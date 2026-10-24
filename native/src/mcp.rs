@@ -14,8 +14,9 @@ use serde_json::{json, Value};
 use crate::cli::Launch;
 use crate::links;
 use crate::mime::{new_block_id, Capsule};
+use crate::planning::{self, TaskFilters};
 use crate::search::{self, Bm25Index};
-use crate::vault::{default_vault_dir, Vault};
+use crate::vault::Vault;
 
 pub const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 pub const SERVER_NAME: &str = "capsulecraft-mcp";
@@ -182,6 +183,118 @@ pub fn tool_definitions() -> Value {
                     }
                 },
                 "required": ["parent_id", "content"]
+            }
+        },
+        {
+            "name": "capsule_patch",
+            "description": "Atomically patch an existing capsule: append text/notes, replace specific sections, toggle task checkboxes, or add tags without clobbering other content.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Message-ID, title, or filename of the capsule to patch"
+                    },
+                    "append_markdown": {
+                        "type": "string",
+                        "description": "Markdown text to append to the end of the note"
+                    },
+                    "toggle_task": {
+                        "type": "string",
+                        "description": "Task label or task ID to toggle between [ ] and [x]"
+                    },
+                    "add_tags": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Tags to add to the capsule"
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": ["append_text", "replace_text", "toggle_task", "add_tag"],
+                        "description": "Specific patch action to perform"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Content for append_text or replacement text for replace_text"
+                    },
+                    "target": {
+                        "type": "string",
+                        "description": "Target string to replace, or task text/id to toggle, or tag to add"
+                    }
+                },
+                "required": ["id"]
+            }
+        },
+        {
+            "name": "capsule_backlinks",
+            "description": "Retrieve all capsules that link to the specified capsule via [[Wiki links]] or RFC Message-IDs.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Message-ID, title, or filename of the target capsule"
+                    }
+                },
+                "required": ["id"]
+            }
+        },
+        {
+            "name": "capsule_related",
+            "description": "Find capsules semantically related by content using TF-IDF cosine similarity across the vault.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Message-ID, title, or filename of the reference capsule"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of related capsules to return (default: 5)"
+                    },
+                    "min_score": {
+                        "type": "number",
+                        "description": "Minimum similarity threshold (0.0 to 1.0, default: 0.05)"
+                    }
+                },
+                "required": ["id"]
+            }
+        },
+        {
+            "name": "capsule_tasks",
+            "description": "Scan and query tasks and checklist items across all capsules in the vault, with status and deadline filtering.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["all", "open", "todo", "doing", "done"],
+                        "description": "Filter by task status (default: 'all')"
+                    },
+                    "due": {
+                        "type": "string",
+                        "enum": ["all", "overdue", "today", "week", "upcoming", "none"],
+                        "description": "Filter by deadline bucket"
+                    },
+                    "priority": {
+                        "type": "string",
+                        "enum": ["all", "low", "normal", "high"],
+                        "description": "Filter by priority level"
+                    },
+                    "capsule_id": {
+                        "type": "string",
+                        "description": "Filter tasks belonging to a specific capsule"
+                    },
+                    "tag": {
+                        "type": "string",
+                        "description": "Filter tasks from capsules with a specific tag"
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Filter tasks matching search query string"
+                    }
+                }
             }
         }
     ])
@@ -417,6 +530,10 @@ impl McpHandler {
             "capsule_search" => self.tool_capsule_search(args),
             "capsule_create" => self.tool_capsule_create(args),
             "capsule_reply" => self.tool_capsule_reply(args),
+            "capsule_patch" => self.tool_capsule_patch(args),
+            "capsule_backlinks" => self.tool_capsule_backlinks(args),
+            "capsule_related" => self.tool_capsule_related(args),
+            "capsule_tasks" => self.tool_capsule_tasks(args),
             unknown => Err(format!("Unknown tool: {unknown}")),
         }
     }
@@ -789,6 +906,412 @@ impl McpHandler {
             "blocks_count": saved.blocks.len()
         }))
     }
+
+    fn tool_capsule_patch(&mut self, args: &Value) -> Result<Value, String> {
+        let id = args
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "Missing required argument 'id'".to_string())?;
+
+        let (index, _) = self
+            .find_capsule(id)
+            .ok_or_else(|| format!("Capsule not found: '{id}'"))?;
+
+        let action = args.get("action").and_then(Value::as_str);
+        let content = args.get("content").and_then(Value::as_str);
+        let target = args.get("target").and_then(Value::as_str);
+
+        let append_markdown = args
+            .get("append_markdown")
+            .and_then(Value::as_str)
+            .or_else(|| if action == Some("append_text") { content.or(target) } else { None });
+
+        let toggle_task = args
+            .get("toggle_task")
+            .and_then(Value::as_str)
+            .or_else(|| if action == Some("toggle_task") { target.or(content) } else { None });
+
+        let mut tags_to_add: Vec<String> = args
+            .get("add_tags")
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(ToString::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if action == Some("add_tag") {
+            if let Some(t) = target.or(content) {
+                let clean = t.trim();
+                if !clean.is_empty() && !tags_to_add.iter().any(|s| s.eq_ignore_ascii_case(clean)) {
+                    tags_to_add.push(clean.to_string());
+                }
+            }
+        }
+
+        let replace_req = if action == Some("replace_text") {
+            match (target, content) {
+                (Some(tgt), Some(cnt)) => Some((tgt, cnt)),
+                _ => return Err("Action 'replace_text' requires both 'target' and 'content' parameters".to_string()),
+            }
+        } else {
+            None
+        };
+
+        if append_markdown.is_none() && toggle_task.is_none() && tags_to_add.is_empty() && replace_req.is_none() {
+            return Err("No patch operation specified. Provide 'append_markdown', 'toggle_task', 'add_tags', or 'action'".to_string());
+        }
+
+        let capsule = &mut self.vault.capsules[index];
+        if !capsule.native {
+            return Err(format!("Capsule '{}' is read-only in the native runtime", capsule.message_id));
+        }
+
+        let mut patch_summary = Vec::new();
+
+        // 1. Append markdown
+        if let Some(md) = append_markdown {
+            let paras: Vec<&str> = md
+                .split("\n\n")
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+                .collect();
+
+            if paras.is_empty() {
+                if !md.trim().is_empty() {
+                    capsule.blocks.push(json!({
+                        "id": new_block_id("paragraph"),
+                        "type": "paragraph",
+                        "data": { "text": md.trim() }
+                    }));
+                    patch_summary.push("Appended 1 paragraph block".to_string());
+                }
+            } else {
+                let count = paras.len();
+                for p in paras {
+                    capsule.blocks.push(json!({
+                        "id": new_block_id("paragraph"),
+                        "type": "paragraph",
+                        "data": { "text": p }
+                    }));
+                }
+                patch_summary.push(format!("Appended {count} paragraph blocks"));
+            }
+        }
+
+        // 2. Toggle task
+        if let Some(task_target) = toggle_task {
+            match toggle_task_in_blocks(&mut capsule.blocks, task_target) {
+                Some((text, next_done)) => {
+                    let status_str = if next_done { "done ([x])" } else { "todo ([ ])" };
+                    patch_summary.push(format!("Toggled task '{text}' -> {status_str}"));
+                }
+                None => {
+                    return Err(format!("Task matching '{task_target}' was not found in any todo block"));
+                }
+            }
+        }
+
+        // 3. Add tags
+        if !tags_to_add.is_empty() {
+            let mut added = Vec::new();
+            for tag in tags_to_add {
+                if !capsule.tags.iter().any(|t| t.eq_ignore_ascii_case(&tag)) {
+                    capsule.tags.push(tag.clone());
+                    added.push(tag);
+                }
+            }
+            if !added.is_empty() {
+                patch_summary.push(format!("Added tags: {}", added.join(", ")));
+            }
+        }
+
+        // 4. Replace text
+        if let Some((tgt, cnt)) = replace_req {
+            let replacements = replace_in_blocks(&mut capsule.blocks, tgt, cnt);
+            if replacements == 0 {
+                return Err(format!("Target text '{tgt}' was not found in any content block"));
+            }
+            patch_summary.push(format!("Replaced {replacements} occurrence(s) of '{tgt}'"));
+        }
+
+        self.vault.save(index)?;
+
+        let saved = &self.vault.capsules[index];
+        Ok(json!({
+            "success": true,
+            "id": saved.message_id,
+            "file_name": saved.file_name,
+            "subject": saved.subject,
+            "blocks_count": saved.blocks.len(),
+            "tags": saved.tags,
+            "operations": patch_summary
+        }))
+    }
+
+    fn tool_capsule_backlinks(&self, args: &Value) -> Result<Value, String> {
+        let id = args
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "Missing required argument 'id'".to_string())?;
+
+        let (target_idx, capsule) = self
+            .find_capsule(id)
+            .ok_or_else(|| format!("Capsule not found: '{id}'"))?;
+
+        let target_id = capsule.message_id.clone();
+        let target_subject = capsule.subject.clone();
+
+        let backlink_indices = links::backlinks(&self.vault.capsules, target_idx);
+        let backlinks: Vec<Value> = backlink_indices
+            .into_iter()
+            .filter_map(|idx| self.vault.capsules.get(idx))
+            .map(|c| {
+                json!({
+                    "id": c.message_id,
+                    "subject": c.subject,
+                    "file_name": c.file_name,
+                    "date": c.date,
+                    "tags": c.tags
+                })
+            })
+            .collect();
+
+        Ok(json!({
+            "target_id": target_id,
+            "target_subject": target_subject,
+            "count": backlinks.len(),
+            "backlinks": backlinks
+        }))
+    }
+
+    fn tool_capsule_related(&self, args: &Value) -> Result<Value, String> {
+        let id = args
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "Missing required argument 'id'".to_string())?;
+
+        let limit = args
+            .get("limit")
+            .and_then(Value::as_u64)
+            .map(|l| l as usize)
+            .unwrap_or(5);
+
+        let min_score = args
+            .get("min_score")
+            .and_then(Value::as_f64)
+            .map(|s| s as f32)
+            .unwrap_or(0.01);
+
+        let (_, capsule) = self
+            .find_capsule(id)
+            .ok_or_else(|| format!("Capsule not found: '{id}'"))?;
+
+        let target_id = capsule.message_id.clone();
+        let target_subject = capsule.subject.clone();
+
+        let mut bm25 = Bm25Index::default();
+        for c in &self.vault.capsules {
+            let text = links::page_text(c);
+            let tokens = search::tokenize(&text);
+            bm25.add(&c.message_id, tokens);
+        }
+
+        let ids: Vec<&str> = self
+            .vault
+            .capsules
+            .iter()
+            .map(|c| c.message_id.as_str())
+            .collect();
+
+        let matches = search::related(&bm25, &target_id, &ids, min_score, limit);
+
+        let results: Vec<Value> = matches
+            .into_iter()
+            .filter_map(|(idx, score)| {
+                self.vault.capsules.get(idx).map(|other| {
+                    json!({
+                        "id": other.message_id,
+                        "subject": other.subject,
+                        "similarity": (score * 1000.0).round() / 1000.0,
+                        "file_name": other.file_name,
+                        "tags": other.tags
+                    })
+                })
+            })
+            .collect();
+
+        Ok(json!({
+            "target_id": target_id,
+            "target_subject": target_subject,
+            "count": results.len(),
+            "related": results
+        }))
+    }
+
+    fn tool_capsule_tasks(&self, args: &Value) -> Result<Value, String> {
+        let status = args
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("all")
+            .to_string();
+        let due = args
+            .get("due")
+            .and_then(Value::as_str)
+            .unwrap_or("all");
+        let priority = args
+            .get("priority")
+            .and_then(Value::as_str)
+            .unwrap_or("all")
+            .to_string();
+        let query = args
+            .get("query")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let capsule_id = args
+            .get("capsule_id")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let tag = args
+            .get("tag")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+
+        let mut all_tasks = Vec::new();
+        for c in &self.vault.capsules {
+            all_tasks.extend(planning::tasks_in_capsule(
+                &c.message_id,
+                &c.subject,
+                &c.tags,
+                &c.blocks,
+            ));
+        }
+
+        let today = planning::today_key();
+        let (due_filter, upcoming_only) = if due == "upcoming" {
+            ("all".to_string(), true)
+        } else {
+            (due.to_string(), false)
+        };
+
+        let filters = TaskFilters {
+            text: query,
+            status,
+            priority,
+            due: due_filter,
+            capsule_id,
+            tag,
+        };
+
+        let mut filtered = planning::filter_tasks(&all_tasks, &filters, &today);
+        if upcoming_only {
+            filtered.retain(|t| {
+                if let Some(day) = t.item.due.as_deref().filter(|d| planning::is_date_key(d)) {
+                    day >= today.as_str()
+                } else {
+                    false
+                }
+            });
+        }
+
+        let sorted = planning::sort_tasks(&filtered);
+
+        let tasks_json: Vec<Value> = sorted
+            .into_iter()
+            .map(|t| {
+                json!({
+                    "id": t.item.id,
+                    "text": t.item.text,
+                    "done": t.item.done,
+                    "status": t.item.status(),
+                    "due": t.item.due,
+                    "start": t.item.start,
+                    "priority": t.item.priority(),
+                    "blocked_by": t.item.blocked_by,
+                    "capsule_id": t.capsule_id,
+                    "capsule_subject": t.capsule_subject,
+                    "capsule_tags": t.capsule_tags,
+                    "block_id": t.block_id,
+                    "block_title": t.block_title
+                })
+            })
+            .collect();
+
+        Ok(json!({
+            "total": tasks_json.len(),
+            "tasks": tasks_json
+        }))
+    }
+}
+
+fn replace_in_blocks(blocks: &mut [Value], target: &str, replacement: &str) -> usize {
+    let mut count = 0;
+    for block in blocks.iter_mut() {
+        if let Some(data) = block.get_mut("data") {
+            count += replace_in_value(data, target, replacement);
+        }
+    }
+    count
+}
+
+fn replace_in_value(val: &mut Value, target: &str, replacement: &str) -> usize {
+    let mut count = 0;
+    match val {
+        Value::String(s) => {
+            if s.contains(target) {
+                *s = s.replace(target, replacement);
+                count += 1;
+            }
+        }
+        Value::Array(arr) => {
+            for item in arr {
+                count += replace_in_value(item, target, replacement);
+            }
+        }
+        Value::Object(map) => {
+            for (k, v) in map.iter_mut() {
+                if k != "id" && k != "type" {
+                    count += replace_in_value(v, target, replacement);
+                }
+            }
+        }
+        _ => {}
+    }
+    count
+}
+
+fn toggle_task_in_blocks(blocks: &mut [Value], target: &str) -> Option<(String, bool)> {
+    let target_clean = target.trim();
+    for block in blocks.iter_mut() {
+        if block.get("type").and_then(Value::as_str) == Some("todo_list") {
+            if let Some(items) = block
+                .get_mut("data")
+                .and_then(|d| d.get_mut("items"))
+                .and_then(Value::as_array_mut)
+            {
+                for item in items.iter_mut() {
+                    let id = item.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+                    let text = item.get("text").and_then(Value::as_str).unwrap_or("").to_string();
+                    let matches = id == target_clean
+                        || text.eq_ignore_ascii_case(target_clean)
+                        || text.to_lowercase().contains(&target_clean.to_lowercase());
+                    if matches {
+                        let current_done = item.get("done").and_then(Value::as_bool).unwrap_or(false);
+                        let next_done = !current_done;
+                        item["done"] = json!(next_done);
+                        item["status"] = json!(if next_done { "done" } else { "todo" });
+                        return Some((text, next_done));
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Run the stdio JSON-RPC loop.
@@ -959,6 +1482,299 @@ mod tests {
         let resp = handler.handle_message(&read_req).expect("read response");
         let val: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(val["result"]["isError"], false);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn capsule_patch_flow() {
+        let dir = temp_vault();
+        let mut handler = McpHandler::new(Some(dir.clone()));
+
+        // 1. Create a capsule with a todo
+        let create_req = json!({
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_create",
+                "arguments": {
+                    "subject": "Patch Test Note",
+                    "content": "Original paragraph here.",
+                    "tags": ["testing"],
+                    "todos": ["Write unit test", "Deploy to prod"]
+                }
+            }
+        })
+        .to_string();
+        let resp = handler.handle_message(&create_req).expect("create");
+        let val: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(val["result"]["isError"], false);
+
+        // 2. Patch: append markdown, toggle task, and add tags
+        let patch_req = json!({
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_patch",
+                "arguments": {
+                    "id": "Patch Test Note",
+                    "append_markdown": "Appended second paragraph.\n\nAppended third paragraph.",
+                    "toggle_task": "Write unit test",
+                    "add_tags": ["mcp", "verified"]
+                }
+            }
+        })
+        .to_string();
+        let resp = handler.handle_message(&patch_req).expect("patch");
+        let val: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(val["result"]["isError"], false);
+
+        // 3. Patch: replace_text
+        let replace_req = json!({
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_patch",
+                "arguments": {
+                    "id": "Patch Test Note",
+                    "action": "replace_text",
+                    "target": "Original paragraph",
+                    "content": "Modified paragraph"
+                }
+            }
+        })
+        .to_string();
+        let resp = handler.handle_message(&replace_req).expect("replace");
+        let val: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(val["result"]["isError"], false);
+
+        // 4. Verify by reading back
+        let read_req = json!({
+            "jsonrpc": "2.0",
+            "id": 13,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_read",
+                "arguments": {
+                    "id": "Patch Test Note"
+                }
+            }
+        })
+        .to_string();
+        let resp = handler.handle_message(&read_req).expect("read");
+        let val: Value = serde_json::from_str(&resp).unwrap();
+        let content_text = val["result"]["content"][0]["text"].as_str().unwrap();
+        let read_val: Value = serde_json::from_str(content_text).unwrap();
+
+        // Check tags
+        let tags = read_val["tags"].as_array().unwrap();
+        assert!(tags.iter().any(|t| t == "testing"));
+        assert!(tags.iter().any(|t| t == "mcp"));
+        assert!(tags.iter().any(|t| t == "verified"));
+
+        // Check text modification
+        let body = read_val["content"].as_str().unwrap();
+        assert!(body.contains("Modified paragraph"));
+        assert!(body.contains("Appended second paragraph"));
+
+        // Check task toggled
+        let blocks = read_val["blocks"].as_array().unwrap();
+        let todo_block = blocks
+            .iter()
+            .find(|b| b["type"] == "todo_list")
+            .expect("todo block exists");
+        let items = todo_block["data"]["items"].as_array().unwrap();
+        let toggled = items
+            .iter()
+            .find(|it| it["text"] == "Write unit test")
+            .unwrap();
+        assert_eq!(toggled["done"], true);
+        assert_eq!(toggled["status"], "done");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn capsule_backlinks_and_related_flow() {
+        let dir = temp_vault();
+        let mut handler = McpHandler::new(Some(dir.clone()));
+
+        // 1. Create target note A
+        let note_a_req = json!({
+            "jsonrpc": "2.0",
+            "id": 20,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_create",
+                "arguments": {
+                    "subject": "Distributed Consensus",
+                    "content": "Raft protocol and leader election mechanics in distributed databases."
+                }
+            }
+        })
+        .to_string();
+        handler.handle_message(&note_a_req);
+
+        // 2. Create note B linking to A
+        let note_b_req = json!({
+            "jsonrpc": "2.0",
+            "id": 21,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_create",
+                "arguments": {
+                    "subject": "Replication Architecture",
+                    "content": "Building resilient replication on top of [[Distributed Consensus]] leader election."
+                }
+            }
+        })
+        .to_string();
+        handler.handle_message(&note_b_req);
+
+        // 3. Query backlinks for Note A
+        let backlinks_req = json!({
+            "jsonrpc": "2.0",
+            "id": 22,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_backlinks",
+                "arguments": {
+                    "id": "Distributed Consensus"
+                }
+            }
+        })
+        .to_string();
+        let resp = handler.handle_message(&backlinks_req).expect("backlinks response");
+        let val: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(val["result"]["isError"], false);
+        let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
+        let backlinks_val: Value = serde_json::from_str(text_content).unwrap();
+        assert_eq!(backlinks_val["count"], 1);
+        assert_eq!(backlinks_val["backlinks"][0]["subject"], "Replication Architecture");
+
+        // 4. Query related for Note A
+        let related_req = json!({
+            "jsonrpc": "2.0",
+            "id": 23,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_related",
+                "arguments": {
+                    "id": "Distributed Consensus"
+                }
+            }
+        })
+        .to_string();
+        let resp = handler.handle_message(&related_req).expect("related response");
+        let val: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(val["result"]["isError"], false);
+        let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
+        let related_val: Value = serde_json::from_str(text_content).unwrap();
+        assert_eq!(related_val["count"], 1);
+        assert_eq!(related_val["related"][0]["subject"], "Replication Architecture");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn capsule_tasks_flow() {
+        let dir = temp_vault();
+        let mut handler = McpHandler::new(Some(dir.clone()));
+
+        // Create a note with tasks
+        let create_req = json!({
+            "jsonrpc": "2.0",
+            "id": 30,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_create",
+                "arguments": {
+                    "subject": "Sprint Tasks",
+                    "content": "Sprint planning overview",
+                    "todos": ["Task Alpha", "Task Beta", "Task Gamma"]
+                }
+            }
+        })
+        .to_string();
+        handler.handle_message(&create_req);
+
+        // Toggle Task Beta to done
+        let toggle_req = json!({
+            "jsonrpc": "2.0",
+            "id": 31,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_patch",
+                "arguments": {
+                    "id": "Sprint Tasks",
+                    "toggle_task": "Task Beta"
+                }
+            }
+        })
+        .to_string();
+        handler.handle_message(&toggle_req);
+
+        // Query all tasks
+        let tasks_all_req = json!({
+            "jsonrpc": "2.0",
+            "id": 32,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_tasks",
+                "arguments": {
+                    "status": "all"
+                }
+            }
+        })
+        .to_string();
+        let resp = handler.handle_message(&tasks_all_req).expect("tasks all response");
+        let val: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(val["result"]["isError"], false);
+        let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
+        let tasks_val: Value = serde_json::from_str(text_content).unwrap();
+        assert_eq!(tasks_val["total"], 3);
+
+        // Query only open tasks
+        let tasks_open_req = json!({
+            "jsonrpc": "2.0",
+            "id": 33,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_tasks",
+                "arguments": {
+                    "status": "open"
+                }
+            }
+        })
+        .to_string();
+        let resp = handler.handle_message(&tasks_open_req).expect("tasks open response");
+        let val: Value = serde_json::from_str(&resp).unwrap();
+        let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
+        let tasks_val: Value = serde_json::from_str(text_content).unwrap();
+        assert_eq!(tasks_val["total"], 2);
+
+        // Query only done tasks
+        let tasks_done_req = json!({
+            "jsonrpc": "2.0",
+            "id": 34,
+            "method": "tools/call",
+            "params": {
+                "name": "capsule_tasks",
+                "arguments": {
+                    "status": "done"
+                }
+            }
+        })
+        .to_string();
+        let resp = handler.handle_message(&tasks_done_req).expect("tasks done response");
+        let val: Value = serde_json::from_str(&resp).unwrap();
+        let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
+        let tasks_val: Value = serde_json::from_str(text_content).unwrap();
+        assert_eq!(tasks_val["total"], 1);
+        assert_eq!(tasks_val["tasks"][0]["text"], "Task Beta");
 
         let _ = fs::remove_dir_all(&dir);
     }

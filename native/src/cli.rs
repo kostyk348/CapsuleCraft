@@ -30,6 +30,8 @@ pub struct Launch {
     pub scroll: Option<f32>,
     /// Run as a Model Context Protocol (MCP) server over stdin/stdout.
     pub mcp: bool,
+    /// Import an Obsidian vault into CapsuleCraft (.eml) and exit.
+    pub import_obsidian: Option<PathBuf>,
     /// Print MCP client configuration snippet and exit.
     pub print_mcp_config: bool,
     /// Print the parsed launch configuration and exit.
@@ -79,6 +81,27 @@ pub fn parse(args: &[String]) -> Launch {
             "--search" => launch.search = take_value(&mut index),
             "--scroll" => launch.scroll = take_value(&mut index).and_then(|v| v.parse().ok()),
             "--mcp" => launch.mcp = true,
+            "import-obsidian" => {
+                if let Some(next) = args.get(index + 1) {
+                    if next == "--from" {
+                        index += 1;
+                        launch.import_obsidian = take_value(&mut index).map(PathBuf::from);
+                    } else if !next.starts_with('-') {
+                        launch.import_obsidian = take_value(&mut index).map(PathBuf::from);
+                    }
+                }
+            }
+            "--import-obsidian" => {
+                launch.import_obsidian = take_value(&mut index).map(PathBuf::from);
+            }
+            "--from" => {
+                if launch.import_obsidian.is_none() {
+                    launch.import_obsidian = take_value(&mut index).map(PathBuf::from);
+                }
+            }
+            "--vault" => {
+                launch.vault = take_value(&mut index).map(PathBuf::from);
+            }
             "--print-mcp-config" | "--mcp-config" => launch.print_mcp_config = true,
             "--print-config" => launch.print_config = true,
             other if !other.starts_with('-') => {
@@ -177,5 +200,21 @@ mod tests {
 
         let config = parse(&args(&["--print-mcp-config"]));
         assert!(config.print_mcp_config);
+    }
+
+    #[test]
+    fn parses_import_obsidian_flags() {
+        let cmd = parse(&args(&[
+            "import-obsidian",
+            "--from",
+            "D:/notes",
+            "--vault",
+            "D:/vault",
+        ]));
+        assert_eq!(cmd.import_obsidian, Some(PathBuf::from("D:/notes")));
+        assert_eq!(cmd.vault, Some(PathBuf::from("D:/vault")));
+
+        let flag = parse(&args(&["--import-obsidian=D:/notes2"]));
+        assert_eq!(flag.import_obsidian, Some(PathBuf::from("D:/notes2")));
     }
 }

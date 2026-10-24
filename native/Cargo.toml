@@ -20,6 +20,8 @@ base64 = "0.22"
 png = "0.17"
 notify = "8"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+imap = "2.4"
+native-tls = "0.2"
 
 [profile.release]
 opt-level = 2

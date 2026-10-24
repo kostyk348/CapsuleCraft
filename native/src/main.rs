@@ -14,10 +14,12 @@ mod brand;
 mod chrome;
 mod cli;
 mod cothinker;
+mod export;
 mod graph;
 mod history;
 mod i18n;
 mod icons;
+mod importers;
 mod links;
 mod mail;
 mod mcp;
@@ -29,6 +31,7 @@ mod theme;
 mod vault;
 mod views;
 mod watch;
+mod sync_imap;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -75,6 +78,34 @@ fn main() -> eframe::Result<()> {
     if launch.mcp {
         mcp::run_server(launch.vault);
         return Ok(());
+    }
+    if let Some(obsidian_path) = launch.import_obsidian {
+        let vault_dir = launch.vault.unwrap_or_else(vault::get_active_vault_dir);
+        match importers::obsidian::import_obsidian_vault(&obsidian_path, &vault_dir) {
+            Ok(summary) => {
+                println!(
+                    "Successfully imported Obsidian vault into {}",
+                    vault_dir.display()
+                );
+                println!("- Pages imported: {}", summary.imported_pages);
+                println!("- Folders created: {}", summary.created_folders);
+                println!(
+                    "- Attachments imported: {}",
+                    summary.imported_attachments
+                );
+                if !summary.errors.is_empty() {
+                    eprintln!("Warnings/errors ({}):", summary.errors.len());
+                    for err in &summary.errors {
+                        eprintln!("  • {err}");
+                    }
+                }
+                return Ok(());
+            }
+            Err(err) => {
+                eprintln!("Error importing Obsidian vault: {err}");
+                std::process::exit(1);
+            }
+        }
     }
     let window = if launch.snapshot.is_some() {
         [1440.0, 900.0]
@@ -160,9 +191,13 @@ struct NativeApp {
     confirm_delete: bool,
     show_mcp_modal: bool,
     mcp_tab: usize,
+    show_imap_modal: bool,
+    imap_config: sync_imap::ImapConfig,
+    imap_status: sync_imap::SyncStatus,
     show_cothink_modal: bool,
     cothink_mode: cothinker::CoThinkMode,
     cothink_focus: String,
+    dragged_page: Option<usize>,
     /// `--snapshot`: render a few frames, write a PNG, then close.
     snapshot_job: Option<SnapshotJob>,
     /// Cached `[[link]]` resolution targets: (normalised subject, normalised
@@ -197,6 +232,7 @@ impl NativeApp {
     fn new(launch: cli::Launch) -> Self {
         let dir = launch.vault.clone().unwrap_or_else(vault::get_active_vault_dir);
         vault::set_active_vault_dir(&dir);
+        let imap_config = sync_imap::ImapConfig::load_from_vault(&dir);
         let vault = Vault::load(dir);
         let locale = launch.locale.unwrap_or_else(Locale::detect);
         let selected = launch
@@ -230,9 +266,13 @@ impl NativeApp {
             confirm_delete: false,
             show_mcp_modal: false,
             mcp_tab: 0,
+            show_imap_modal: false,
+            imap_config,
+            imap_status: sync_imap::SyncStatus::Idle,
             show_cothink_modal: false,
             cothink_mode: cothinker::CoThinkMode::Critique,
             cothink_focus: String::new(),
+            dragged_page: None,
             snapshot_job,
             link_index: Vec::new(),
             backlinks: Vec::new(),
@@ -808,6 +848,40 @@ impl NativeApp {
         self.import_paths(paths);
     }
 
+    fn import_obsidian_dialog(&mut self) {
+        if !self.save_selected() {
+            return;
+        }
+        let Some(folder) = rfd::FileDialog::new()
+            .set_title(t(self.locale, Key::ImportObsidianTitle))
+            .pick_folder()
+        else {
+            return;
+        };
+        match importers::obsidian::import_obsidian_vault(&folder, &self.vault.dir) {
+            Ok(summary) => {
+                self.reload();
+                self.toast(format!(
+                    "{} · {} .eml{}",
+                    t(self.locale, Key::ObsidianImportSummary),
+                    summary.imported_pages + summary.created_folders,
+                    if summary.imported_attachments > 0 {
+                        format!(
+                            " · {} {}",
+                            summary.imported_attachments,
+                            t(self.locale, Key::Attachment)
+                        )
+                    } else {
+                        String::new()
+                    }
+                ));
+            }
+            Err(err) => {
+                self.toast(format!("Import error: {err}"));
+            }
+        }
+    }
+
     /// Copy `.eml` files into the vault. Dropped files and the import dialog
     /// share this path, so both behave the same and both keep the original
     /// bytes (an imported mail is never re-encoded on the way in).
@@ -961,10 +1035,13 @@ struct ShellAction {
     toggle_locale: bool,
     palette: bool,
     connect_mcp: bool,
+    open_imap: bool,
+    sync_imap: bool,
     import: bool,
     export_vault: bool,
     export_page: bool,
     delete_page: bool,
+    reparent: Option<(usize, Option<String>)>,
 }
 
 impl ShellAction {
@@ -978,10 +1055,13 @@ impl ShellAction {
         self.toggle_locale |= other.toggle_locale;
         self.palette |= other.palette;
         self.connect_mcp |= other.connect_mcp;
+        self.open_imap |= other.open_imap;
+        self.sync_imap |= other.sync_imap;
         self.import |= other.import;
         self.export_vault |= other.export_vault;
         self.export_page |= other.export_page;
         self.delete_page |= other.delete_page;
+        self.reparent = other.reparent.or_else(|| self.reparent.take());
     }
 }
 
@@ -1048,6 +1128,9 @@ impl eframe::App for NativeApp {
         let (cmd, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
         if cmd && shift && ctx.input(|i| i.key_pressed(egui::Key::A)) {
             self.show_cothink_modal = true;
+        }
+        if cmd && shift && ctx.input(|i| i.key_pressed(egui::Key::S)) {
+            self.trigger_imap_sync();
         }
         if cmd && ctx.input(|i| i.key_pressed(egui::Key::S)) {
             self.save_selected();
@@ -1116,6 +1199,8 @@ impl eframe::App for NativeApp {
                     self.dirty,
                     &self.status,
                     self.status_error,
+                    &self.imap_config,
+                    &self.imap_status,
                     self.view,
                     self.locale,
                 ));
@@ -1136,6 +1221,7 @@ impl eframe::App for NativeApp {
                         &self.vault,
                         &tree,
                         self.selected,
+                        &mut self.dragged_page,
                         &mut self.search,
                         &mut self.collapsed,
                         &self.search_index,
@@ -1265,6 +1351,14 @@ impl eframe::App for NativeApp {
         } else if let Some(index) = view_action.select.or(editor.select).or(shell.select) {
             self.select_page(index);
         }
+        if let Some((dragged_idx, new_parent_id)) = shell.reparent {
+            if let Err(err) = self.vault.reparent_page(dragged_idx, new_parent_id) {
+                self.toast(err);
+            } else {
+                self.toast(t(self.locale, Key::Reparented));
+                self.refresh_links();
+            }
+        }
         if let Some(view) = view_action.view.or(shell.view) {
             self.view = view;
         }
@@ -1315,6 +1409,12 @@ impl eframe::App for NativeApp {
         if shell.connect_mcp {
             self.show_mcp_modal = true;
         }
+        if shell.open_imap {
+            self.show_imap_modal = true;
+        }
+        if shell.sync_imap {
+            self.trigger_imap_sync();
+        }
 
         // Command palette: a pure overlay; the shell performs whatever it picks.
         if let Some(command) =
@@ -1325,6 +1425,7 @@ impl eframe::App for NativeApp {
 
         self.draw_confirm_delete(&ctx);
         self.draw_mcp_modal(&ctx);
+        self.draw_imap_modal(&ctx);
         self.draw_cothink_modal(&ctx);
         self.draw_toast(&ctx);
 
@@ -1350,6 +1451,7 @@ impl NativeApp {
             PaletteCommand::ExportMarkdown => self.export_markdown(),
             PaletteCommand::ExportVault => self.export_vault(),
             PaletteCommand::ImportEml => self.import_eml(),
+            PaletteCommand::ImportObsidian => self.import_obsidian_dialog(),
             PaletteCommand::ToggleLocale => {
                 let locale = self.locale.other();
                 self.set_locale(locale);
@@ -1366,6 +1468,8 @@ impl NativeApp {
                 self.cothink_mode = mode;
                 self.show_cothink_modal = true;
             }
+            PaletteCommand::OpenImapSync => self.show_imap_modal = true,
+            PaletteCommand::SyncImapNow => self.trigger_imap_sync(),
         }
     }
 
@@ -1598,6 +1702,182 @@ impl NativeApp {
 
         if close {
             self.show_mcp_modal = false;
+        }
+    }
+
+    fn draw_imap_modal(&mut self, ctx: &egui::Context) {
+        if !self.show_imap_modal {
+            return;
+        }
+
+        let mut close = false;
+        let mut test_conn = false;
+        let mut save_cfg = false;
+        let mut sync_now = false;
+
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            close = true;
+        }
+
+        egui::Area::new(egui::Id::new("imap-sync-modal"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(ctx.content_rect().min)
+            .show(ctx, |ui| {
+                let (rect, resp) = ui.allocate_exact_size(ctx.content_rect().size(), Sense::click());
+                if resp.clicked() {
+                    close = true;
+                }
+                ui.painter()
+                    .rect_filled(rect, 0.0, egui::Color32::from_black_alpha(150));
+
+                let panel = Rect::from_center_size(rect.center(), vec2(520.0, 480.0));
+                ui.painter().rect(
+                    panel,
+                    theme::RADIUS,
+                    theme::PANEL,
+                    Stroke::new(1.0, theme::LINE_STRONG),
+                    egui::StrokeKind::Inside,
+                );
+
+                let mut body = ui.new_child(
+                    UiBuilder::new()
+                        .max_rect(panel.shrink(22.0))
+                        .layout(Layout::top_down(Align::Min)),
+                );
+
+                body.label(
+                    RichText::new(t(self.locale, Key::ImapSyncTitle))
+                        .family(theme::medium())
+                        .size(15.0)
+                        .color(theme::INK),
+                );
+                body.add_space(4.0);
+                body.add(
+                    Label::new(
+                        RichText::new(t(self.locale, Key::ImapSyncDesc))
+                            .size(12.0)
+                            .color(theme::MUTED),
+                    )
+                    .wrap(),
+                );
+                body.add_space(14.0);
+
+                // Enable checkbox
+                body.checkbox(&mut self.imap_config.enabled, t(self.locale, Key::ImapEnable));
+                body.add_space(8.0);
+
+                // Fields
+                body.label(RichText::new(t(self.locale, Key::ImapHost)).size(11.0).color(theme::MUTED));
+                body.add(TextEdit::singleline(&mut self.imap_config.host).hint_text("imap.gmail.com").desired_width(f32::INFINITY));
+                body.add_space(6.0);
+
+                body.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(t(self.locale, Key::ImapPort)).size(11.0).color(theme::MUTED));
+                        let mut port_str = self.imap_config.port.to_string();
+                        if ui.add(TextEdit::singleline(&mut port_str).desired_width(100.0)).changed() {
+                            if let Ok(p) = port_str.parse::<u16>() {
+                                self.imap_config.port = p;
+                            }
+                        }
+                    });
+                    ui.add_space(12.0);
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(t(self.locale, Key::ImapFolder)).size(11.0).color(theme::MUTED));
+                        ui.add(TextEdit::singleline(&mut self.imap_config.folder).hint_text("CapsuleCraft").desired_width(f32::INFINITY));
+                    });
+                });
+                body.add_space(6.0);
+
+                body.label(RichText::new(t(self.locale, Key::ImapUsername)).size(11.0).color(theme::MUTED));
+                body.add(TextEdit::singleline(&mut self.imap_config.username).hint_text("user@example.com").desired_width(f32::INFINITY));
+                body.add_space(6.0);
+
+                body.label(RichText::new(t(self.locale, Key::ImapPassword)).size(11.0).color(theme::MUTED));
+                body.add(TextEdit::singleline(&mut self.imap_config.password).password(true).desired_width(f32::INFINITY));
+                body.add_space(16.0);
+
+                // Status info
+                let status_text = match &self.imap_status {
+                    sync_imap::SyncStatus::Idle => String::new(),
+                    sync_imap::SyncStatus::Syncing => t(self.locale, Key::ImapSyncing).to_string(),
+                    sync_imap::SyncStatus::Success(s) => s.clone(),
+                    sync_imap::SyncStatus::Error(e) => format!("Error: {e}"),
+                };
+                if !status_text.is_empty() {
+                    let color = match &self.imap_status {
+                        sync_imap::SyncStatus::Error(_) => theme::BAD,
+                        sync_imap::SyncStatus::Syncing => theme::BADGE_BETA,
+                        _ => theme::ACCENT,
+                    };
+                    body.label(RichText::new(status_text).size(11.5).color(color));
+                    body.add_space(8.0);
+                }
+
+                // Buttons row
+                body.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if secondary_button(ui, Some(Icon::Close), t(self.locale, Key::Close), 28.0).clicked() {
+                        close = true;
+                    }
+                    ui.add_space(8.0);
+                    if primary_button(ui, t(self.locale, Key::ImapSaveSettings), 28.0).clicked() {
+                        save_cfg = true;
+                    }
+                    ui.add_space(8.0);
+                    if secondary_button(ui, None, t(self.locale, Key::ImapTestConnection), 28.0).clicked() {
+                        test_conn = true;
+                    }
+                    if self.imap_config.enabled {
+                        ui.add_space(8.0);
+                        if secondary_button(ui, Some(Icon::Reload), t(self.locale, Key::ImapSyncNow), 28.0).clicked() {
+                            sync_now = true;
+                        }
+                    }
+                });
+            });
+
+        if save_cfg {
+            let _ = self.imap_config.save_to_vault(&self.vault.dir);
+            self.toast(t(self.locale, Key::Saved));
+        }
+
+        if test_conn {
+            let engine = sync_imap::ImapSyncEngine::new(self.imap_config.clone(), self.vault.dir.clone());
+            match engine.test_connection() {
+                Ok(msg) => self.imap_status = sync_imap::SyncStatus::Success(msg),
+                Err(err) => self.imap_status = sync_imap::SyncStatus::Error(err),
+            }
+        }
+
+        if sync_now {
+            let _ = self.imap_config.save_to_vault(&self.vault.dir);
+            self.trigger_imap_sync();
+        }
+
+        if close {
+            self.show_imap_modal = false;
+        }
+    }
+
+    fn trigger_imap_sync(&mut self) {
+        if !self.imap_config.enabled {
+            self.show_imap_modal = true;
+            return;
+        }
+
+        self.imap_status = sync_imap::SyncStatus::Syncing;
+        let engine = sync_imap::ImapSyncEngine::new(self.imap_config.clone(), self.vault.dir.clone());
+        match engine.run_sync() {
+            Ok(msg) => {
+                self.imap_status = sync_imap::SyncStatus::Success(msg.clone());
+                self.toast(msg);
+                self.reload();
+            }
+            Err(err) => {
+                let err_msg = err.clone();
+                self.imap_status = sync_imap::SyncStatus::Error(err);
+                self.toast(format!("{}: {err_msg}", t(self.locale, Key::ImapErrorToast)));
+            }
         }
     }
 
@@ -1872,6 +2152,8 @@ fn draw_titlebar(
     dirty: bool,
     status: &str,
     status_error: bool,
+    imap_config: &sync_imap::ImapConfig,
+    imap_status: &sync_imap::SyncStatus,
     view: View,
     locale: Locale,
 ) -> ShellAction {
@@ -1922,6 +2204,29 @@ fn draw_titlebar(
     .clicked()
     {
         action.connect_mcp = true;
+    }
+    let (imap_color, imap_hint) = if !imap_config.enabled {
+        (theme::MUTED, t(locale, Key::ImapDisabled))
+    } else {
+        match imap_status {
+            sync_imap::SyncStatus::Syncing => (theme::BADGE_BETA, t(locale, Key::ImapSyncing)),
+            sync_imap::SyncStatus::Error(_) => (theme::BAD, t(locale, Key::ImapErrorToast)),
+            _ => (theme::ACCENT, t(locale, Key::ImapSynced)),
+        }
+    };
+    let imap_resp = ghost(
+        right_ui,
+        Icon::Mail,
+        Some("IMAP"),
+        imap_hint,
+        true,
+        26.0,
+    );
+    // Draw status dot on the IMAP icon
+    let dot_pos = pos2(imap_resp.rect.left() + 7.0, imap_resp.rect.top() + 7.0);
+    right_ui.painter().circle_filled(dot_pos, 2.5, imap_color);
+    if imap_resp.clicked() {
+        action.open_imap = true;
     }
     if ghost(
         right_ui,
@@ -2131,6 +2436,7 @@ fn draw_sidebar(
     vault: &Vault,
     tree: &PageTree,
     selected: Option<usize>,
+    dragged_page: &mut Option<usize>,
     search: &mut String,
     collapsed: &mut HashSet<String>,
     index: &search::Bm25Index,
@@ -2242,16 +2548,79 @@ fn draw_sidebar(
             if query.is_empty() {
                 if tree.roots().is_empty() {
                     empty_pages(ui, &mut action, vault.capsules.is_empty());
-                } else if let Some(index) = draw_page_nodes(
-                    ui,
-                    &vault.capsules,
-                    tree,
-                    None,
-                    0,
-                    selected,
-                    collapsed,
-                ) {
-                    action.select = Some(index);
+                } else {
+                    let mut drop_target = None;
+                    if let Some(index) = draw_page_nodes(
+                        ui,
+                        &vault.capsules,
+                        tree,
+                        None,
+                        0,
+                        selected,
+                        collapsed,
+                        dragged_page,
+                        &mut drop_target,
+                        locale,
+                    ) {
+                        action.select = Some(index);
+                    }
+
+                    // Promote to root drop zone at the bottom of the list
+                    if let Some(dragged) = *dragged_page {
+                        ui.add_space(8.0);
+                        let (root_drop_rect, root_drop_resp) = ui.allocate_exact_size(
+                            vec2(ui.available_width(), 32.0),
+                            Sense::hover(),
+                        );
+                        let is_already_root = tree.parent_of(dragged).is_none();
+                        let hovered = root_drop_resp.hovered() && !is_already_root;
+
+                        ui.painter().rect_stroke(
+                            root_drop_rect,
+                            theme::RADIUS,
+                            Stroke::new(
+                                1.0,
+                                if hovered {
+                                    theme::ACCENT
+                                } else {
+                                    theme::fade(theme::LINE, 0.4)
+                                },
+                            ),
+                            egui::StrokeKind::Inside,
+                        );
+
+                        if hovered {
+                            ui.painter().rect_filled(
+                                root_drop_rect,
+                                theme::RADIUS,
+                                theme::fade(theme::ACCENT, 0.1),
+                            );
+                            drop_target = Some(None);
+                        }
+
+                        let text = t(locale, Key::MoveToRoot);
+                        ui.painter().text(
+                            root_drop_rect.center(),
+                            Align2::CENTER_CENTER,
+                            text,
+                            FontId::new(11.0, theme::mono()),
+                            if hovered {
+                                theme::ACCENT
+                            } else {
+                                theme::FAINT
+                            },
+                        );
+                    }
+
+                    // If user was dragging and releases mouse button
+                    if let Some(dragged) = *dragged_page {
+                        if ui.input(|i| i.pointer.any_released()) {
+                            if let Some(target) = drop_target {
+                                action.reparent = Some((dragged, target));
+                            }
+                            *dragged_page = None;
+                        }
+                    }
                 }
             } else {
                 // BM25 over the whole page text, not a substring of the
@@ -2506,6 +2875,9 @@ fn draw_page_nodes(
     depth: usize,
     selected: Option<usize>,
     collapsed: &mut HashSet<String>,
+    dragged_page: &mut Option<usize>,
+    drop_target: &mut Option<Option<String>>,
+    locale: Locale,
 ) -> Option<usize> {
     let mut clicked = None;
     for &index in tree.children_of(parent) {
@@ -2518,10 +2890,63 @@ fn draw_page_nodes(
 
         let (rect, response) = ui.allocate_exact_size(
             vec2(ui.available_width(), 30.0),
-            Sense::click(),
+            Sense::click_and_drag(),
         );
+
+        // Drag start / update
+        if response.drag_started() && capsule.native {
+            *dragged_page = Some(index);
+        }
+
         let is_selected = selected == Some(index);
-        if is_selected {
+        let is_dragged = *dragged_page == Some(index);
+
+        // Check drop target if something is currently being dragged
+        let mut is_valid_drop_target = false;
+        let mut is_cycle_target = false;
+        if let Some(dragged) = *dragged_page {
+            if dragged != index && response.hovered() {
+                if tree.is_descendant_of(index, dragged) {
+                    is_cycle_target = true;
+                } else {
+                    is_valid_drop_target = true;
+                    *drop_target = Some(Some(capsule.message_id.clone()));
+                }
+            }
+        }
+
+        if is_dragged {
+            ui.painter().rect_stroke(
+                rect,
+                theme::RADIUS,
+                Stroke::new(1.0, theme::fade(theme::LINE, 0.4)),
+                egui::StrokeKind::Inside,
+            );
+        } else if is_valid_drop_target {
+            ui.painter().rect_stroke(
+                rect,
+                theme::RADIUS,
+                Stroke::new(1.5, theme::ACCENT),
+                egui::StrokeKind::Inside,
+            );
+            ui.painter().rect_filled(
+                rect,
+                theme::RADIUS,
+                theme::fade(theme::ACCENT, 0.15),
+            );
+        } else if is_cycle_target {
+            ui.painter().rect_stroke(
+                rect,
+                theme::RADIUS,
+                Stroke::new(1.5, theme::BAD),
+                egui::StrokeKind::Inside,
+            );
+            ui.painter().rect_filled(
+                rect,
+                theme::RADIUS,
+                theme::fade(theme::BAD, 0.15),
+            );
+        } else if is_selected {
             ui.painter()
                 .rect_filled(rect, theme::RADIUS, theme::WASH_SELECTED);
             ui.painter().rect_filled(
@@ -2563,8 +2988,10 @@ fn draw_page_nodes(
             toggle = chev.clicked();
         }
 
-        let ink = if is_selected || response.hovered() {
+        let ink = if is_selected || response.hovered() || is_valid_drop_target {
             Color32::WHITE
+        } else if is_dragged {
+            theme::FAINT
         } else {
             theme::SIDEBAR_INK
         };
@@ -2614,14 +3041,46 @@ fn draw_page_nodes(
             } else {
                 collapsed.insert(key.clone());
             }
-        } else if response.clicked() {
+        } else if response.clicked() && dragged_page.is_none() {
             clicked = Some(index);
         }
 
-        let response = if capsule.native {
-            response
-        } else {
+        // Floating drag preview badge when dragging this page
+        if is_dragged {
+            if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
+                let painter = ui.ctx().layer_painter(egui::LayerId::new(
+                    egui::Order::Tooltip,
+                    egui::Id::new("page-drag-preview"),
+                ));
+                let preview_rect = Rect::from_min_size(
+                    pos2(pointer_pos.x + 12.0, pointer_pos.y + 12.0),
+                    vec2(140.0, 24.0),
+                );
+                painter.rect_filled(preview_rect, theme::RADIUS, theme::WASH_SELECTED);
+                painter.rect_stroke(
+                    preview_rect,
+                    theme::RADIUS,
+                    Stroke::new(1.0, theme::ACCENT),
+                    egui::StrokeKind::Inside,
+                );
+                painter.text(
+                    pos2(preview_rect.left() + 8.0, preview_rect.center().y),
+                    Align2::LEFT_CENTER,
+                    truncate_chars(&capsule.subject, 18),
+                    FontId::new(11.0, theme::medium()),
+                    Color32::WHITE,
+                );
+            }
+        }
+
+        let response = if is_cycle_target {
+            response.on_hover_text(t(locale, Key::CannotDropInsideSelf))
+        } else if is_valid_drop_target {
+            response.on_hover_text(format!("{} «{}»", t(locale, Key::MakeChildOf), capsule.subject))
+        } else if !capsule.native {
             response.on_hover_text("Imported email — read-only in the native prototype")
+        } else {
+            response
         };
         let _ = response;
 
@@ -2634,6 +3093,9 @@ fn draw_page_nodes(
                 depth + 1,
                 selected,
                 collapsed,
+                dragged_page,
+                drop_target,
+                locale,
             ) {
                 clicked = Some(child);
             }

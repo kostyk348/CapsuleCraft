@@ -102,7 +102,7 @@ impl Vault {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|err| format!("Clock error: {err}"))?;
-        let stamp = now.as_millis();
+        let stamp = now.as_nanos();
         let suffix = format!("{:x}", stamp & 0xfffff);
 
         let mut file_name = format!("capsule_native_{suffix}.eml");
@@ -116,7 +116,7 @@ impl Vault {
             file_name = format!("capsule_native_{suffix}_{counter}.eml");
             counter += 1;
         }
-        let message_id = format!("<capsule-native-{suffix}-{stamp}@vault.local>");
+        let message_id = format!("<capsule-native-{suffix}-{stamp}-{}@vault.local>", self.capsules.len());
 
         let parent_capsule = parent
             .as_ref()
@@ -131,6 +131,32 @@ impl Vault {
         let index = self.capsules.len() - 1;
         self.save(index)?;
         Ok(index)
+    }
+
+    pub fn reparent_page(&mut self, index: usize, new_parent_id: Option<String>) -> Result<(), String> {
+        if index >= self.capsules.len() {
+            return Err("Invalid page index".to_string());
+        }
+
+        // Cycle check: verify new_parent_id is not the page itself and not a descendant of the page
+        if let Some(target_id) = new_parent_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            let this_id = &self.capsules[index].message_id;
+            if target_id == this_id {
+                return Err("Cannot reparent page to itself".to_string());
+            }
+
+            let tree = PageTree::build(&self.capsules);
+            if let Some(target_idx) = self.capsules.iter().position(|c| c.message_id == target_id) {
+                if tree.is_descendant_of(target_idx, index) {
+                    return Err("Cannot reparent page inside its own subtree (cycle detected)".to_string());
+                }
+            }
+        }
+
+        let capsule = &mut self.capsules[index];
+        capsule.parent_id = new_parent_id.filter(|s| !s.trim().is_empty());
+        self.save(index)?;
+        Ok(())
     }
 
     pub fn selected_root(&self) -> Option<usize> {
@@ -273,6 +299,26 @@ impl PageTree {
         result.reverse();
         result
     }
+
+    /// Returns `true` if `node` is a descendant of `ancestor`.
+    pub fn is_descendant_of(&self, node: usize, ancestor: usize) -> bool {
+        if node == ancestor {
+            return false;
+        }
+        let mut current = self.parent_of(node);
+        let mut seen = HashSet::new();
+        seen.insert(node);
+        while let Some(parent) = current {
+            if parent == ancestor {
+                return true;
+            }
+            if !seen.insert(parent) {
+                break;
+            }
+            current = self.parent_of(parent);
+        }
+        false
+    }
 }
 
 fn effective_parent(index: usize, raw_parents: &[Option<usize>]) -> Option<usize> {
@@ -334,5 +380,62 @@ mod tests {
         assert_eq!(tree.roots(), &[0, 1]);
         assert_eq!(tree.children_of(Some(0)), &[2]);
         assert!(tree.parent_of(2).is_some());
+    }
+
+    #[test]
+    fn test_is_descendant_of() {
+        let capsules = vec![
+            capsule("<root>", "Root", None),
+            capsule("<a>", "Alpha", Some("<root>")),
+            capsule("<a1>", "Alpha one", Some("<a>")),
+            capsule("<a2>", "Alpha two", Some("<a1>")),
+            capsule("<b>", "Beta", Some("<root>")),
+        ];
+        let tree = PageTree::build(&capsules);
+
+        // a1 is descendant of a (1) and root (0)
+        assert!(tree.is_descendant_of(2, 1));
+        assert!(tree.is_descendant_of(2, 0));
+        assert!(tree.is_descendant_of(3, 1));
+        assert!(tree.is_descendant_of(3, 0));
+
+        // root is not descendant of a1
+        assert!(!tree.is_descendant_of(0, 2));
+        // beta is not descendant of alpha
+        assert!(!tree.is_descendant_of(4, 1));
+        // node is not descendant of itself
+        assert!(!tree.is_descendant_of(1, 1));
+    }
+
+    #[test]
+    fn test_reparent_page() {
+        let dir = std::env::temp_dir().join(format!("capsuleos-reparent-test-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        let mut vault = Vault::load(dir.clone());
+
+        let p1 = vault.create_page(None).unwrap();
+        let p2 = vault.create_page(None).unwrap();
+        let p3 = vault.create_page(None).unwrap();
+
+        let id1 = vault.capsules[p1].message_id.clone();
+        let id2 = vault.capsules[p2].message_id.clone();
+
+        // Make p2 child of p1
+        vault.reparent_page(p2, Some(id1.clone())).unwrap();
+        assert_eq!(vault.capsules[p2].parent_id, Some(id1.clone()));
+
+        // Make p3 child of p2
+        vault.reparent_page(p3, Some(id2.clone())).unwrap();
+        assert_eq!(vault.capsules[p3].parent_id, Some(id2.clone()));
+
+        // Cycle check: attempt to make p1 child of p3 (which is descendant of p1) must fail
+        let id3 = vault.capsules[p3].message_id.clone();
+        let err = vault.reparent_page(p1, Some(id3)).unwrap_err();
+        assert!(err.contains("cycle detected"));
+
+        // Reparent p2 to root (None)
+        vault.reparent_page(p2, None).unwrap();
+        assert_eq!(vault.capsules[p2].parent_id, None);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -186,6 +186,9 @@ strings! {
     CommandExportMarkdown => ("Экспорт Markdown", "Export Markdown"),
     CommandExportVault => ("Экспорт хранилища", "Export vault"),
     CommandImport => ("Импорт .eml", "Import .eml"),
+    CommandImportObsidian => ("Импорт Obsidian / Markdown…", "Import Obsidian / Markdown…"),
+    ImportObsidianTitle => ("Выберите папку хранилища Obsidian", "Select Obsidian Vault Folder"),
+    ObsidianImportSummary => ("Импортировано из Obsidian", "Imported from Obsidian"),
     CommandLocale => ("Переключить язык", "Switch language"),
     UndoEmpty => ("История пуста", "Nothing to undo"),
     RedoEmpty => ("Нечего повторять", "Nothing to redo"),
@@ -414,6 +417,30 @@ strings! {
     AddColumn => ("Добавить столбец", "Add column"),
     AddRow => ("Добавить строку", "Add row"),
     RenameField => ("Название", "Name"),
+
+    // Drag-and-drop hierarchy
+    MakeChildOf => ("Сделать дочерней для", "Make child of"),
+    MoveToRoot => ("Переместить в корень", "Move to root"),
+    CannotDropInsideSelf => ("Нельзя переместить внутрь собственного поддерева", "Cannot move inside its own subtree"),
+
+    // IMAP Sync
+    ImapSyncTitle => ("Синхронизация почты (IMAP)", "Email Sync (IMAP)"),
+    ImapSyncDesc => ("Синхронизация капсул через почтовый ящик по протоколу IMAP.", "Synchronize capsules via an IMAP mailbox."),
+    ImapHost => ("IMAP сервер", "IMAP Host"),
+    ImapPort => ("Порт", "Port"),
+    ImapUsername => ("Логин / Email", "Username / Email"),
+    ImapPassword => ("Пароль приложения", "App Password"),
+    ImapFolder => ("Папка на сервере", "Mailbox Folder"),
+    ImapEnable => ("Включить синхронизацию", "Enable synchronization"),
+    ImapTestConnection => ("Проверить связь", "Test Connection"),
+    ImapSyncNow => ("Синхронизировать сейчас", "Sync Now"),
+    ImapSaveSettings => ("Сохранить настройки", "Save Settings"),
+    ImapTesting => ("Проверка...", "Testing..."),
+    ImapSyncing => ("Синхронизация...", "Syncing..."),
+    ImapSynced => ("Синхронизировано", "Synced"),
+    ImapDisabled => ("IMAP выкл", "IMAP off"),
+    ImapSuccessToast => ("Синхронизация успешно выполнена", "Sync completed successfully"),
+    ImapErrorToast => ("Ошибка синхронизации", "Sync error"),
 }
 
 pub fn t(locale: Locale, key: Key) -> &'static str {
