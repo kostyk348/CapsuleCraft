@@ -71,14 +71,15 @@ export interface TaskStats {
   completionRate: number;
 }
 
+/** Default (English) bucket titles — the UI passes localized ones from i18n. */
 export const BUCKET_TITLES: Record<BucketId, string> = {
-  overdue: 'Просрочено',
-  today: 'Сегодня',
-  tomorrow: 'Завтра',
-  week: 'На этой неделе',
-  later: 'Позже',
-  none: 'Без даты',
-  done: 'Выполнено',
+  overdue: 'Overdue',
+  today: 'Today',
+  tomorrow: 'Tomorrow',
+  week: 'This week',
+  later: 'Later',
+  none: 'No due date',
+  done: 'Completed',
 };
 
 const PRIORITY_WEIGHT: Record<TaskPriority, number> = { high: 0, normal: 1, low: 2 };
@@ -366,14 +367,19 @@ export function sortTasks(tasks: PlannedTask[]): PlannedTask[] {
 }
 
 /** Group tasks into the fixed agenda buckets, skipping empty sections. */
-export function groupTasks(tasks: PlannedTask[], today: string): TaskSection[] {
+export function groupTasks(
+  tasks: PlannedTask[],
+  today: string,
+  options: { titles?: Record<BucketId, string> } = {},
+): TaskSection[] {
+  const titles = options.titles || BUCKET_TITLES;
   const order: BucketId[] = ['overdue', 'today', 'tomorrow', 'week', 'later', 'none', 'done'];
   const buckets = new Map<BucketId, PlannedTask[]>(order.map((id) => [id, []]));
   for (const task of tasks) {
     buckets.get(bucketOf(task, today))!.push(task);
   }
   return order
-    .map((id) => ({ id, title: BUCKET_TITLES[id], tasks: sortTasks(buckets.get(id)!) }))
+    .map((id) => ({ id, title: titles[id], tasks: sortTasks(buckets.get(id)!) }))
     .filter((section) => section.tasks.length > 0);
 }
 
@@ -464,7 +470,14 @@ export interface IcsOptions {
   calendarName?: string;
   /** Include already completed tasks (STATUS:COMPLETED). Default: false. */
   includeCompleted?: boolean;
+  /** Output language of DESCRIPTION strings. Default: 'en'. */
+  lang?: 'ru' | 'en';
 }
+
+const ICS_LABELS = {
+  en: { untitled: '(untitled)', capsule: 'Capsule: {subject}', list: 'List: {title}', tags: 'Tags: {tags}' },
+  ru: { untitled: '(без названия)', capsule: 'Капсула: {subject}', list: 'Список: {title}', tags: 'Теги: {tags}' },
+} as const;
 
 function icsPriority(priority: TaskPriority | undefined): number {
   switch (priority) {
@@ -482,6 +495,8 @@ export function buildIcs(tasks: PlannedTask[], options: IcsOptions = {}): string
   const now = options.now || new Date();
   const stamp = formatUtcStamp(now);
   const calendarName = options.calendarName || 'CapsuleCraft Planning';
+  const lang = options.lang || 'en';
+  const labels = ICS_LABELS[lang];
   const selected = options.includeCompleted
     ? tasks
     : tasks.filter((t) => taskStatus(t.item) !== 'done');
@@ -489,7 +504,7 @@ export function buildIcs(tasks: PlannedTask[], options: IcsOptions = {}): string
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//CapsuleCraft//Planning//RU',
+    `PRODID:-//CapsuleCraft//Planning//${lang.toUpperCase()}`,
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${escapeIcsText(calendarName)}`,
@@ -497,10 +512,12 @@ export function buildIcs(tasks: PlannedTask[], options: IcsOptions = {}): string
 
   for (const task of selected) {
     const uid = `${sanitizeUid(task.blockId)}.${sanitizeUid(task.item.id)}@${ICS_UID_DOMAIN}`;
-    const summary = task.item.text.trim() || '(без названия)';
-    const descriptionParts = [`Капсула: ${task.capsuleSubject}`];
-    if (task.blockTitle) descriptionParts.push(`Список: ${task.blockTitle}`);
-    if (task.capsuleTags.length) descriptionParts.push(`Теги: ${task.capsuleTags.join(' ')}`);
+    const summary = task.item.text.trim() || labels.untitled;
+    const descriptionParts = [labels.capsule.replace('{subject}', task.capsuleSubject)];
+    if (task.blockTitle) descriptionParts.push(labels.list.replace('{title}', task.blockTitle));
+    if (task.capsuleTags.length) {
+      descriptionParts.push(labels.tags.replace('{tags}', task.capsuleTags.join(' ')));
+    }
 
     lines.push('BEGIN:VTODO');
     lines.push(`UID:${uid}`);

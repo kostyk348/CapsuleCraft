@@ -118,7 +118,7 @@ export const WhiteboardBlock: React.FC<Props> = ({
       y: 80 + (elements.length % 3) * 40,
       width: type === 'sticky' ? 200 : type === 'arrow' ? 120 : 180,
       height: type === 'sticky' ? 85 : type === 'arrow' ? 4 : 65,
-      label: type === 'sticky' ? '💡 Новая мысль / инсайт' : type === 'arrow' ? 'Link' : 'Mind Node',
+      label: type === 'sticky' ? t('board.stickyLabel') : type === 'arrow' ? 'Link' : 'Mind Node',
       color: type === 'sticky' ? '#f59e0b' : '#38bdf8',
     };
     const updated = [...elements, newEl];

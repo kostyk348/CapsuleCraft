@@ -3,6 +3,7 @@ import { CapsuleBlock, ParagraphBlockData } from '../../types';
 import { vaultStore } from '../../engine/vaultStore';
 import { renderMarkdownMultiLine } from '../../engine/markdown';
 import { Eye, Pencil, CornerDownLeft } from 'lucide-react';
+import { useI18n } from '../../i18n';
 
 interface Props {
   block: CapsuleBlock & { type: 'paragraph' };
@@ -25,6 +26,7 @@ function trailingBacklinkQuery(text: string): string | null {
 }
 
 export const RichTextBlock: React.FC<Props> = ({ block, onChange, onKeyDown, onOpenCapsule }) => {
+  const { t } = useI18n();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -74,7 +76,7 @@ export const RichTextBlock: React.FC<Props> = ({ block, onChange, onKeyDown, onO
           type="button"
           onClick={() => setShowPreview((v) => !v)}
           className="p-1 rounded bg-slate-800/80 text-slate-400 hover:text-cyan-300 border border-slate-700/60 text-[10px] flex items-center gap-1"
-          title={showPreview ? 'Редактировать' : 'Предпросмотр (Markdown)'}
+          title={showPreview ? t('block.edit') : t('block.preview')}
         >
           {showPreview ? <Pencil className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
         </button>
@@ -85,7 +87,7 @@ export const RichTextBlock: React.FC<Props> = ({ block, onChange, onKeyDown, onO
           className="w-full text-slate-200 text-[15px] leading-relaxed py-0.5 cursor-text"
           onDoubleClick={() => setShowPreview(false)}
           onClick={() => setShowPreview(false)}
-          title="Двойной клик — редактировать"
+          title={t('block.doubleClickEdit')}
         >
           {renderMarkdownMultiLine(
             block.data.text,
@@ -107,7 +109,7 @@ export const RichTextBlock: React.FC<Props> = ({ block, onChange, onKeyDown, onO
             }
             onKeyDown?.(e);
           }}
-          placeholder="Type a thought or enter '/' for interactive blocks... [[для ссылки на капсулу"
+          placeholder={t('block.paragraphPlaceholder')}
           className="w-full resize-none overflow-hidden bg-transparent text-slate-300 text-[15px] leading-relaxed border-none outline-none focus:ring-0 placeholder:text-slate-600 focus:text-slate-100 selection:bg-cyan-500/30 font-normal"
         />
       )}

@@ -598,7 +598,7 @@ export const BlockCanvasEditor: React.FC<Props> = ({
                 type="button"
                 onClick={handleExportMarkdown}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 text-emerald-300 hover:bg-emerald-950/40 border border-emerald-600/30 text-xs font-medium transition-all"
-                title="Экспорт капсулы в Markdown (опция — .eml остаётся источником истины)"
+                title={t('editor.exportMd')}
               >
                 <FileCode className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Export .md</span>
@@ -818,6 +818,7 @@ const RelatedCapsules: React.FC<{
   capsule: CapsuleNode;
   onOpenCapsule?: (messageId: string) => void;
 }> = ({ capsule, onOpenCapsule }) => {
+  const { t } = useI18n();
   const outgoing = vaultStore.getBacklinks(capsule.messageId);
   const incoming = vaultStore.getIncomingBacklinks(capsule.messageId);
   // tf-idf cosine over the same inverted index — deterministic "similar by meaning".
@@ -853,35 +854,35 @@ const RelatedCapsules: React.FC<{
       <div className="px-5 py-3 border-b border-slate-800/80 flex items-center gap-2">
         <Layers className="w-4 h-4 text-cyan-400" />
         <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-          Связанные капсулы
+          {t('editor.relatedCapsules')}
         </span>
         <span className="text-[10px] font-mono text-slate-500 ml-auto">
           {incoming.length} ← / → {outgoing.length}
-          {similar.length > 0 ? ` · ~${similar.length} пох.` : ''}
+          {similar.length > 0 ? t('editor.similarCount', { count: similar.length }) : ''}
         </span>
       </div>
       <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div className="space-y-1.5">
           <div className="text-[10px] font-mono text-purple-400/80 uppercase tracking-wider mb-1">
-            Ссылаются на эту капсулу (incoming)
+            {t('editor.incoming')}
           </div>
           {incoming.length > 0 ? incoming.map((id) => renderLink(id, 'in')) : (
-            <div className="text-[11px] text-slate-600">— нет входящих ссылок</div>
+            <div className="text-[11px] text-slate-600">{t('editor.incomingEmpty')}</div>
           )}
         </div>
         <div className="space-y-1.5">
           <div className="text-[10px] font-mono text-cyan-400/80 uppercase tracking-wider mb-1">
-            Ссылки из этой капсулы (outgoing)
+            {t('editor.outgoing')}
           </div>
           {outgoing.length > 0 ? outgoing.map((id) => renderLink(id, 'out')) : (
-            <div className="text-[11px] text-slate-600">— нет исходящих ссылок</div>
+            <div className="text-[11px] text-slate-600">{t('editor.outgoingEmpty')}</div>
           )}
         </div>
       </div>
       {similar.length > 0 && (
         <div className="px-4 pb-4">
           <div className="text-[10px] font-mono text-emerald-400/80 uppercase tracking-wider mb-1.5">
-            Похожие по смыслу (tf-idf, без ИИ)
+            {t('editor.relatedTfidf')}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {similar.map(({ node, similarity }) => (
@@ -890,7 +891,7 @@ const RelatedCapsules: React.FC<{
                 type="button"
                 onClick={() => onOpenCapsule?.(node.messageId)}
                 className="group/link flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-950/20 hover:bg-emerald-950/40 border border-emerald-900/40 hover:border-emerald-500/40 text-left transition-all"
-                title={`tf-idf косинусная близость: ${(similarity * 100).toFixed(1)}%`}
+                title={t('editor.relatedTitle', { score: (similarity * 100).toFixed(1) })}
               >
                 <span className="text-[10px] font-mono text-emerald-400">≈</span>
                 <span className="text-xs text-slate-300 group-hover/link:text-emerald-200 truncate">

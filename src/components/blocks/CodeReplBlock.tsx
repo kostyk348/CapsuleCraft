@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CapsuleBlock, CodeReplBlockData } from '../../types';
 import { Play, Code2, Trash2, CheckCircle2, AlertCircle, Copy, Check } from 'lucide-react';
+import { useI18n } from '../../i18n';
 
 interface Props {
   block: CapsuleBlock & { type: 'code_repl' };
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export const CodeReplBlock: React.FC<Props> = ({ block, onChange, onDelete }) => {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
 
@@ -37,10 +39,7 @@ export const CodeReplBlock: React.FC<Props> = ({ block, onChange, onDelete }) =>
       const langLabel = block.data.language === 'python' ? 'Python' : 'Rust';
       finishRun({
         output: undefined,
-        error:
-          langLabel +
-          ' — интерпретатор не входит в offline-сборку CapsuleCraft (zero-dependency). ' +
-          'Код сохранён в .eml как текст. Исполняемые языки сейчас: JavaScript, JSON.',
+        error: t('code.unsupportedNote', { lang: langLabel }),
       });
       return;
     }
@@ -130,9 +129,9 @@ export const CodeReplBlock: React.FC<Props> = ({ block, onChange, onDelete }) =>
             className="bg-slate-800/80 text-xs text-slate-300 border border-slate-700 rounded px-2 py-0.5 outline-none font-mono"
           >
             <option value="javascript">JavaScript (REPL)</option>
-            <option value="python">Python — скоро</option>
-            <option value="rust">Rust — скоро</option>
-            <option value="json">JSON (валидация)</option>
+            <option value="python">{t('code.option.pythonSoon')}</option>
+            <option value="rust">{t('code.option.rustSoon')}</option>
+            <option value="json">{t('code.option.json')}</option>
           </select>
         </div>
 

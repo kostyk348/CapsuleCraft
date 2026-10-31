@@ -79,7 +79,7 @@ export const CommandPalette: React.FC<Props> = ({
         title: t('palette.importTitle'),
         hint: t('palette.importHint'),
         group: t('palette.importGroup'),
-        keywords: ['import', 'открыть', 'файл', 'загрузить', 'file', 'open'],
+        keywords: t('palette.import.keywords').split(' '),
         run: () => fileRef.current?.click(),
       },
     ],
