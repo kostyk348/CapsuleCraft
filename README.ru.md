@@ -11,7 +11,7 @@
 
 [![Release](https://img.shields.io/github/v/release/kostyk348/CapsuleCraft?sort=semver&color=0ea5e9&label=release)](https://github.com/kostyk348/CapsuleCraft/releases)
 [![CI](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml)
-[![native tests](https://img.shields.io/badge/native%20tests-98%20passing-22c55e)](native/)
+[![native tests](https://img.shields.io/badge/native%20tests-133%20passing-22c55e)](native/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![No DB](https://img.shields.io/badge/database-none-orange)](#почему-eml)
 [![Offline](https://img.shields.io/badge/offline--first-success)](#сильные-стороны)
@@ -22,6 +22,8 @@
 </div>
 
 ---
+
+![CapsuleCraft в действии — страницы, планирование, граф, треды и MIME](screenshots/demo.gif)
 
 ## Что такое CapsuleCraft?
 
@@ -77,7 +79,18 @@ CapsuleCraft стартует **пустым** — никаких демо-за�
 - **Треды** — ответы это дочерние `.eml` с заголовками `In-Reply-To` /
   `References`, ровно как в почте: дерево размышлений живёт в стандарте.
 - **Данные** — CSV/JSON едут как MIME-части и адресуются через `Content-ID`;
-  datagrid-блоки показывают их таблицами.
+  datagrid-блоки показывают их таблицами, а ячейки-формулы `=SUM(A1:A5)`
+  считает встроенный офлайн-JS-движок — и в браузере, и в нативной оболочке.
+- **Воспроизведение аудио в native shell** — аудиозаметки из MIME-частей
+  играют прямо в egui (rodio: WAV/MP3/OGG/FLAC) с кнопками Play/Pause/Stop.
+- **Шифрование капсул OpenPGP** — любую капсулу можно экспортировать в
+  бронированный `.eml.asc` с шифрованием по парольной фразе (AES-256,
+  SEIPD v1 через rPGP) и импортировать обратно тем же диалогом; полностью
+  офлайн, бинарник gpg не нужен.
+- **Офлайн-исполнение кода** — JavaScript-блоки REPL работают в native shell
+  через встроенный движок boa (веб-сборка — песочница в Web Worker);
+  JSON валидируется и форматируется; Python/Rust честно сообщают, что
+  интерпретатора в zero-dependency-сборке нет.
 - **Импорт** — перетащите `.eml` в окно (байт-в-байт), импорт по IMAP или
   перенос готового хранилища Obsidian (`--import-obsidian`).
 - **Готовность к ИИ-агентам** — хранилище открывается наружу через
@@ -166,19 +179,19 @@ CapsuleCraft нарочно уже: локальное хранение, кот�
 **Нативный AppImage** (рекомендуется, Linux):
 
 ```bash
-chmod +x CapsuleCraft_1.8.1_amd64.AppImage
-./CapsuleCraft_1.8.1_amd64.AppImage              # хранилище по умолчанию...
-./CapsuleCraft_1.8.1_amd64.AppImage /path/to/vault   # ...или ваша папка
+chmod +x CapsuleCraft_1.9.0_amd64.AppImage
+./CapsuleCraft_1.9.0_amd64.AppImage              # хранилище по умолчанию...
+./CapsuleCraft_1.9.0_amd64.AppImage /path/to/vault   # ...или ваша папка
 ```
 
 Нужны только glibc и рабочий стол X11 или Wayland — никаких WebKitGTK,
 WebView2 и прочего. К каждому релизу прилагается `SHA256SUMS.txt`.
 
-**Нативное приложение для Windows** (x64) — `CapsuleCraft_native_1.8.1_x64.zip`:
+**Нативное приложение для Windows** (x64) — `CapsuleCraft_native_1.9.0_x64.zip`:
 распакуйте в любую папку и запустите `CapsuleCraft.exe`. Автономный нативный egui-клиент
 без WebView2 и без необходимости установки.
 
-**Нативное приложение для macOS** (arm64) — `CapsuleCraft_native_1.8.1_arm64.app.zip`:
+**Нативное приложение для macOS** (arm64) — `CapsuleCraft_native_1.9.0_arm64.app.zip`:
 распакуйте, перетащите `CapsuleCraft.app` в «Программы». Подпись ad-hoc; если
 Gatekeeper блокирует первый запуск: `xattr -d com.apple.quarantine CapsuleCraft.app`.
 
@@ -234,7 +247,7 @@ native/src/
 ```bash
 # native shell
 cd native
-cargo test          # 98 unit-тестов
+cargo test          # 133 unit-теста
 
 # legacy web engine
 npm ci
@@ -245,6 +258,7 @@ npx vitest run      # 172 теста
 
 | Версия | Что | Когда |
 |---|---|---|
+| **v1.9.0** | Трио фич роадмапа в native shell: воспроизведение аудио (rodio), шифрование `.eml.asc` по OpenPGP (rPGP), исполнение кода и табличные формулы (boa); полный английский интерфейс с тестом на пуризм | 2026-10-31 |
 | **v1.8.1** | Пересобран релизный конвейер: нативная portable-сборка Windows, релиз создаётся заранее (артефакты больше не теряются), единый `SHA256SUMS.txt`, тесты нативного ядра в CI | 2026-10-27 |
 | **v1.8.0** | Двухуровневый хедер, Zen-режим, широкий холст; сборки macOS arm64; укрепление AppImage | 2026-10-26 |
 | **v1.7.0** | Встроенный FAQ в оболочке; нигде нет демо-заметок; обновлённый README | 2026-10-25 |
@@ -258,16 +272,16 @@ npx vitest run      # 172 теста
 
 ## Ограничения (честные)
 
-См. [`LIMITATIONS.md`](LIMITATIONS.md). Главное: нативная оболочка пока не
-исполняет код и не воспроизводит аудио, слежение за папкой — best-effort,
-капсулы не шифруются GPG.
+См. [`LIMITATIONS.md`](LIMITATIONS.md). Главное: воспроизведение аудио
+покрывает WAV/MP3/OGG/FLAC (веб-записи webm/opus требуют конвертации), JS-движок
+не выполняет таймеры и ввод-вывод, синхронизация хранилища по-прежнему ручная.
 
 ## Роадмап
 
-- ✅ v1.0 – v1.8 (текущий milestone)
-- ⬜ Нативное исполнение кода (REPL / табличные формулы JS)
-- ⬜ Воспроизведение аудио в native shell
-- ⬜ GPG-шифрование капсул
+- ✅ v1.0 – v1.9 (текущий milestone)
+- ✅ Нативное исполнение кода (REPL / табличные формулы JS) — готово в v1.9.0 (boa)
+- ✅ Воспроизведение аудио в native shell — готово в v1.9.0 (rodio)
+- ✅ GPG-шифрование капсул — готово в v1.9.0 (rPGP, `.eml.asc` с парольной фразой)
 - ✅ Сборки macOS в CI (arm64)
 - ⬜ Опциональная E2E-шифрованная синхронизация vault (tamper/censor-proof, всё ещё zero-cloud)
 

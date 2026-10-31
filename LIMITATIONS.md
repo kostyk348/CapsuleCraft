@@ -3,7 +3,7 @@
 Honest list of what CapsuleCraft does **not** do yet. Updated as features land — if a
 limitation below is fixed, it gets removed instead of being quietly forgotten.
 
-_Last updated: 2026-10-23 (v1.5 in progress)_
+_Last updated: 2026-10-31 (v1.9.0)_
 
 ## Page hierarchy
 
@@ -50,16 +50,26 @@ _Last updated: 2026-10-23 (v1.5 in progress)_
   text`). There is no grouping, undo, multi-select or connection routing.
 - Code REPL executes JavaScript in the browser; other language selectors are
   syntax labels, not real execution environments.
-- Block placeholders and some block-level toolbar labels are still hardcoded
-  English or Russian instead of going through i18n.
-- English/Russian pluralization is not implemented (`1 capsules`).
+- Grid formula cells evaluate one expression per cell (`=SUM(A1:A5)`,
+  `=AVG`, `=MIN`, `=MAX`, `=COUNT`, arithmetic, nested refs). There is no
+  cross-cell dependency graph: a cell resolves against the values committed
+  in the previous frame, and mutually recursive cells stop after 8 levels.
 - New capsules have no default tags or demo body; the subject falls back to a
   localized "New capsule" until you rename it.
 
 ## Architecture / product
 
-- Sync, multi-user access, RBAC and encryption-at-rest are roadmap items only.
-  Nothing in the UI claims otherwise.
+- Sync, multi-user access and RBAC remain roadmap items. Capsule **export**
+  to OpenPGP (`passphrase .eml.asc`) exists since v1.9.0, but there is no
+  keyring integration, no per-user public-key workflow and no
+  encryption-at-rest for the vault folder itself.
+- Native audio playback decodes WAV/MP3/OGG/FLAC through rodio's built-in
+  decoders; browser-recorded webm/opus notes are reported as not decodable
+  instead of playing silence. There is no seeking, volume or waveform scrub
+  yet — just Play/Pause/Stop.
+- The native JS engine (boa) executes pure computation only: a console shim
+  captures `log/warn/error`, but there are no timers, no `fetch`, no filesystem
+  access and no shared state between runs.
 - No plugin API, webhooks or external API yet. Extensibility is limited to the
   `.eml` file format and the TypeScript engine.
 - The web build persists the vault in `localStorage`; the Tauri build persists a
@@ -83,11 +93,12 @@ _Last updated: 2026-10-23 (v1.5 in progress)_
 The `native/` crate is a separate, experimental shell over the same `.eml`
 folder. It is honest about what it does not do yet:
 
-- **No audio playback.** Audio notes can be attached and stored as MIME parts,
-  but the native shell cannot play them; the block says so instead of showing a
-  fake waveform player.
-- **No code execution.** Code blocks are syntax-labelled text; "Run" is
-  unavailable, and the source is only ever written to the `.eml`.
+- **Audio playback covers WAV/MP3/OGG/FLAC** (rodio decoders). MediaRecorder
+  webm/opus shows an honest "attach mp3/wav/ogg/flac instead" note; there is
+  no seeking or volume control yet.
+- **Code blocks execute JavaScript and JSON** in the native shell (boa); the
+  source of truth is still the `.eml`, and other language selectors remain
+  honest syntax labels.
 - **Folder watching is debounced and best-effort.** The native shell polls the
   watcher once per frame and waits for unsaved edits to flush before reloading;
   on network shares or filesystems without change notifications it falls back to
