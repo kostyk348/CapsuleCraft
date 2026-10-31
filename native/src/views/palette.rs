@@ -903,3 +903,47 @@ fn build_index(capsules: &[Capsule]) -> search::Bm25Index {
     }
     index
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn has_cyrillic(text: &str) -> bool {
+        text.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c))
+    }
+
+    #[test]
+    fn english_palette_is_cyrillic_free() {
+        // Strict EN purism: titles, hints and search keywords must never
+        // leak Russian when the locale is English.
+        for (command, palette) in commands(Locale::En) {
+            let _ = command;
+            for text in [
+                palette.title.as_str(),
+                palette.hint.as_str(),
+                palette.group.as_str(),
+            ] {
+                assert!(
+                    !has_cyrillic(text),
+                    "EN palette text contains Cyrillic: {text}"
+                );
+            }
+            for keyword in &palette.keywords {
+                assert!(
+                    !has_cyrillic(keyword),
+                    "EN palette keyword contains Cyrillic: {keyword}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn russian_palette_keeps_its_aliases() {
+        // RU keeps both English keywords and Cyrillic aliases.
+        let cyr = commands(Locale::Ru)
+            .iter()
+            .flat_map(|(_, p)| p.keywords.iter().cloned())
+            .any(|k| has_cyrillic(&k));
+        assert!(cyr, "RU locale should still carry Cyrillic aliases");
+    }
+}

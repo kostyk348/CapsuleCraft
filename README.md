@@ -11,7 +11,7 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 
 [![Release](https://img.shields.io/github/v/release/kostyk348/CapsuleCraft?sort=semver&color=0ea5e9&label=release)](https://github.com/kostyk348/CapsuleCraft/releases)
 [![CI](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml)
-[![native tests](https://img.shields.io/badge/native%20tests-133%20passing-22c55e)](native/)
+[![native tests](https://img.shields.io/badge/native%20tests-135%20passing-22c55e)](native/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![No DB](https://img.shields.io/badge/database-none-orange)](#why-eml)
 [![Offline](https://img.shields.io/badge/offline--first-success)](#strengths)
@@ -248,7 +248,7 @@ native/src/
 ```bash
 # native shell
 cd native
-cargo test          # 133 unit tests
+cargo test          # 135 unit tests
 
 # legacy web engine
 npm ci

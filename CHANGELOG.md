@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 ## [1.9.0] — 2026-10-31 — Full English, roadmap trio in the native shell
 
 The three native-shell roadmap items land together with a strict-English UI
-pass. Native test suite grows from 98 to **133** unit tests.
+pass. Native test suite grows from 98 to **135** unit tests.
 
 ### Added
 - **Native audio playback** (roadmap): audio notes stored as MIME attachments
