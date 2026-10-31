@@ -378,7 +378,11 @@ pub fn generate_cothink(
                     "⚡ **Key Claims Scrutiny:**\n"
                 });
                 for c in &claims {
-                    crit.push_str(&format!("• «{}» — на чем основана эта цифра? Заложен ли буфер на отклонение?\n", c));
+                    if lang == Locale::Ru {
+                        crit.push_str(&format!("• «{}» — на чем основана эта цифра? Заложен ли буфер на отклонение?\n", c));
+                    } else {
+                        crit.push_str(&format!("• “{}” — what is this figure based on? Is there a buffer for deviation?\n", c));
+                    }
                 }
                 crit.push('\n');
             }
@@ -444,7 +448,8 @@ pub fn generate_cothink(
                 "### Core Essence & Context\n"
             });
             if !kw.is_empty() {
-                synth.push_str(&format!("**Темы:** {}\n\n", kw.join(" · ")));
+                let topics_label = if lang == Locale::Ru { "Темы" } else { "Topics" };
+                synth.push_str(&format!("**{}:** {}\n\n", topics_label, kw.join(" · ")));
             }
 
             synth.push_str(if lang == Locale::Ru {
@@ -488,7 +493,11 @@ pub fn generate_cothink(
                 });
             } else {
                 for (name, csv_data) in csv_attachments {
-                    content.push_str(&format!("#### Датасет: {}\n", name));
+                    if lang == Locale::Ru {
+                        content.push_str(&format!("#### Датасет: {}\n", name));
+                    } else {
+                        content.push_str(&format!("#### Dataset: {}\n", name));
+                    }
                     let stats = analyze_csv(csv_data);
                     if stats.is_empty() {
                         content.push_str(if lang == Locale::Ru {
@@ -498,10 +507,17 @@ pub fn generate_cothink(
                         });
                     } else {
                         for s in &stats {
-                            content.push_str(&format!(
-                                "• **{}** (N={}): Среднее={:.2}, Мин={:.2}, Макс={:.2}, Динамика={:+.1}%, Тренд={}\n",
-                                s.column, s.count, s.mean, s.min, s.max, s.delta_pct, s.trend
-                            ));
+                            if lang == Locale::Ru {
+                                content.push_str(&format!(
+                                    "• **{}** (N={}): Среднее={:.2}, Мин={:.2}, Макс={:.2}, Динамика={:+.1}%, Тренд={}\n",
+                                    s.column, s.count, s.mean, s.min, s.max, s.delta_pct, s.trend
+                                ));
+                            } else {
+                                content.push_str(&format!(
+                                    "• **{}** (N={}): Mean={:.2}, Min={:.2}, Max={:.2}, Change={:+.1}%, Trend={}\n",
+                                    s.column, s.count, s.mean, s.min, s.max, s.delta_pct, s.trend
+                                ));
+                            }
                         }
                     }
                     content.push('\n');
@@ -649,6 +665,60 @@ mod tests {
                 assert_eq!(b["data"]["tone"], "blue");
                 let text = b["data"]["content"].as_str().unwrap();
                 assert!(text.contains("Sales"));
+                assert!(text.contains("Датасет"));
+            }
+            _ => panic!("Expected CalloutBlock"),
+        }
+    }
+
+    #[test]
+    fn test_generate_cothink_english_output() {
+        // English capsule → every generated string must be Latin-only.
+        let blocks = vec![json!({
+            "id": "p1",
+            "type": "paragraph",
+            "data": { "text": "Launch plan: we will guaranteed grow by 50% without any risk review. Revenue projection is 12000 dollars soon." }
+        })];
+        let has_cyrillic = |s: &str| s.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c));
+
+        let crit = generate_cothink(CoThinkMode::Critique, "Launch", &blocks, &[], "budget");
+        match crit {
+            CoThinkOutcome::OpponentBlock(b) => {
+                let c = b["data"]["criticism"].as_str().unwrap();
+                assert!(c.contains("Analysis Focus"));
+                assert!(c.contains("budget"));
+                assert!(!has_cyrillic(c), "criticism leaked Cyrillic: {}", c);
+            }
+            _ => panic!("Expected OpponentBlock"),
+        }
+
+        let synth = generate_cothink(CoThinkMode::Synthesis, "Launch", &blocks, &[], "");
+        match synth {
+            CoThinkOutcome::CalloutBlock(b) => {
+                let c = b["data"]["content"].as_str().unwrap();
+                assert!(c.contains("Core Essence"));
+                assert!(!has_cyrillic(c), "synthesis leaked Cyrillic: {}", c);
+            }
+            _ => panic!("Expected CalloutBlock"),
+        }
+
+        let counter = generate_cothink(CoThinkMode::CounterArg, "Launch", &blocks, &[], "");
+        match counter {
+            CoThinkOutcome::ReplyCapsule { subject, body, .. } => {
+                assert_eq!(subject, "Re: Launch (Co-Thinker)");
+                assert!(!has_cyrillic(&body), "counter leaked Cyrillic: {}", body);
+            }
+            _ => panic!("Expected ReplyCapsule"),
+        }
+
+        let csv = "Day,Sales\n1,10\n2,20\n3,35";
+        let data = generate_cothink(CoThinkMode::DataInsight, "Launch", &blocks, &[("sales.csv", csv)], "");
+        match data {
+            CoThinkOutcome::CalloutBlock(b) => {
+                let c = b["data"]["content"].as_str().unwrap();
+                assert!(c.contains("Dataset"));
+                assert!(c.contains("Mean"));
+                assert!(!has_cyrillic(c), "data insight leaked Cyrillic: {}", c);
             }
             _ => panic!("Expected CalloutBlock"),
         }

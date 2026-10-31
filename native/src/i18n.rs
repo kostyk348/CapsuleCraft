@@ -110,6 +110,11 @@ macro_rules! strings {
                     Locale::En => self.en(),
                 }
             }
+
+            /// Every key in declaration order — used by purism tests.
+            pub fn all_keys() -> &'static [Key] {
+                &[$(Key::$key),*]
+            }
         }
     };
 }
@@ -518,10 +523,24 @@ mod tests {
     fn every_key_has_both_languages() {
         // The macro cannot produce a missing side, but an empty string would
         // still be a silent hole in the UI.
-        for key in [Key::Pages, Key::PlanningTitle, Key::ExternalPreview] {
-            assert!(!key.ru().is_empty());
-            assert!(!key.en().is_empty());
-            assert_ne!(key.ru(), "");
+        for key in Key::all_keys() {
+            assert!(!key.ru().is_empty(), "empty RU string for {:?}", key);
+            assert!(!key.en().is_empty(), "empty EN string for {:?}", key);
+        }
+    }
+
+    #[test]
+    fn english_strings_are_cyrillic_free() {
+        // Strict EN purism: the English locale must never render Russian,
+        // so no EN column may contain a single Cyrillic character.
+        for key in Key::all_keys() {
+            let en = key.en();
+            assert!(
+                !en.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c)),
+                "EN string for {:?} contains Cyrillic: {:?}",
+                key,
+                en
+            );
         }
     }
 
