@@ -1,7 +1,7 @@
 {
   "name": "capsulecraft",
   "private": true,
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "CapsuleCraft — Zero-DB, Pure-MIME multimodal workspace & personal knowledge engine (Tauri + React 19)",
   "license": "MIT",
   "repository": {

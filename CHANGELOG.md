@@ -3,6 +3,37 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.10.0] — 2026-11-01 — Microphone recording in the native shell
+
+The record half of the audio item: the egui shell now captures the microphone
+straight from the audio block, closing the gap with the web `MediaRecorder`
+flow. Native test suite grows from 135 to **143** unit tests.
+
+### Added
+- **Mic recording from the audio block**: a "Record from mic" button next to
+  "Attach audio" starts a take with a pulsing dot, an honest `m:ss` clock and
+  a live RMS level meter; "Stop recording" lands the take as a 16-bit mono
+  PCM WAV — cpal capture at the device's native rate, any input layout
+  downmixed — attached to the capsule like any other MIME part and immediately
+  playable, because the offline player decodes WAV natively
+  (`native/src/audio_recorder.rs`).
+- Takes are capped at ten minutes so a forgotten stop cannot fill the disk;
+  the level meter reads real input, never a fake animation.
+
+### Fixed
+- **File attachments from the audio block actually land in the capsule now**:
+  the file picker wrote a `__attach` marker into the block JSON that nothing
+  ever read. Attachments now travel through a new `BlockOp::AttachAudio`
+  command that the document view applies to `capsule.attachments` — the same
+  path recordings use.
+- Release pipeline: the native AppImage job installs `libasound2-dev` +
+  `pkg-config`, fixing the v1.9.0 AppImage failure (`alsa-sys` had no ALSA
+  headers on ubuntu-22.04).
+
+### Changed
+- New `Icon::Record` (filled dot) in the native icon set; the whole native
+  crate is `cargo fmt`-normalized.
+
 ## [1.9.0] — 2026-10-31 — Full English, roadmap trio in the native shell
 
 The three native-shell roadmap items land together with a strict-English UI

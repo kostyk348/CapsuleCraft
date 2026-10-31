@@ -36,6 +36,7 @@ pub enum Icon {
     Globe,
     Close,
     Sidebar,
+    Record,
 }
 
 fn at(rect: Rect, x: f32, y: f32) -> Pos2 {
@@ -58,6 +59,10 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
     };
 
     match icon {
+        Icon::Record => {
+            // Filled dot — the universal "recording" affordance.
+            dot(0.5, 0.5, 0.42);
+        }
         Icon::Doc => {
             p.rect_stroke(
                 Rect::from_min_max(at(rect, 0.24, 0.13), at(rect, 0.76, 0.87)),
@@ -215,7 +220,14 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             line(&[(0.16, 0.6), (0.84, 0.6)]);
         }
         Icon::Audio => {
-            for (x, h) in [(0.22, 0.2), (0.34, 0.5), (0.46, 0.34), (0.58, 0.66), (0.7, 0.28), (0.82, 0.44)] {
+            for (x, h) in [
+                (0.22, 0.2),
+                (0.34, 0.5),
+                (0.46, 0.34),
+                (0.58, 0.66),
+                (0.7, 0.28),
+                (0.82, 0.44),
+            ] {
                 line(&[(x, 0.5 - h / 2.0), (x, 0.5 + h / 2.0)]);
             }
         }
@@ -226,11 +238,31 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
                 stroke,
                 egui::StrokeKind::Inside,
             );
-            line(&[(0.28, 0.34), (0.44, 0.34), (0.44, 0.6), (0.28, 0.6), (0.28, 0.34)]);
-            line(&[(0.56, 0.44), (0.72, 0.44), (0.72, 0.68), (0.56, 0.68), (0.56, 0.44)]);
+            line(&[
+                (0.28, 0.34),
+                (0.44, 0.34),
+                (0.44, 0.6),
+                (0.28, 0.6),
+                (0.28, 0.34),
+            ]);
+            line(&[
+                (0.56, 0.44),
+                (0.72, 0.44),
+                (0.72, 0.68),
+                (0.56, 0.68),
+                (0.56, 0.44),
+            ]);
         }
         Icon::Filter => {
-            line(&[(0.16, 0.26), (0.84, 0.26), (0.58, 0.52), (0.58, 0.8), (0.42, 0.72), (0.42, 0.52), (0.16, 0.26)]);
+            line(&[
+                (0.16, 0.26),
+                (0.84, 0.26),
+                (0.58, 0.52),
+                (0.58, 0.8),
+                (0.42, 0.72),
+                (0.42, 0.52),
+                (0.16, 0.26),
+            ]);
         }
         Icon::Copy => {
             p.rect_stroke(
@@ -259,7 +291,14 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             line(&[(0.6, 0.4), (0.4, 0.6)]);
         }
         Icon::Tag => {
-            line(&[(0.16, 0.42), (0.42, 0.16), (0.84, 0.16), (0.84, 0.58), (0.58, 0.84), (0.16, 0.42)]);
+            line(&[
+                (0.16, 0.42),
+                (0.42, 0.16),
+                (0.84, 0.16),
+                (0.84, 0.58),
+                (0.58, 0.84),
+                (0.16, 0.42),
+            ]);
             dot(0.66, 0.34, 0.05);
         }
         Icon::Globe => {

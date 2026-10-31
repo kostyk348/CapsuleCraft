@@ -81,8 +81,9 @@ data transfer right inside the app.
   datagrid blocks render them as tables — and `=SUM(A1:A5)`-style formula cells
   are evaluated by the embedded offline JS engine, both in the browser and in
   the native shell.
-- **Native audio playback** — audio notes stored as MIME parts play right in
-  the egui shell (rodio: WAV/MP3/OGG/FLAC) with play/pause/stop controls.
+- **Native audio recording & playback** — record voice notes right from the
+  audio block (cpal → 16-bit PCM WAV, live level meter) and play MIME audio
+  in the egui shell (rodio: WAV/MP3/OGG/FLAC) with play/pause/stop controls.
 - **OpenPGP capsule encryption** — any capsule can be exported as an armored,
   passphrase-encrypted `.eml.asc` (AES-256, SEIPD v1 via rPGP) and imported
   back with the same dialog; fully offline, no gpg binary required.
@@ -259,6 +260,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v1.10.0** | Microphone recording from the native audio block (cpal → WAV, live meter); fixed audio file attachments never reaching the capsule; AppImage CI fix | 2026-11-01 |
 | **v1.9.0** | Roadmap trio in the native shell: audio playback (rodio), OpenPGP `.eml.asc` encryption (rPGP), code execution + grid formulas (boa); full English UI with a purism test | 2026-10-31 |
 | **v1.8.1** | Release pipeline rebuilt: native Windows portable build, pre-created release (no more lost artifacts), unified `SHA256SUMS.txt`, native test job in CI | 2026-10-27 |
 | **v1.8.0** | Two-tier header, Zen focus mode, wide canvas; macOS arm64 builds; AppImage hardening | 2026-10-26 |

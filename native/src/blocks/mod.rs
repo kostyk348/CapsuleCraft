@@ -46,16 +46,38 @@ pub enum BlockOp {
         target_text: String,
         after: String,
     },
+    /// A block produced a brand-new MIME attachment (picked file or mic
+    /// recording); the document view pushes it into `capsule.attachments` —
+    /// block renderers only get an immutable slice, so they ask instead.
+    AttachAudio {
+        name: String,
+        cid: String,
+        mime: String,
+        b64: String,
+        size: usize,
+    },
 }
 
 pub fn transform_block(block: &mut Value, target: BlockKind, locale: Locale) {
     let mut text = block_data_text(block);
     if text.is_empty() {
-        if let Some(content) = block.get("data").and_then(|d| d.get("content")).and_then(Value::as_str) {
+        if let Some(content) = block
+            .get("data")
+            .and_then(|d| d.get("content"))
+            .and_then(Value::as_str)
+        {
             text = content.to_string();
-        } else if let Some(code) = block.get("data").and_then(|d| d.get("code")).and_then(Value::as_str) {
+        } else if let Some(code) = block
+            .get("data")
+            .and_then(|d| d.get("code"))
+            .and_then(Value::as_str)
+        {
             text = code.to_string();
-        } else if let Some(items) = block.get("data").and_then(|d| d.get("items")).and_then(Value::as_array) {
+        } else if let Some(items) = block
+            .get("data")
+            .and_then(|d| d.get("items"))
+            .and_then(Value::as_array)
+        {
             let item_texts: Vec<&str> = items
                 .iter()
                 .filter_map(|i| i.get("text").and_then(Value::as_str))
@@ -63,7 +85,11 @@ pub fn transform_block(block: &mut Value, target: BlockKind, locale: Locale) {
             text = item_texts.join("\n");
         }
     }
-    let id = block.get("id").and_then(Value::as_str).unwrap_or("blk").to_string();
+    let id = block
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or("blk")
+        .to_string();
     *block = match target {
         BlockKind::Text => json!({
             "id": id,
@@ -246,7 +272,8 @@ pub fn draw_block_row(
                     ui.add_space(GUTTER);
                     ui.vertical(|ui| {
                         ui.set_max_width(ui.available_width());
-                        changed = draw_block_content(ui, block, &kind, attachments, locale, &mut op);
+                        changed =
+                            draw_block_content(ui, block, &kind, attachments, locale, &mut op);
                     });
                 });
             },
@@ -255,10 +282,7 @@ pub fn draw_block_row(
 
     let row_rect = response.rect;
     let hovered = ui.rect_contains_pointer(row_rect);
-    let handle_rect = Rect::from_min_size(
-        pos2(row_top.x + 1.0, row_top.y + 3.0),
-        vec2(20.0, 18.0),
-    );
+    let handle_rect = Rect::from_min_size(pos2(row_top.x + 1.0, row_top.y + 3.0), vec2(20.0, 18.0));
     let handle = ui
         .interact(
             handle_rect,
@@ -313,19 +337,69 @@ pub fn draw_block_row(
 
             // Turn into...
             menu_header(ui, t(locale, Key::TurnInto));
-            if menu_row(ui, Some(Icon::Doc), t(locale, Key::BlockParagraph), None, false, kind != "paragraph", false).clicked() {
+            if menu_row(
+                ui,
+                Some(Icon::Doc),
+                t(locale, Key::BlockParagraph),
+                None,
+                false,
+                kind != "paragraph",
+                false,
+            )
+            .clicked()
+            {
                 op = Some(BlockOp::TransformTo(BlockKind::Text));
             }
-            if menu_row(ui, Some(Icon::Command), t(locale, Key::BlockHeading), None, false, kind != "heading", false).clicked() {
+            if menu_row(
+                ui,
+                Some(Icon::Command),
+                t(locale, Key::BlockHeading),
+                None,
+                false,
+                kind != "heading",
+                false,
+            )
+            .clicked()
+            {
                 op = Some(BlockOp::TransformTo(BlockKind::Heading));
             }
-            if menu_row(ui, Some(Icon::Check), t(locale, Key::BlockTodo), None, false, kind != "todo_list", false).clicked() {
+            if menu_row(
+                ui,
+                Some(Icon::Check),
+                t(locale, Key::BlockTodo),
+                None,
+                false,
+                kind != "todo_list",
+                false,
+            )
+            .clicked()
+            {
                 op = Some(BlockOp::TransformTo(BlockKind::Tasks));
             }
-            if menu_row(ui, Some(Icon::Info), t(locale, Key::BlockCallout), None, false, kind != "callout", false).clicked() {
+            if menu_row(
+                ui,
+                Some(Icon::Info),
+                t(locale, Key::BlockCallout),
+                None,
+                false,
+                kind != "callout",
+                false,
+            )
+            .clicked()
+            {
                 op = Some(BlockOp::TransformTo(BlockKind::Callout));
             }
-            if menu_row(ui, Some(Icon::Code), t(locale, Key::BlockCode), None, false, kind != "code_repl", false).clicked() {
+            if menu_row(
+                ui,
+                Some(Icon::Code),
+                t(locale, Key::BlockCode),
+                None,
+                false,
+                kind != "code_repl",
+                false,
+            )
+            .clicked()
+            {
                 op = Some(BlockOp::TransformTo(BlockKind::Code));
             }
             menu_separator(ui);
@@ -432,13 +506,17 @@ pub fn draw_block_content(
                     if p_idx != s_idx {
                         let c_min: usize = p_idx.min(s_idx).into();
                         let c_max: usize = p_idx.max(s_idx).into();
-                        let (b_start, b_end) = crate::rich_text::char_range_to_byte_range(&text, c_min, c_max);
+                        let (b_start, b_end) =
+                            crate::rich_text::char_range_to_byte_range(&text, c_min, c_max);
                         if b_start < b_end && b_end <= text.len() {
                             let r1 = output.galley.pos_from_cursor(cursor_range.primary);
                             let r2 = output.galley.pos_from_cursor(cursor_range.secondary);
                             let sel_rect = r1.union(r2).translate(output.galley_pos.to_vec2());
                             ui.data_mut(|d| {
-                                d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel_rect, b_start, b_end));
+                                d.insert_temp(
+                                    sel_key,
+                                    crate::rich_text::SavedSelection::new(sel_rect, b_start, b_end),
+                                );
                             });
                         }
                     } else {
@@ -447,28 +525,62 @@ pub fn draw_block_content(
                 }
             }
 
-            let saved_selection = ui.data(|d| d.get_temp::<crate::rich_text::SavedSelection>(sel_key));
+            let saved_selection =
+                ui.data(|d| d.get_temp::<crate::rich_text::SavedSelection>(sel_key));
             let bubble_id = response.id.with("floating-bubble-menu");
             let bubble_rect = crate::rich_text::toolbar_rect(ui, bubble_id);
 
             if has_focus {
                 if let Some(sel) = saved_selection {
                     if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::B)) {
-                        let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "**", "**");
+                        let (s, e) = crate::rich_text::toggle_wrap(
+                            &mut text,
+                            sel.b_start,
+                            sel.b_end,
+                            "**",
+                            "**",
+                        );
                         set_block_text(block, text);
-                        ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                sel_key,
+                                crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                            )
+                        });
                         return true;
                     }
                     if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::I)) {
-                        let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "_", "_");
+                        let (s, e) = crate::rich_text::toggle_wrap(
+                            &mut text,
+                            sel.b_start,
+                            sel.b_end,
+                            "_",
+                            "_",
+                        );
                         set_block_text(block, text);
-                        ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                sel_key,
+                                crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                            )
+                        });
                         return true;
                     }
                     if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K)) {
-                        let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "[[", "]]");
+                        let (s, e) = crate::rich_text::toggle_wrap(
+                            &mut text,
+                            sel.b_start,
+                            sel.b_end,
+                            "[[",
+                            "]]",
+                        );
                         set_block_text(block, text);
-                        ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                sel_key,
+                                crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                            )
+                        });
                         return true;
                     }
                 }
@@ -476,27 +588,63 @@ pub fn draw_block_content(
 
             if let Some(sel) = saved_selection {
                 let pointer_pos = ui.input(|i| i.pointer.hover_pos());
-                let hovering_bubble = pointer_pos.map_or(false, |p| bubble_rect.map_or(false, |r| r.contains(p)));
+                let hovering_bubble =
+                    pointer_pos.map_or(false, |p| bubble_rect.map_or(false, |r| r.contains(p)));
 
                 if has_focus || hovering_bubble {
-                    if let Some(bubble_action) = crate::rich_text::draw_bubble_toolbar(ui, bubble_id, sel.rect(), locale) {
+                    if let Some(bubble_action) =
+                        crate::rich_text::draw_bubble_toolbar(ui, bubble_id, sel.rect(), locale)
+                    {
                         match bubble_action {
                             crate::rich_text::BubbleAction::ToggleBold => {
-                                let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "**", "**");
+                                let (s, e) = crate::rich_text::toggle_wrap(
+                                    &mut text,
+                                    sel.b_start,
+                                    sel.b_end,
+                                    "**",
+                                    "**",
+                                );
                                 set_block_text(block, text);
-                                ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                                ui.data_mut(|d| {
+                                    d.insert_temp(
+                                        sel_key,
+                                        crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                                    )
+                                });
                                 return true;
                             }
                             crate::rich_text::BubbleAction::ToggleItalic => {
-                                let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "_", "_");
+                                let (s, e) = crate::rich_text::toggle_wrap(
+                                    &mut text,
+                                    sel.b_start,
+                                    sel.b_end,
+                                    "_",
+                                    "_",
+                                );
                                 set_block_text(block, text);
-                                ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                                ui.data_mut(|d| {
+                                    d.insert_temp(
+                                        sel_key,
+                                        crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                                    )
+                                });
                                 return true;
                             }
                             crate::rich_text::BubbleAction::ToggleWikiLink => {
-                                let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "[[", "]]");
+                                let (s, e) = crate::rich_text::toggle_wrap(
+                                    &mut text,
+                                    sel.b_start,
+                                    sel.b_end,
+                                    "[[",
+                                    "]]",
+                                );
                                 set_block_text(block, text);
-                                ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                                ui.data_mut(|d| {
+                                    d.insert_temp(
+                                        sel_key,
+                                        crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                                    )
+                                });
                                 return true;
                             }
                             crate::rich_text::BubbleAction::TransformBlock(t_name) => {
@@ -519,7 +667,9 @@ pub fn draw_block_content(
                                 if let Some(lvl) = target_level {
                                     block["data"]["level"] = json!(lvl);
                                 }
-                                ui.data_mut(|d| d.remove_temp::<crate::rich_text::SavedSelection>(sel_key));
+                                ui.data_mut(|d| {
+                                    d.remove_temp::<crate::rich_text::SavedSelection>(sel_key)
+                                });
                                 return true;
                             }
                         }
@@ -597,13 +747,17 @@ pub fn draw_block_content(
                     if p_idx != s_idx {
                         let c_min: usize = p_idx.min(s_idx).into();
                         let c_max: usize = p_idx.max(s_idx).into();
-                        let (b_start, b_end) = crate::rich_text::char_range_to_byte_range(&text, c_min, c_max);
+                        let (b_start, b_end) =
+                            crate::rich_text::char_range_to_byte_range(&text, c_min, c_max);
                         if b_start < b_end && b_end <= text.len() {
                             let r1 = output.galley.pos_from_cursor(cursor_range.primary);
                             let r2 = output.galley.pos_from_cursor(cursor_range.secondary);
                             let sel_rect = r1.union(r2).translate(output.galley_pos.to_vec2());
                             ui.data_mut(|d| {
-                                d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel_rect, b_start, b_end));
+                                d.insert_temp(
+                                    sel_key,
+                                    crate::rich_text::SavedSelection::new(sel_rect, b_start, b_end),
+                                );
                             });
                         }
                     } else {
@@ -612,28 +766,62 @@ pub fn draw_block_content(
                 }
             }
 
-            let saved_selection = ui.data(|d| d.get_temp::<crate::rich_text::SavedSelection>(sel_key));
+            let saved_selection =
+                ui.data(|d| d.get_temp::<crate::rich_text::SavedSelection>(sel_key));
             let bubble_id = response.id.with("floating-bubble-menu");
             let bubble_rect = crate::rich_text::toolbar_rect(ui, bubble_id);
 
             if has_focus {
                 if let Some(sel) = saved_selection {
                     if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::B)) {
-                        let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "**", "**");
+                        let (s, e) = crate::rich_text::toggle_wrap(
+                            &mut text,
+                            sel.b_start,
+                            sel.b_end,
+                            "**",
+                            "**",
+                        );
                         set_block_text(block, text);
-                        ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                sel_key,
+                                crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                            )
+                        });
                         return true;
                     }
                     if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::I)) {
-                        let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "_", "_");
+                        let (s, e) = crate::rich_text::toggle_wrap(
+                            &mut text,
+                            sel.b_start,
+                            sel.b_end,
+                            "_",
+                            "_",
+                        );
                         set_block_text(block, text);
-                        ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                sel_key,
+                                crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                            )
+                        });
                         return true;
                     }
                     if ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K)) {
-                        let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "[[", "]]");
+                        let (s, e) = crate::rich_text::toggle_wrap(
+                            &mut text,
+                            sel.b_start,
+                            sel.b_end,
+                            "[[",
+                            "]]",
+                        );
                         set_block_text(block, text);
-                        ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                sel_key,
+                                crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                            )
+                        });
                         return true;
                     }
                 }
@@ -641,27 +829,63 @@ pub fn draw_block_content(
 
             if let Some(sel) = saved_selection {
                 let pointer_pos = ui.input(|i| i.pointer.hover_pos());
-                let hovering_bubble = pointer_pos.map_or(false, |p| bubble_rect.map_or(false, |r| r.contains(p)));
+                let hovering_bubble =
+                    pointer_pos.map_or(false, |p| bubble_rect.map_or(false, |r| r.contains(p)));
 
                 if has_focus || hovering_bubble {
-                    if let Some(bubble_action) = crate::rich_text::draw_bubble_toolbar(ui, bubble_id, sel.rect(), locale) {
+                    if let Some(bubble_action) =
+                        crate::rich_text::draw_bubble_toolbar(ui, bubble_id, sel.rect(), locale)
+                    {
                         match bubble_action {
                             crate::rich_text::BubbleAction::ToggleBold => {
-                                let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "**", "**");
+                                let (s, e) = crate::rich_text::toggle_wrap(
+                                    &mut text,
+                                    sel.b_start,
+                                    sel.b_end,
+                                    "**",
+                                    "**",
+                                );
                                 set_block_text(block, text);
-                                ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                                ui.data_mut(|d| {
+                                    d.insert_temp(
+                                        sel_key,
+                                        crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                                    )
+                                });
                                 return true;
                             }
                             crate::rich_text::BubbleAction::ToggleItalic => {
-                                let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "_", "_");
+                                let (s, e) = crate::rich_text::toggle_wrap(
+                                    &mut text,
+                                    sel.b_start,
+                                    sel.b_end,
+                                    "_",
+                                    "_",
+                                );
                                 set_block_text(block, text);
-                                ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                                ui.data_mut(|d| {
+                                    d.insert_temp(
+                                        sel_key,
+                                        crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                                    )
+                                });
                                 return true;
                             }
                             crate::rich_text::BubbleAction::ToggleWikiLink => {
-                                let (s, e) = crate::rich_text::toggle_wrap(&mut text, sel.b_start, sel.b_end, "[[", "]]");
+                                let (s, e) = crate::rich_text::toggle_wrap(
+                                    &mut text,
+                                    sel.b_start,
+                                    sel.b_end,
+                                    "[[",
+                                    "]]",
+                                );
                                 set_block_text(block, text);
-                                ui.data_mut(|d| d.insert_temp(sel_key, crate::rich_text::SavedSelection::new(sel.rect(), s, e)));
+                                ui.data_mut(|d| {
+                                    d.insert_temp(
+                                        sel_key,
+                                        crate::rich_text::SavedSelection::new(sel.rect(), s, e),
+                                    )
+                                });
                                 return true;
                             }
                             crate::rich_text::BubbleAction::TransformBlock(t_name) => {
@@ -699,7 +923,9 @@ pub fn draw_block_content(
                                         after,
                                     });
                                 }
-                                ui.data_mut(|d| d.remove_temp::<crate::rich_text::SavedSelection>(sel_key));
+                                ui.data_mut(|d| {
+                                    d.remove_temp::<crate::rich_text::SavedSelection>(sel_key)
+                                });
                                 return true;
                             }
                         }
@@ -718,7 +944,7 @@ pub fn draw_block_content(
         "callout" => draw_callout_block(ui, block, locale),
         "code_repl" => draw_code_block(ui, block, locale),
         "data_grid_view" => draw_grid_block(ui, block, attachments, locale),
-        "audio_note" => draw_audio_block(ui, block, attachments, locale),
+        "audio_note" => draw_audio_block(ui, block, attachments, locale, op),
         "interactive_canvas" => draw_canvas_block(ui, block, locale),
         "ai_opponent_block" => draw_opponent_block(ui, block, locale),
         _ => {
