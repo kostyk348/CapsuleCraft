@@ -48,6 +48,8 @@ pub enum Command {
     OpenImapSync,
     SyncImapNow,
     Faq,
+    ExportEncrypted,
+    ImportEncrypted,
     ToggleZenMode,
     ToggleSidebar,
     ZoomIn,
@@ -65,6 +67,15 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
             "navigation".into(),
             view.title(locale).to_lowercase(),
         ]
+    };
+    // Search keywords: English always, Russian aliases only in the RU locale
+    // (the EN locale must stay 100% Latin — strict purism).
+    let kw = |en: &[&str], ru: &[&str]| -> Vec<String> {
+        let mut v: Vec<String> = en.iter().map(|s| s.to_string()).collect();
+        if locale == Locale::Ru {
+            v.extend(ru.iter().map(|s| s.to_string()));
+        }
+        v
     };
     vec![
         (
@@ -225,14 +236,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::ImapSyncNow).into(),
                 hint: "IMAP".into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "sync".into(),
-                    "imap".into(),
-                    "email".into(),
-                    "mail".into(),
-                    "почта".into(),
-                    "синхронизация".into(),
-                ],
+                keywords: kw(&["sync", "imap", "email", "mail"], &["почта", "синхронизация"]),
                 shortcut: Some("Ctrl Shift S".into()),
             },
         ),
@@ -243,12 +247,42 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::Faq).into(),
                 hint: t(locale, Key::FaqSubtitle).into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "faq".into(),
-                    "помощь".into(),
-                    "вопросы".into(),
-                    "eml".into(),
-                ],
+                keywords: kw(&["faq", "eml"], &["помощь", "вопросы"]),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::ExportEncrypted,
+            PaletteCommand {
+                id: "export_encrypted",
+                title: t(locale, Key::EncryptCapsuleCmd).into(),
+                hint: t(locale, Key::EncryptHint).into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &[
+                        "encrypt",
+                        "gpg",
+                        "openpgp",
+                        "asc",
+                        "password",
+                        "security",
+                    ],
+                    &["шифровать", "шифрование", "пароль"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::ImportEncrypted,
+            PaletteCommand {
+                id: "import_encrypted",
+                title: t(locale, Key::DecryptEmlCmd).into(),
+                hint: t(locale, Key::EncryptHint).into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["decrypt", "gpg", "openpgp", "asc", "password"],
+                    &["расшифровать"],
+                ),
                 shortcut: None,
             },
         ),
@@ -259,13 +293,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::CommandZenMode).into(),
                 hint: "F11 / Esc".into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "zen".into(),
-                    "focus".into(),
-                    "fullscreen".into(),
-                    "дзэн".into(),
-                    "фокус".into(),
-                ],
+                keywords: kw(&["zen", "focus", "fullscreen"], &["дзэн", "фокус"]),
                 shortcut: Some("F11".into()),
             },
         ),
@@ -276,12 +304,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::CommandToggleSidebar).into(),
                 hint: "Ctrl \\".into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "sidebar".into(),
-                    "toggle".into(),
-                    "панель".into(),
-                    "боковая".into(),
-                ],
+                keywords: kw(&["sidebar", "toggle"], &["панель", "боковая"]),
                 shortcut: Some("Ctrl \\".into()),
             },
         ),
@@ -292,13 +315,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::CommandZoomIn).into(),
                 hint: "+10%".into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "zoom".into(),
-                    "in".into(),
-                    "scale".into(),
-                    "масштаб".into(),
-                    "увеличить".into(),
-                ],
+                keywords: kw(&["zoom", "in", "scale"], &["масштаб", "увеличить"]),
                 shortcut: Some("Ctrl +".into()),
             },
         ),
@@ -309,13 +326,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::CommandZoomOut).into(),
                 hint: "-10%".into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "zoom".into(),
-                    "out".into(),
-                    "scale".into(),
-                    "масштаб".into(),
-                    "уменьшить".into(),
-                ],
+                keywords: kw(&["zoom", "out", "scale"], &["масштаб", "уменьшить"]),
                 shortcut: Some("Ctrl -".into()),
             },
         ),
@@ -326,13 +337,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::CommandResetZoom).into(),
                 hint: "110%".into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "zoom".into(),
-                    "reset".into(),
-                    "default".into(),
-                    "масштаб".into(),
-                    "сброс".into(),
-                ],
+                keywords: kw(&["zoom", "reset", "default"], &["масштаб", "сброс"]),
                 shortcut: Some("Ctrl 0".into()),
             },
         ),
@@ -343,13 +348,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::CommandWideCanvas).into(),
                 hint: "Wide / Standard".into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "canvas".into(),
-                    "wide".into(),
-                    "width".into(),
-                    "холст".into(),
-                    "широкий".into(),
-                ],
+                keywords: kw(&["canvas", "wide", "width"], &["холст", "широкий"]),
                 shortcut: Some("Ctrl Shift W".into()),
             },
         ),
@@ -360,15 +359,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::CommandToggleIconStyle).into(),
                 hint: "Mascot / Document".into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "icon".into(),
-                    "brand".into(),
-                    "mascot".into(),
-                    "document".into(),
-                    "логотип".into(),
-                    "иконка".into(),
-                    "маскот".into(),
-                ],
+                keywords: kw(&["icon", "brand", "mascot", "document"], &["логотип", "иконка", "маскот"]),
                 shortcut: None,
             },
         ),
@@ -379,15 +370,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::ImapSyncTitle).into(),
                 hint: t(locale, Key::ImapSyncDesc).into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "imap".into(),
-                    "email".into(),
-                    "mail".into(),
-                    "sync".into(),
-                    "settings".into(),
-                    "почта".into(),
-                    "настройки".into(),
-                ],
+                keywords: kw(&["imap", "email", "mail", "sync", "settings"], &["почта", "настройки"]),
                 shortcut: None,
             },
         ),
@@ -398,14 +381,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::CoThinkTitle).into(),
                 hint: t(locale, Key::CoThinkSubtitle).into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec![
-                    "cothink".into(),
-                    "ai".into(),
-                    "analysis".into(),
-                    "offline".into(),
-                    "мыслитель".into(),
-                    "анализ".into(),
-                ],
+                keywords: kw(&["cothink", "ai", "analysis", "offline"], &["мыслитель", "анализ"]),
                 shortcut: Some("Ctrl Shift A".into()),
             },
         ),
@@ -416,7 +392,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: format!("{}: {}", t(locale, Key::CoThinkTitle), t(locale, Key::Critique)),
                 hint: t(locale, Key::CritiqueDesc).into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec!["critique".into(), "criticism".into(), "критика".into(), "риски".into()],
+                keywords: kw(&["critique", "criticism"], &["критика", "риски"]),
                 shortcut: None,
             },
         ),
@@ -427,7 +403,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: format!("{}: {}", t(locale, Key::CoThinkTitle), t(locale, Key::Synthesis)),
                 hint: t(locale, Key::SynthesisDesc).into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec!["synthesis".into(), "синтез".into(), "шаги".into(), "выводы".into()],
+                keywords: kw(&["synthesis"], &["синтез", "шаги", "выводы"]),
                 shortcut: None,
             },
         ),
@@ -438,7 +414,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: format!("{}: {}", t(locale, Key::CoThinkTitle), t(locale, Key::CounterArg)),
                 hint: t(locale, Key::CounterArgDesc).into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec!["counter".into(), "контраргумент".into(), "ответ".into(), "тред".into()],
+                keywords: kw(&["counter", "counterarg", "reply"], &["контраргумент", "ответ", "тред"]),
                 shortcut: None,
             },
         ),
@@ -449,7 +425,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: format!("{}: {}", t(locale, Key::CoThinkTitle), t(locale, Key::DataInsight)),
                 hint: t(locale, Key::DataInsightDesc).into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: vec!["data".into(), "csv".into(), "данные".into(), "ols".into(), "тренд".into()],
+                keywords: kw(&["data", "csv", "ols", "trend"], &["данные", "тренд"]),
                 shortcut: None,
             },
         ),
@@ -926,4 +902,48 @@ fn build_index(capsules: &[Capsule]) -> search::Bm25Index {
         );
     }
     index
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn has_cyrillic(text: &str) -> bool {
+        text.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c))
+    }
+
+    #[test]
+    fn english_palette_is_cyrillic_free() {
+        // Strict EN purism: titles, hints and search keywords must never
+        // leak Russian when the locale is English.
+        for (command, palette) in commands(Locale::En) {
+            let _ = command;
+            for text in [
+                palette.title.as_str(),
+                palette.hint.as_str(),
+                palette.group.as_str(),
+            ] {
+                assert!(
+                    !has_cyrillic(text),
+                    "EN palette text contains Cyrillic: {text}"
+                );
+            }
+            for keyword in &palette.keywords {
+                assert!(
+                    !has_cyrillic(keyword),
+                    "EN palette keyword contains Cyrillic: {keyword}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn russian_palette_keeps_its_aliases() {
+        // RU keeps both English keywords and Cyrillic aliases.
+        let cyr = commands(Locale::Ru)
+            .iter()
+            .flat_map(|(_, p)| p.keywords.iter().cloned())
+            .any(|k| has_cyrillic(&k));
+        assert!(cyr, "RU locale should still carry Cyrillic aliases");
+    }
 }

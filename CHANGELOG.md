@@ -3,6 +3,50 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.9.0] — 2026-10-31 — Full English, roadmap trio in the native shell
+
+The three native-shell roadmap items land together with a strict-English UI
+pass. Native test suite grows from 98 to **135** unit tests.
+
+### Added
+- **Native audio playback** (roadmap): audio notes stored as MIME attachments
+  play inside the egui shell via `rodio` (WAV/MP3/OGG/FLAC), with Play/Pause/Stop
+  and an honest "webm/opus is not decodable offline" note for MediaRecorder
+  recordings (`native/src/audio_player.rs`). Playback runs on a dedicated audio
+  thread because cpal's output stream is `!Send`.
+- **OpenPGP capsule encryption** (roadmap): any capsule exports to an armored
+  passphrase-encrypted `.eml.asc` — AES-256, SEIPD v1, iterated+salted S2K via
+  `rPGP` — and `.eml.asc` files import back into the vault through the same
+  dialog; a wrong passphrase reopens the modal instead of failing silently
+  (`native/src/crypto.rs`, `native/src/modals/encrypt.rs`, palette commands
+  "Encrypt capsule (.eml.asc)" / "Decrypt .eml.asc into the vault").
+- **Offline code execution** (roadmap): JavaScript REPL blocks now run in the
+  native shell through the embedded `boa` engine with a console shim and the
+  same output layout as the web worker; JSON blocks validate and pretty-print;
+  TypeScript/Python/Rust/SQL keep an honest "no interpreter in the
+  zero-dependency build" note (`native/src/js_engine.rs`, `blocks/code.rs`).
+- **Data-grid formulas** (roadmap): cells starting with `=` are evaluated by the
+  same engine — `=SUM(A1:A5)`, `=AVG`, `=MIN`, `=MAX`, `=COUNT`, arithmetic and
+  nested cell references, `A1:B3` range expansion; the raw formula is stored,
+  the computed value is displayed, click-to-edit shows the source.
+- **Animated demo GIF** in both READMEs, rendered from the real app via the
+  `--snapshot` CLI (`screenshots/demo.gif`).
+
+### Changed
+- **Full English UI with enforced purism**: every block component, the FAQ and
+  the onboarding screen in the web build go through i18n; the command palette
+  adds Russian search aliases only in the RU locale; Co-Thinker output, ICS
+  export labels and numeric formatting follow the detected capsule/UI language.
+  A native unit test asserts **no EN string contains a single Cyrillic
+  character**, and an engine test asserts Co-Thinker replies to an English
+  capsule are Latin-only.
+- ICS export language is selectable (`IcsOptions.lang` on native,
+  `lang` option in the web `buildIcs`), PRODID carries the locale.
+- Native dev profile uses `debug = "line-tables-only"`: full DWARF produced
+  multi-GB artifacts that broke constrained CI runners; line tables keep
+  backtraces readable.
+- CI: the native job now installs `libasound2-dev` + `pkg-config` for rodio.
+
 ## [1.8.1] — 2026-10-27 — Release pipeline that does not lose artifacts
 
 A patch release. No application code changed: this ships the rebuilt release

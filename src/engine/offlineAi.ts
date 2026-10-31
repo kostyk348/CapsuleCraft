@@ -307,8 +307,8 @@ export function analyzeCsv(csv: string, fileName = 'dataset.csv'): CsvReport | n
   return report.columns.length ? report : null;
 }
 
-const fmt = (v: number, unit = '') =>
-  `${v >= 0 ? '' : '−'}${Math.abs(v).toLocaleString('ru-RU', { maximumFractionDigits: 2 })}${unit}`;
+const fmt = (v: number, unit = '', locale: 'ru-RU' | 'en-US' = 'ru-RU') =>
+  `${v >= 0 ? '' : '−'}${Math.abs(v).toLocaleString(locale, { maximumFractionDigits: 2 })}${unit}`;
 
 /** Human, honest dataset summary — every number comes from the report. */
 export function describeCsvReport(r: CsvReport, lang: SupportedLang = 'ru'): string {
@@ -319,7 +319,7 @@ export function describeCsvReport(r: CsvReport, lang: SupportedLang = 'ru'): str
     for (const c of r.columns) {
       const arrow = c.trend === 'up' ? '↑ growth' : c.trend === 'down' ? '↓ decline' : '→ flat';
       lines.push(
-        `• ${c.name}: mean ${fmt(c.mean)}, range ${fmt(c.min)}…${fmt(c.max)}, ${arrow} ${fmt(c.deltaPct, '%')} (${fmt(c.first)} → ${fmt(c.last)}, n=${c.n})`,
+        `• ${c.name}: mean ${fmt(c.mean, '', 'en-US')}, range ${fmt(c.min, '', 'en-US')}…${fmt(c.max, '', 'en-US')}, ${arrow} ${fmt(c.deltaPct, '%', 'en-US')} (${fmt(c.first, '', 'en-US')} → ${fmt(c.last, '', 'en-US')}, n=${c.n})`,
       );
     }
     if (r.correlation !== undefined && r.correlationPair) {
@@ -606,7 +606,7 @@ export function generateOfflineAiResponse(
         if (csv) {
           const c = csv.columns[0];
           const dir = c.trend === 'up' ? 'increasing' : c.trend === 'down' ? 'declining' : 'flat';
-          parts.push(`3. Data already shows: ${c.name} is ${dir} (${fmt(c.deltaPct, '%')} across ${c.n} points). Follow-up logic should account for this.`);
+          parts.push(`3. Data already shows: ${c.name} is ${dir} (${fmt(c.deltaPct, '%', 'en-US')} across ${c.n} points). Follow-up logic should account for this.`);
         }
         if (related.length > 0) {
           parts.push(`4. Connect with "${related[0].subject}" — content overlap ~${Math.round(related[0].similarity * 100)}%. Common ground exists, [[wikilink]] will link them in the graph.`);
@@ -801,7 +801,9 @@ export function offlineAiResponse(
   ctx?: VaultContext,
 ) {
   const result = generateOfflineAiResponse(action, currentCapsule, prompt, persona, ctx);
-  const reply = result.criticism || result.text || 'Анализ капсулы завершен.';
+  const doneLang = detectTextLang(textContentOf(currentCapsule) + ' ' + (prompt || ''));
+  const reply = result.criticism || result.text ||
+    (doneLang === 'en' ? 'Capsule analysis complete.' : 'Анализ капсулы завершен.');
   return {
     success: true,
     mode: 'offline',

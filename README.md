@@ -11,7 +11,7 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 
 [![Release](https://img.shields.io/github/v/release/kostyk348/CapsuleCraft?sort=semver&color=0ea5e9&label=release)](https://github.com/kostyk348/CapsuleCraft/releases)
 [![CI](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml)
-[![native tests](https://img.shields.io/badge/native%20tests-98%20passing-22c55e)](native/)
+[![native tests](https://img.shields.io/badge/native%20tests-135%20passing-22c55e)](native/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![No DB](https://img.shields.io/badge/database-none-orange)](#why-eml)
 [![Offline](https://img.shields.io/badge/offline--first-success)](#strengths)
@@ -23,6 +23,8 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 </div>
 
 ---
+
+![CapsuleCraft demo — page, planning, graph, threads and MIME views](screenshots/demo.gif)
 
 ## What is CapsuleCraft?
 
@@ -76,14 +78,26 @@ data transfer right inside the app.
 - **Threads** — replies are real child `.eml`s with `In-Reply-To`/`References`,
   exactly like email. Your reasoning tree is standard mail threading.
 - **Datasets** — CSV/JSON travel as MIME parts addressed by `Content-ID`;
-  datagrid blocks render them as tables.
+  datagrid blocks render them as tables — and `=SUM(A1:A5)`-style formula cells
+  are evaluated by the embedded offline JS engine, both in the browser and in
+  the native shell.
+- **Native audio playback** — audio notes stored as MIME parts play right in
+  the egui shell (rodio: WAV/MP3/OGG/FLAC) with play/pause/stop controls.
+- **OpenPGP capsule encryption** — any capsule can be exported as an armored,
+  passphrase-encrypted `.eml.asc` (AES-256, SEIPD v1 via rPGP) and imported
+  back with the same dialog; fully offline, no gpg binary required.
+- **Offline code execution** — JavaScript REPL blocks run in the native shell
+  through the embedded boa engine (the web build uses a sandboxed worker);
+  JSON blocks validate and pretty-print; Python/Rust stay honest about having
+  no interpreter in a zero-dependency build.
 - **Import** — drop `.eml` files into the window (byte-for-byte), import from
   IMAP or migrate an existing Obsidian vault (`--import-obsidian`).
 - **AI-agent ready** — expose the vault over [MCP](https://modelcontextprotocol.io)
   so Claude, Cursor or any MCP client can read and search your knowledge base.
   The built-in Co-Thinker argues with your theses offline instead.
 - **Built-in FAQ + snapshot CLI** — `--snapshot` renders the real window to PNG
-  (which is how every screenshot above was made). RU/EN interface included.
+  (which is how every screenshot above was made). RU/EN interface included,
+  and the EN locale is enforced 100% Latin by a unit test.
 
 ## Why `.eml`?
 
@@ -165,19 +179,20 @@ deliberately narrower: local-first storage you can trust for decades.
 The **native AppImage** (recommended, Linux):
 
 ```bash
-chmod +x CapsuleCraft_1.8.1_amd64.AppImage
-./CapsuleCraft_1.8.1_amd64.AppImage            # default vault...
-./CapsuleCraft_1.8.1_amd64.AppImage /path/to/vault   # ...or your folder
+chmod +x CapsuleCraft_1.9.0_amd64.AppImage
+./CapsuleCraft_1.9.0_amd64.AppImage            # default vault...
+./CapsuleCraft_1.9.0_amd64.AppImage /path/to/vault   # ...or your folder
 ```
 
-It needs only glibc and an X11 or Wayland desktop — no WebKitGTK, no WebView2,
-nothing else. Every GitHub release also carries `SHA256SUMS.txt`.
+It needs only glibc, an X11 or Wayland desktop and (for audio playback) ALSA —
+no WebKitGTK, no WebView2, nothing else. Every GitHub release also carries
+`SHA256SUMS.txt`.
 
-The **native Windows app** (x64) ships as `CapsuleCraft_native_1.8.1_x64.zip`:
+The **native Windows app** (x64) ships as `CapsuleCraft_native_1.9.0_x64.zip`:
 unzip it and run `CapsuleCraft.exe`. Standalone native egui shell, zero dependencies,
 no WebView2 or installer required.
 
-The **native macOS app** (arm64) ships as `CapsuleCraft_native_1.8.1_arm64.app.zip`:
+The **native macOS app** (arm64) ships as `CapsuleCraft_native_1.9.0_arm64.app.zip`:
 unzip it, drag `CapsuleCraft.app` into Applications. It is ad-hoc signed; if
 Gatekeeper blocks the first launch, run `xattr -d com.apple.quarantine CapsuleCraft.app`.
 
@@ -233,7 +248,7 @@ native/src/
 ```bash
 # native shell
 cd native
-cargo test          # 98 unit tests
+cargo test          # 135 unit tests
 
 # legacy web engine
 npm ci
@@ -244,6 +259,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v1.9.0** | Roadmap trio in the native shell: audio playback (rodio), OpenPGP `.eml.asc` encryption (rPGP), code execution + grid formulas (boa); full English UI with a purism test | 2026-10-31 |
 | **v1.8.1** | Release pipeline rebuilt: native Windows portable build, pre-created release (no more lost artifacts), unified `SHA256SUMS.txt`, native test job in CI | 2026-10-27 |
 | **v1.8.0** | Two-tier header, Zen focus mode, wide canvas; macOS arm64 builds; AppImage hardening | 2026-10-26 |
 | **v1.7.0** | Built-in FAQ in the shell; no demo notes anywhere; README redrawn | 2026-10-25 |
@@ -257,16 +273,16 @@ npx vitest run      # 172 tests
 
 ## Limitations (honest ones)
 
-See [`LIMITATIONS.md`](LIMITATIONS.md). Notably: the native shell cannot
-execute code or play audio yet, folder watching is best-effort, and capsules
-are not GPG-encrypted.
+See [`LIMITATIONS.md`](LIMITATIONS.md). Notably: audio playback covers
+WAV/MP3/OGG/FLAC (browser-recorded webm/opus needs conversion), the JS engine
+runs no timed side effects or I/O, and vault sync is still a manual folder copy.
 
 ## Roadmap
 
-- ✅ v1.0 – v1.8 (current milestone)
-- ⬜ Native code execution (REPL / JS table formulas)
-- ⬜ Audio playback in the native shell
-- ⬜ GPG-encrypted capsules
+- ✅ v1.0 – v1.9 (current milestone)
+- ✅ Native code execution (REPL / JS table formulas) — done in v1.9.0 (boa)
+- ✅ Audio playback in the native shell — done in v1.9.0 (rodio)
+- ✅ GPG-encrypted capsules — done in v1.9.0 (rPGP, passphrase `.eml.asc`)
 - ✅ macOS native builds in CI (arm64)
 - ⬜ Optional end-to-end-encrypted vault sync (tamper/censor-proof, still zero-cloud)
 

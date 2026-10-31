@@ -1,6 +1,6 @@
 [package]
 name = "capsuleos-native"
-version = "1.8.1"
+version = "1.9.0"
 edition = "2021"
 description = "CapsuleCraft native egui prototype (same .eml vault, no webview)"
 license = "MIT"
@@ -22,6 +22,10 @@ notify = "8"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 imap = "2.4"
 native-tls = "0.2"
+rodio = "0.20"
+boa_engine = "0.20"
+pgp = "0.15"
+rand = "0.8"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
@@ -29,3 +33,8 @@ winres = "0.1"
 [profile.release]
 opt-level = 2
 lto = "thin"
+
+# Keep dev artifacts small enough for constrained CI runners: line tables
+# preserve backtraces without the multi-GB DWARF of full debug info.
+[profile.dev]
+debug = "line-tables-only"

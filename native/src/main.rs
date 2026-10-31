@@ -17,12 +17,14 @@ mod brand;
 mod chrome;
 mod cli;
 mod cothinker;
+mod crypto;
 mod export;
 mod graph;
 mod history;
 mod i18n;
 mod icons;
 mod importers;
+mod js_engine;
 mod links;
 mod mail;
 mod mcp;
@@ -36,6 +38,7 @@ mod theme;
 mod vault;
 mod views;
 mod watch;
+mod audio_player;
 mod sync_imap;
 mod ui_state;
 mod util;
@@ -213,6 +216,9 @@ struct NativeApp {
     show_faq_modal: bool,
     cothink_mode: cothinker::CoThinkMode,
     cothink_focus: String,
+    encrypt: modals::EncryptState,
+    /// `.eml.asc` picked for decryption, waiting for the passphrase modal.
+    pending_decrypt_path: Option<PathBuf>,
     dragged_page: Option<usize>,
     /// `--snapshot`: render a few frames, write a PNG, then close.
     snapshot_job: Option<SnapshotJob>,
@@ -296,6 +302,8 @@ impl NativeApp {
             show_faq_modal: false,
             cothink_mode: cothinker::CoThinkMode::Critique,
             cothink_focus: String::new(),
+            encrypt: modals::EncryptState::default(),
+            pending_decrypt_path: None,
             dragged_page: None,
             snapshot_job,
             link_index: Vec::new(),
@@ -784,6 +792,124 @@ impl NativeApp {
         self.toast(t(self.locale, Key::Redone));
     }
 
+    /// Palette: encrypt the selected capsule into an armored `.eml.asc`
+    /// (roadmap: OpenPGP capsule encryption, fully offline via rPGP).
+    fn begin_encrypt_capsule(&mut self) {
+        if !self.save_selected() {
+            return;
+        }
+        let Some(index) = self.selected else {
+            return;
+        };
+        let Some(capsule) = self.vault.capsules.get(index) else {
+            return;
+        };
+        let file_name = capsule.file_name.clone();
+        self.encrypt
+            .open(modals::EncryptMode::Encrypt { file_name });
+    }
+
+    /// Called after the passphrase modal confirms in encrypt mode.
+    fn finish_encrypt_capsule(&mut self, file_name: &str, passphrase: &str) {
+        let Some(index) = self.selected else {
+            return;
+        };
+        let Some(capsule) = self.vault.capsules.get(index) else {
+            return;
+        };
+        let armored = match crypto::encrypt_to_armored(capsule.export_eml().as_bytes(), passphrase) {
+            Ok(text) => text,
+            Err(err) => {
+                self.status = err.to_string();
+                self.status_error = true;
+                return;
+            }
+        };
+        let stem = file_name.trim_end_matches(".eml").trim_end_matches(".EML");
+        let default_name = format!("{stem}.eml.asc");
+        let Some(path) = rfd::FileDialog::new()
+            .set_title(t(self.locale, Key::EncryptCapsuleCmd))
+            .set_file_name(&default_name)
+            .add_filter("PGP armored message", &["asc"])
+            .save_file()
+        else {
+            return;
+        };
+        match std::fs::write(&path, armored) {
+            Ok(()) => {
+                let name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("capsule.eml.asc");
+                self.toast(format!(
+                    "{}: {name}",
+                    t(self.locale, Key::EncryptedDone)
+                ));
+            }
+            Err(err) => {
+                self.status = err.to_string();
+                self.status_error = true;
+            }
+        }
+    }
+
+    /// Palette: pick an `.eml.asc`, then ask for the passphrase.
+    fn begin_decrypt_asc(&mut self) {
+        if !self.save_selected() {
+            return;
+        }
+        let Some(path) = rfd::FileDialog::new()
+            .set_title(t(self.locale, Key::DecryptEmlCmd))
+            .add_filter("PGP armored message", &["asc"])
+            .pick_file()
+        else {
+            return;
+        };
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("capsule.eml.asc")
+            .to_string();
+        self.pending_decrypt_path = Some(path);
+        self.encrypt.open(modals::EncryptMode::Decrypt { file_name });
+    }
+
+    /// Called after the passphrase modal confirms in decrypt mode. A wrong
+    /// passphrase reopens the modal with an error instead of giving up.
+    fn finish_decrypt_asc(&mut self, file_name: &str, passphrase: &str) {
+        let Some(path) = self.pending_decrypt_path.clone() else {
+            return;
+        };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            self.status = t(self.locale, Key::CryptoFailed).to_string();
+            self.status_error = true;
+            return;
+        };
+        match crypto::decrypt_from_armored(&text, passphrase) {
+            Ok(eml_bytes) => {
+                let target_name = file_name.trim_end_matches(".asc").to_string();
+                let target = unique_path(&self.vault.dir, &target_name);
+                match std::fs::write(&target, &eml_bytes) {
+                    Ok(()) => {
+                        self.pending_decrypt_path = None;
+                        self.reload();
+                        self.toast(t(self.locale, Key::DecryptDone));
+                    }
+                    Err(err) => {
+                        self.status = err.to_string();
+                        self.status_error = true;
+                    }
+                }
+            }
+            Err(_) => {
+                // Keep the picked file and reopen the modal for another try.
+                self.encrypt
+                    .open(modals::EncryptMode::Decrypt { file_name: file_name.to_string() });
+                self.encrypt.error = Some(t(self.locale, Key::CryptoFailed).to_string());
+            }
+        }
+    }
+
     fn export_page(&mut self) {
         let Some(index) = self.selected else {
             return;
@@ -1150,7 +1276,8 @@ impl eframe::App for NativeApp {
             || self.show_mcp_modal
             || self.show_imap_modal
             || self.show_cothink_modal
-            || self.show_faq_modal;
+            || self.show_faq_modal
+            || self.encrypt.open;
         if self.zen_mode && !modals_open && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.toggle_zen_mode();
         }
@@ -1600,6 +1727,24 @@ impl eframe::App for NativeApp {
             self.show_faq_modal = false;
         }
 
+        let encrypt_action = modals::draw_encrypt_modal(&mut self.encrypt, self.locale, &ctx);
+        match encrypt_action {
+            modals::EncryptAction::Confirm(passphrase) => {
+                if let Some(mode) = self.encrypt.mode.take() {
+                    match mode {
+                        modals::EncryptMode::Encrypt { file_name } => {
+                            self.finish_encrypt_capsule(&file_name, &passphrase);
+                        }
+                        modals::EncryptMode::Decrypt { file_name } => {
+                            self.finish_decrypt_asc(&file_name, &passphrase);
+                        }
+                    }
+                }
+                self.encrypt.close();
+            }
+            modals::EncryptAction::Cancel | modals::EncryptAction::None => {}
+        }
+
         modals::draw_toast(&mut self.toast, &ctx);
 
         if self.dirty && self.last_edit.elapsed() > Duration::from_millis(750) {
@@ -1695,6 +1840,8 @@ impl NativeApp {
             }
             PaletteCommand::OpenImapSync => self.show_imap_modal = true,
             PaletteCommand::SyncImapNow => self.trigger_imap_sync(),
+            PaletteCommand::ExportEncrypted => self.begin_encrypt_capsule(),
+            PaletteCommand::ImportEncrypted => self.begin_decrypt_asc(),
             PaletteCommand::ToggleZenMode => self.toggle_zen_mode(),
             PaletteCommand::ToggleSidebar => self.toggle_sidebar(),
             PaletteCommand::ZoomIn => self.zoom_in(ctx),

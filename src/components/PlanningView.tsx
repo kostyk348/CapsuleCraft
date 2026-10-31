@@ -65,7 +65,15 @@ interface Props {
   onAddTask: (text: string, due?: string, priority?: TodoPriority) => void;
 }
 
-const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const WEEKDAY_KEYS: TranslationKey[] = [
+  'planning.weekday.mon',
+  'planning.weekday.tue',
+  'planning.weekday.wed',
+  'planning.weekday.thu',
+  'planning.weekday.fri',
+  'planning.weekday.sat',
+  'planning.weekday.sun',
+];
 
 const PRIORITY_KEY: Record<TodoPriority, TranslationKey> = {
   high: 'priority.high',
@@ -160,6 +168,7 @@ export const PlanningView: React.FC<Props> = ({
   onAddTask,
 }) => {
   const { t, locale } = useI18n();
+  const weekdays = useMemo(() => WEEKDAY_KEYS.map((k) => t(k)), [t]);
   const dateLocale = locale === 'en' ? 'en-GB' : 'ru-RU';
   const today = useMemo(() => toDateKey(new Date()), []);
   const [cursor, setCursor] = useState(() => {
@@ -214,7 +223,21 @@ export const PlanningView: React.FC<Props> = ({
     return map;
   }, [displayTasks]);
 
-  const sections = useMemo(() => groupTasks(displayTasks, today), [displayTasks, today]);
+  const sections = useMemo(
+    () =>
+      groupTasks(displayTasks, today, {
+        titles: {
+          overdue: t('bucket.overdue'),
+          today: t('bucket.today'),
+          tomorrow: t('bucket.tomorrow'),
+          week: t('bucket.week'),
+          later: t('bucket.later'),
+          none: t('bucket.none'),
+          done: t('bucket.done'),
+        },
+      }),
+    [displayTasks, today, t],
+  );
 
   const board = useMemo(() => groupByStatus(displayTasks), [displayTasks]);
 
@@ -276,7 +299,11 @@ export const PlanningView: React.FC<Props> = ({
   const exportIcs = () => {
     // Export what the user currently sees; displayTasks already applied the
     // completed-task visibility rule, so allow completed rows through.
-    const ics = buildIcs(displayTasks, { includeCompleted: true, calendarName: 'CapsuleCraft Planning' });
+    const ics = buildIcs(displayTasks, {
+      includeCompleted: true,
+      calendarName: 'CapsuleCraft Planning',
+      lang: locale,
+    });
     downloadText(icsFileName(), ics, 'text/calendar;charset=utf-8');
   };
 
@@ -649,7 +676,7 @@ export const PlanningView: React.FC<Props> = ({
             </div>
 
             <div className="grid grid-cols-7 gap-1 text-center">
-              {WEEKDAYS.map((day) => (
+              {weekdays.map((day) => (
                 <div key={day} className="text-[10px] font-mono text-slate-600 pb-1">
                   {day}
                 </div>

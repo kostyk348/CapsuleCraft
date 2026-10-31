@@ -3,6 +3,7 @@ import { CapsuleBlock, HeadingBlockData } from '../../types';
 import { vaultStore } from '../../engine/vaultStore';
 import { renderMarkdownMultiLine } from '../../engine/markdown';
 import { Hash, Eye, Pencil } from 'lucide-react';
+import { useI18n } from '../../i18n';
 
 interface Props {
   block: CapsuleBlock & { type: 'heading' };
@@ -13,6 +14,7 @@ interface Props {
 
 export const HeadingBlock: React.FC<Props> = ({ block, onChange, onDelete, onOpenCapsule }) => {
   const [showPreview, setShowPreview] = useState(false);
+  const { t } = useI18n();
   const { level, text } = block.data;
 
   const fontClasses = {
@@ -40,7 +42,7 @@ export const HeadingBlock: React.FC<Props> = ({ block, onChange, onDelete, onOpe
           type="button"
           onClick={() => setShowPreview((v) => !v)}
           className="p-1 text-xs text-slate-500 hover:text-cyan-300 bg-slate-800/80 rounded border border-slate-700"
-          title={showPreview ? 'Редактировать' : 'Предпросмотр (Markdown)'}
+          title={showPreview ? t('block.edit') : t('block.preview')}
         >
           {showPreview ? <Pencil className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
         </button>
@@ -50,7 +52,7 @@ export const HeadingBlock: React.FC<Props> = ({ block, onChange, onDelete, onOpe
         <div
           className={`w-full ${fontClasses} cursor-text`}
           onDoubleClick={() => setShowPreview(false)}
-          title="Двойной клик — редактировать"
+          title={t('block.doubleClickEdit')}
         >
           {renderMarkdownMultiLine(
             text,

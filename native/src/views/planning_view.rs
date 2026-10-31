@@ -376,7 +376,10 @@ fn export_ics(vault: &Vault, locale: Locale) {
     };
     let ics = planning::build_ics(
         &tasks,
-        &planning::IcsOptions::default(),
+        &planning::IcsOptions {
+            lang: locale,
+            ..planning::IcsOptions::default()
+        },
         chrono::Utc::now(),
     );
     let _ = std::fs::write(path, ics);

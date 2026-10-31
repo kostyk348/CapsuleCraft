@@ -1,6 +1,7 @@
 // FAQ & onboarding — shown when the vault is empty (fresh install) and
 // available anytime from the navbar help button. Replaces the old demo seed:
 // a new vault now starts empty, and the FAQ explains the workflow instead.
+// Content ships in both locales; the active one is picked via useI18n().
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ChevronDown,
@@ -12,6 +13,7 @@ import {
   Waypoints,
   X,
 } from 'lucide-react';
+import { useI18n, type Locale } from '../i18n';
 
 /** Inline code chip inside FAQ answers. */
 const C: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -29,102 +31,196 @@ export interface FaqItem {
 // brackets at build time by scripts/fix-wikilink-brackets.mjs — the dev
 // toolchain eats "["+letter sequences in file writes, so they are written
 // indirectly on purpose.
-export const FAQ_ITEMS: FaqItem[] = [
-  {
-    q: 'Что такое CapsuleCraft — в двух словах?',
-    a: (
-      <>
-        Локальный «рабочий стол для мышления». Каждая мысль — настоящее письмо
-        RFC 5322 (файл .eml): блочный редактор вместо Markdown, треды как в
-        почте, граф связей и офлайн Co-Thinker. Никакой базы данных — папка
-        .eml файлов и есть вся ваша база знаний.
-      </>
-    ),
-  },
-  {
-    q: 'Где физически хранятся мои заметки?',
-    a: (
-      <>
-        В десктоп-версии — папка <C>vault</C> внутри каталога данных приложения:
-        по одному .eml на капсулу, <C>vault.json</C> — только кэш. В браузере —
-        localStorage. Положили чужой .eml в папку — он появится в хранилище;
-        удалили файл — капсула исчезла. Формат читается Apple Mail и Thunderbird.
-      </>
-    ),
-  },
-  {
-    q: 'С чего начать, если хранилище пусто?',
-    a: (
-      <>
-        Нажмите «Новая .eml» — и пишите блоками: текст, таблицы, холст, код,
-        аудио. Есть письма уже где-то ещё — «Импорт .eml». Хотите сначала
-        посмотреть, как всё выглядит, — «Загрузить демо-хранилище» создаст пять
-        связанных капсул со всеми типами блоков; удалить каждую можно в один
-        клик, когда наиграетесь.
-      </>
-    ),
-  },
-  {
-    q: 'Как работают треды и связи между мыслями?',
-    a: (
-      <>
-        Ответ на мысль — это дочерняя .eml с заголовками <C>In-Reply-To</C> и{' '}
-        <C>References</C>, ровно как в email-переписке. [[Викилинки]]
-        дают обратные ссылки (backlinks), а Graph DAG и Thought Threads
-        показывают структуру размышления целиком — от корня до последнего
-        контраргумента.
-      </>
-    ),
-  },
-  {
-    q: 'Как записать голосовую заметку?',
-    a: (
-      <>
-        В редакторе наберите <C>/</C> и выберите Audio note, затем нажмите
-        кнопку записи: звук пишется с микрофона прямо в приложение
-        (MediaRecorder), сохраняется как MIME-вложение webm/opus с реальной
-        длительностью и волной. Всё офлайн — внешний диктофон не нужен.
-      </>
-    ),
-  },
-  {
-    q: 'Куда отправляются мои данные?',
-    a: (
-      <>
-        Никуда. Разбор MIME, поиск, бенчмарк и Co-Thinker работают локально —
-        ни сети, ни телеметрии, ни API-ключей. Можете отключить интернет: всё
-        продолжит работать как работало.
-      </>
-    ),
-  },
-  {
-    q: 'Как сделать резервную копию?',
-    a: (
-      <>
-        «Export Vault» в сайдбаре собирает ZIP со всеми .eml, либо просто
-        скопируйте папку <C>vault</C> — это и есть вся база. Файлы открываются
-        в почтовых клиентах, дружат с git и проживут дольше самого приложения.
-      </>
-    ),
-  },
-  {
-    q: 'Почему .eml, а не база данных?',
-    a: (
-      <>
-        .eml — открытый стандарт, который старше многих NoSQL-мод: он читается
-        любым почтовым клиентом, диффится в git и не требует миграций. База
-        данных умирает вместе с приложением, а письма — остаются.
-      </>
-    ),
-  },
-];
+const FAQ_ITEMS: Record<Locale, FaqItem[]> = {
+  ru: [
+    {
+      q: 'Что такое CapsuleCraft — в двух словах?',
+      a: (
+        <>
+          Локальный «рабочий стол для мышления». Каждая мысль — настоящее письмо
+          RFC 5322 (файл .eml): блочный редактор вместо Markdown, треды как в
+          почте, граф связей и офлайн Co-Thinker. Никакой базы данных — папка
+          .eml файлов и есть вся ваша база знаний.
+        </>
+      ),
+    },
+    {
+      q: 'Где физически хранятся мои заметки?',
+      a: (
+        <>
+          В десктоп-версии — папка <C>vault</C> внутри каталога данных приложения:
+          по одному .eml на капсулу, <C>vault.json</C> — только кэш. В браузере —
+          localStorage. Положили чужой .eml в папку — он появится в хранилище;
+          удалили файл — капсула исчезла. Формат читается Apple Mail и Thunderbird.
+        </>
+      ),
+    },
+    {
+      q: 'С чего начать, если хранилище пусто?',
+      a: (
+        <>
+          Нажмите «Новая .eml» — и пишите блоками: текст, таблицы, холст, код,
+          аудио. Есть письма уже где-то ещё — «Импорт .eml». Хотите сначала
+          посмотреть, как всё выглядит, — «Загрузить демо-хранилище» создаст пять
+          связанных капсул со всеми типами блоков; удалить каждую можно в один
+          клик, когда наиграетесь.
+        </>
+      ),
+    },
+    {
+      q: 'Как работают треды и связи между мыслями?',
+      a: (
+        <>
+          Ответ на мысль — это дочерняя .eml с заголовками <C>In-Reply-To</C> и{' '}
+          <C>References</C>, ровно как в email-переписке. [[Викилинки]]
+          дают обратные ссылки (backlinks), а Graph DAG и Thought Threads
+          показывают структуру размышления целиком — от корня до последнего
+          контраргумента.
+        </>
+      ),
+    },
+    {
+      q: 'Как записать голосовую заметку?',
+      a: (
+        <>
+          В редакторе наберите <C>/</C> и выберите Audio note, затем нажмите
+          кнопку записи: звук пишется с микрофона прямо в приложение
+          (MediaRecorder), сохраняется как MIME-вложение webm/opus с реальной
+          длительностью и волной. Всё офлайн — внешний диктофон не нужен.
+        </>
+      ),
+    },
+    {
+      q: 'Куда отправляются мои данные?',
+      a: (
+        <>
+          Никуда. Разбор MIME, поиск, бенчмарк и Co-Thinker работают локально —
+          ни сети, ни телеметрии, ни API-ключей. Можете отключить интернет: всё
+          продолжит работать как работало.
+        </>
+      ),
+    },
+    {
+      q: 'Как сделать резервную копию?',
+      a: (
+        <>
+          «Export Vault» в сайдбаре собирает ZIP со всеми .eml, либо просто
+          скопируйте папку <C>vault</C> — это и есть вся база. Файлы открываются
+          в почтовых клиентах, дружат с git и проживут дольше самого приложения.
+        </>
+      ),
+    },
+    {
+      q: 'Почему .eml, а не база данных?',
+      a: (
+        <>
+          .eml — открытый стандарт, который старше многих NoSQL-мод: он читается
+          любым почтовым клиентом, диффится в git и не требует миграций. База
+          данных умирает вместе с приложением, а письма — остаются.
+        </>
+      ),
+    },
+  ],
+  en: [
+    {
+      q: 'What is CapsuleCraft in a nutshell?',
+      a: (
+        <>
+          A local &quot;thinking desk&quot;. Every thought is a real RFC 5322
+          letter (an .eml file): a block editor instead of Markdown, email-style
+          threads, a link graph and an offline Co-Thinker. No database — the
+          folder of .eml files <em>is</em> your entire knowledge base.
+        </>
+      ),
+    },
+    {
+      q: 'Where are my notes physically stored?',
+      a: (
+        <>
+          In the desktop app — the <C>vault</C> folder inside the app data
+          directory: one .eml per capsule, <C>vault.json</C> is only a cache. In
+          the browser — localStorage. Drop a foreign .eml into the folder and it
+          appears in the vault; delete the file and the capsule is gone. The
+          format opens in Apple Mail and Thunderbird.
+        </>
+      ),
+    },
+    {
+      q: 'Where do I start with an empty vault?',
+      a: (
+        <>
+          Hit &quot;New .eml&quot; and write in blocks: text, tables, canvas,
+          code, audio. Got letters somewhere else already — &quot;Import
+          .eml&quot;. Want to see how it all looks first — &quot;Load demo
+          vault&quot; creates five linked capsules exercising every block type;
+          each can be deleted with one click when you are done playing.
+        </>
+      ),
+    },
+    {
+      q: 'How do threads and links between thoughts work?',
+      a: (
+        <>
+          Replying to a thought creates a child .eml with <C>In-Reply-To</C> and{' '}
+          <C>References</C> headers, exactly like an email conversation.
+          [[Wikilinks]] give you backlinks, and the Graph DAG plus Thought
+          Threads show the whole shape of your reasoning — from the root down to
+          the last counterargument.
+        </>
+      ),
+    },
+    {
+      q: 'How do I record a voice note?',
+      a: (
+        <>
+          Type <C>/</C> in the editor and pick Audio note, then hit the record
+          button: sound is captured from your microphone right inside the app
+          (MediaRecorder) and saved as a webm/opus MIME attachment with real
+          duration and a waveform. Fully offline — no external recorder needed.
+        </>
+      ),
+    },
+    {
+      q: 'Where does my data go?',
+      a: (
+        <>
+          Nowhere. MIME parsing, search, the benchmark and the Co-Thinker all
+          run locally — no network, no telemetry, no API keys. Pull the
+          internet cable: everything keeps working exactly as before.
+        </>
+      ),
+    },
+    {
+      q: 'How do I back up my vault?',
+      a: (
+        <>
+          &quot;Export Vault&quot; in the sidebar packs a ZIP with all .eml
+          files, or simply copy the <C>vault</C> folder — that is the whole
+          database. The files open in mail clients, play nicely with git and
+          will outlive the app itself.
+        </>
+      ),
+    },
+    {
+      q: 'Why .eml instead of a database?',
+      a: (
+        <>
+          .eml is an open standard older than many NoSQL fashions: any mail
+          client reads it, git diffs it, and it needs no migrations. A database
+          dies with the app; letters remain.
+        </>
+      ),
+    },
+  ],
+};
 
-/** Accordion list of FAQ_ITEMS (shared by the empty state and the modal). */
+/** Accordion list of FAQ items (shared by the empty state and the modal). */
 export const FaqList: React.FC = () => {
+  const { locale } = useI18n();
   const [openIdx, setOpenIdx] = useState(0);
   return (
     <div className="divide-y divide-slate-800/80 rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-      {FAQ_ITEMS.map((item, i) => {
+      {FAQ_ITEMS[locale].map((item, i) => {
         const open = openIdx === i;
         return (
           <div key={i}>
@@ -163,29 +259,14 @@ interface EmptyVaultProps {
   onImportEml: (file: File) => void;
 }
 
-const QUICK_STEPS = [
-  {
-    icon: FilePlus2,
-    title: '1. Создайте капсулу',
-    text: 'Кнопка «Новая .eml» — и пишите блоками: / открывает таблицы, холст, код и аудио.',
-  },
-  {
-    icon: Waypoints,
-    title: '2. Свяжите мысли',
-    text: 'Create Re: .eml порождает дочернюю капсулу с In-Reply-To; [[викилинки]] дают backlinks.',
-  },
-  {
-    icon: Mic,
-    title: '3. Добавьте голос',
-    text: 'Audio note пишет с микрофона и сохраняет звук как настоящее MIME-вложение.',
-  },
-];
+const QUICK_STEP_ICONS = [FilePlus2, Waypoints, Mic] as const;
 
 /** Full-page onboarding shown instead of the editor while the vault is empty. */
 export const EmptyVaultState: React.FC<EmptyVaultProps> = ({
   onCreateNew,
   onImportEml,
 }) => {
+  const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -197,13 +278,10 @@ export const EmptyVaultState: React.FC<EmptyVaultProps> = ({
             <PackageOpen className="w-8 h-8 text-cyan-400" />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
-            Хранилище пусто — и это нормально
+            {t('empty.title')}
           </h1>
           <p className="mt-3 text-sm text-slate-400 leading-relaxed max-w-xl mx-auto">
-            CapsuleCraft не создаёт демо-заметок: ваша база знаний начинается с
-            чистого vault. Каждая мысль здесь — настоящий .eml файл (RFC 5322),
-            который всегда можно открыть в почтовом клиенте, отдать другому
-            человеку или положить в git. Вместо свалки примеров — короткий FAQ.
+            {t('empty.subtitle')}
           </p>
         </div>
 
@@ -215,7 +293,7 @@ export const EmptyVaultState: React.FC<EmptyVaultProps> = ({
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold shadow-[0_0_14px_rgba(6,182,212,0.35)] transition-all active:scale-95"
           >
             <FilePlus2 className="w-4 h-4" />
-            Новая .eml
+            {t('empty.create')}
           </button>
           <button
             type="button"
@@ -226,7 +304,7 @@ export const EmptyVaultState: React.FC<EmptyVaultProps> = ({
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-slate-200 text-sm font-medium transition-all active:scale-95"
           >
             <FolderOpen className="w-4 h-4 text-cyan-400" />
-            Импорт .eml
+            {t('empty.import')}
           </button>
           <input
             ref={fileRef}
@@ -244,14 +322,18 @@ export const EmptyVaultState: React.FC<EmptyVaultProps> = ({
 
         {/* Quick start steps */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-10">
-          {QUICK_STEPS.map((s) => (
+          {QUICK_STEP_ICONS.map((Icon, idx) => (
             <div
-              key={s.title}
+              key={idx}
               className="rounded-xl border border-slate-800 bg-slate-900/40 p-4"
             >
-              <s.icon className="w-4 h-4 text-cyan-400 mb-2.5" />
-              <h3 className="text-xs font-bold text-slate-200 mb-1.5">{s.title}</h3>
-              <p className="text-[12px] leading-relaxed text-slate-500">{s.text}</p>
+              <Icon className="w-4 h-4 text-cyan-400 mb-2.5" />
+              <h3 className="text-xs font-bold text-slate-200 mb-1.5">
+                {t(`empty.step${idx + 1}.title` as Parameters<typeof t>[0])}
+              </h3>
+              <p className="text-[12px] leading-relaxed text-slate-500">
+                {t(`empty.step${idx + 1}.text` as Parameters<typeof t>[0])}
+              </p>
             </div>
           ))}
         </div>
@@ -260,7 +342,7 @@ export const EmptyVaultState: React.FC<EmptyVaultProps> = ({
         <div className="flex items-center gap-2 mb-4">
           <HelpCircle className="w-4 h-4 text-cyan-400" />
           <h2 className="text-xs font-bold tracking-[0.2em] text-slate-300 font-mono uppercase">
-            FAQ — частые вопросы
+            {t('faq.title')}
           </h2>
         </div>
         <FaqList />
@@ -274,6 +356,8 @@ export const FaqModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   isOpen,
   onClose,
 }) => {
+  const { t } = useI18n();
+
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -303,7 +387,7 @@ export const FaqModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
           <div className="flex items-center gap-2.5">
             <HelpCircle className="w-5 h-5 text-cyan-400" />
             <div>
-              <h2 className="text-sm font-bold text-white">FAQ — частые вопросы</h2>
+              <h2 className="text-sm font-bold text-white">{t('faq.title')}</h2>
               <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">
                 CapsuleCraft knowledge vault
               </p>
@@ -313,7 +397,7 @@ export const FaqModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             type="button"
             onClick={onClose}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-            title="Закрыть"
+            title={t('faq.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -321,7 +405,7 @@ export const FaqModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
         <div className="overflow-y-auto p-6">
           <FaqList />
           <p className="mt-5 text-[11px] text-slate-600 font-mono text-center">
-            Больше деталей — в README и CONTRIBUTING на GitHub.
+            {t('faq.readmeHint')}
           </p>
         </div>
       </div>

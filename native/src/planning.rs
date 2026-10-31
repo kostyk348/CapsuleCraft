@@ -759,6 +759,9 @@ fn ics_priority(priority: &str) -> u8 {
 pub struct IcsOptions {
     pub calendar_name: String,
     pub include_completed: bool,
+    /// Language of generated VTODO labels (SUMMARY fallback, DESCRIPTION lines,
+    /// PRODID). Matches the web `buildIcs` behavior.
+    pub lang: crate::i18n::Locale,
 }
 
 impl Default for IcsOptions {
@@ -766,6 +769,34 @@ impl Default for IcsOptions {
         Self {
             calendar_name: "CapsuleCraft Planning".to_string(),
             include_completed: false,
+            lang: crate::i18n::Locale::En,
+        }
+    }
+}
+
+/// Localized labels for one VTODO description.
+struct IcsLabels {
+    untitled: &'static str,
+    capsule: &'static str,
+    list: &'static str,
+    tags: &'static str,
+}
+
+impl IcsLabels {
+    fn for_lang(lang: crate::i18n::Locale) -> Self {
+        match lang {
+            crate::i18n::Locale::Ru => Self {
+                untitled: "(без названия)",
+                capsule: "Капсула",
+                list: "Список",
+                tags: "Теги",
+            },
+            crate::i18n::Locale::En => Self {
+                untitled: "(untitled)",
+                capsule: "Capsule",
+                list: "List",
+                tags: "Tags",
+            },
         }
     }
 }
@@ -773,10 +804,15 @@ impl Default for IcsOptions {
 /// `VCALENDAR` with one `VTODO` per task, CRLF-terminated.
 pub fn build_ics(tasks: &[PlannedTask], options: &IcsOptions, now: chrono::DateTime<chrono::Utc>) -> String {
     let stamp = now.format("%Y%m%dT%H%M%SZ").to_string();
+    let labels = IcsLabels::for_lang(options.lang);
+    let prodid_lang = match options.lang {
+        crate::i18n::Locale::Ru => "RU",
+        crate::i18n::Locale::En => "EN",
+    };
     let mut lines: Vec<String> = vec![
         "BEGIN:VCALENDAR".into(),
         "VERSION:2.0".into(),
-        "PRODID:-//CapsuleCraft//Planning//RU".into(),
+        format!("PRODID:-//CapsuleCraft//Planning//{prodid_lang}"),
         "CALSCALE:GREGORIAN".into(),
         "METHOD:PUBLISH".into(),
         format!("X-WR-CALNAME:{}", escape_ics_text(&options.calendar_name)),
@@ -792,16 +828,16 @@ pub fn build_ics(tasks: &[PlannedTask], options: &IcsOptions, now: chrono::DateT
             sanitize_uid(&task.item.id)
         );
         let summary = if task.item.text.trim().is_empty() {
-            "(без названия)".to_string()
+            labels.untitled.to_string()
         } else {
             task.item.text.trim().to_string()
         };
-        let mut description = vec![format!("Капсула: {}", task.capsule_subject)];
+        let mut description = vec![format!("{}: {}", labels.capsule, task.capsule_subject)];
         if let Some(title) = task.block_title.as_deref().filter(|t| !t.is_empty()) {
-            description.push(format!("Список: {title}"));
+            description.push(format!("{}: {title}", labels.list));
         }
         if !task.capsule_tags.is_empty() {
-            description.push(format!("Теги: {}", task.capsule_tags.join(" ")));
+            description.push(format!("{}: {}", labels.tags, task.capsule_tags.join(" ")));
         }
 
         lines.push("BEGIN:VTODO".into());
@@ -1008,6 +1044,28 @@ mod tests {
         assert!(ics.contains("DUE;VALUE=DATE:20261025"));
         assert!(ics.contains("PRIORITY:1"));
         assert!(ics.ends_with("\r\n"));
+    }
+
+    #[test]
+    fn ics_labels_follow_locale() {
+        let tasks = vec![task("a", "", Some("2026-10-25"), None)];
+        let mk = |lang| IcsOptions {
+            lang,
+            ..IcsOptions::default()
+        };
+
+        let en = build_ics(&tasks, &mk(crate::i18n::Locale::En), chrono::Utc::now());
+        assert!(en.contains("PRODID:-//CapsuleCraft//Planning//EN"));
+        assert!(en.contains("SUMMARY:(untitled)"));
+        assert!(en.contains("Capsule: Spec"));
+        assert!(en.contains("Tags: #plan"));
+        assert!(!en.contains("(без названия)"));
+
+        let ru = build_ics(&tasks, &mk(crate::i18n::Locale::Ru), chrono::Utc::now());
+        assert!(ru.contains("PRODID:-//CapsuleCraft//Planning//RU"));
+        assert!(ru.contains("SUMMARY:(без названия)"));
+        assert!(ru.contains("Капсула: Spec"));
+        assert!(ru.contains("Теги: #plan"));
     }
 
     #[test]

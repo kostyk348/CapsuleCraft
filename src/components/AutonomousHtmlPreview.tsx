@@ -3,6 +3,7 @@ import { CapsuleNode } from '../types';
 import { generateAutonomousHtml } from '../engine/mime';
 import { Mail, Monitor, ShieldCheck, Globe, Download, FileCode } from 'lucide-react';
 import { isDesktop, pickSavePath, writeTextFile } from '../engine/desktopStore';
+import { useI18n } from '../i18n';
 
 interface Props {
   capsule: CapsuleNode;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export const AutonomousHtmlPreview: React.FC<Props> = ({ capsule, onDownloadEml }) => {
+  const { t } = useI18n();
   const htmlContent = generateAutonomousHtml(capsule);
   const originalEmailAttachment = capsule.attachments?.find(
     (a) => a.name === 'email_body.html' || a.cid === 'email_body.html'
@@ -80,7 +82,7 @@ export const AutonomousHtmlPreview: React.FC<Props> = ({ capsule, onDownloadEml 
                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="Оригинальный вид внешнего письма (HTML/стили автора)"
+                title={t('preview.originalTitle')}
               >
                 <Mail className="w-3.5 h-3.5" />
                 <span>Original Email</span>
@@ -93,7 +95,7 @@ export const AutonomousHtmlPreview: React.FC<Props> = ({ capsule, onDownloadEml 
                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="Автономный дашборд блоков CapsuleCraft"
+                title={t('preview.dashboardTitle')}
               >
                 <Monitor className="w-3.5 h-3.5" />
                 <span>Capsule Dashboard</span>
@@ -105,7 +107,7 @@ export const AutonomousHtmlPreview: React.FC<Props> = ({ capsule, onDownloadEml 
             type="button"
             onClick={handleDownloadHtml}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition-all shadow-[0_0_10px_rgba(16,185,129,0.3)] text-xs"
-            title="Сохранить активный вид одним .html файлом"
+            title={t('preview.saveHtmlTitle')}
           >
             <FileCode className="w-3.5 h-3.5" />
             <span>{exported ? 'Saved!' : 'Download .html'}</span>

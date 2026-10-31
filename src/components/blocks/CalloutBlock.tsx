@@ -3,6 +3,7 @@ import { CapsuleBlock, CalloutBlockData } from '../../types';
 import { vaultStore } from '../../engine/vaultStore';
 import { renderMarkdownMultiLine } from '../../engine/markdown';
 import { Lightbulb, Info, AlertTriangle, Sparkles, Heart, Trash2, Eye, Pencil } from 'lucide-react';
+import { useI18n } from '../../i18n';
 
 interface Props {
   block: CapsuleBlock & { type: 'callout' };
@@ -13,6 +14,7 @@ interface Props {
 
 export const CalloutBlock: React.FC<Props> = ({ block, onChange, onDelete, onOpenCapsule }) => {
   const [showPreview, setShowPreview] = useState(false);
+  const { t } = useI18n();
   const tone = block.data.tone || 'emerald';
 
   const DEFAULT_TONE = {
@@ -85,7 +87,7 @@ export const CalloutBlock: React.FC<Props> = ({ block, onChange, onDelete, onOpe
             <div
               className="w-full text-slate-300 text-xs leading-relaxed cursor-text"
               onDoubleClick={() => setShowPreview(false)}
-              title="Двойной клик — редактировать"
+              title={t('block.doubleClickEdit')}
             >
               {renderMarkdownMultiLine(
                 block.data.content,
@@ -98,7 +100,7 @@ export const CalloutBlock: React.FC<Props> = ({ block, onChange, onDelete, onOpe
               rows={2}
               value={block.data.content}
               onChange={(e) => onChange({ ...block.data, content: e.target.value })}
-              placeholder="Callout message or invariant... [[для ссылки"
+              placeholder={t('block.calloutPlaceholder')}
               className="w-full bg-transparent text-slate-300 text-xs leading-relaxed resize-none outline-none border-none focus:ring-0 placeholder:text-slate-500"
             />
           )}
@@ -109,7 +111,7 @@ export const CalloutBlock: React.FC<Props> = ({ block, onChange, onDelete, onOpe
             type="button"
             onClick={() => setShowPreview((v) => !v)}
             className="p-1 rounded text-slate-500 hover:text-cyan-300 transition"
-            title={showPreview ? 'Редактировать' : 'Предпросмотр (Markdown)'}
+            title={showPreview ? t('block.edit') : t('block.preview')}
           >
             {showPreview ? <Pencil className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </button>

@@ -320,7 +320,7 @@ export default function App() {  const { t } = useI18n();
   const handleCreateReply = useCallback((parentId: string, title?: string, blocks?: CapsuleNode['blocks']) => {
     const parent = graphState.nodes.get(parentId);
     const newId = `msg-reply-${Date.now().toString(36)}@capsuleos.local`;
-    const finalTitle = title || (parent ? `Re: ${parent.subject}` : 'Re: Размышление');
+    const finalTitle = title || (parent ? `Re: ${parent.subject}` : t('app.replyReflection'));
     const newCapsule: CapsuleNode = {
       messageId: newId,
       subject: finalTitle,
@@ -433,12 +433,12 @@ export default function App() {  const { t } = useI18n();
 
     try {
       const defaultPrompt = mode === 'critique'
-        ? `Проведи критический анализ рисков и слабых мест для капсулы "${currentCapsule.subject}"`
+        ? t('ai.defaultPrompt.critique', { subject: currentCapsule.subject })
         : mode === 'continue'
-        ? `Предложи синтез и следующее логическое развитие мысли для капсулы "${currentCapsule.subject}"`
+        ? t('ai.defaultPrompt.continue', { subject: currentCapsule.subject })
         : mode === 'reply_thread'
-        ? `Создай дочерний контраргумент для капсулы "${currentCapsule.subject}"`
-        : `Проанализируй данные и метрики капсулы "${currentCapsule.subject}"`;
+        ? t('ai.defaultPrompt.counter', { subject: currentCapsule.subject })
+        : t('ai.defaultPrompt.data', { subject: currentCapsule.subject });
 
       const promptToSend = customPrompt || defaultPrompt;
 
@@ -455,7 +455,7 @@ export default function App() {  const { t } = useI18n();
         data.result?.criticism ||
         data.result?.text ||
         (typeof data.result === 'string' ? data.result : '') ||
-        'Анализ капсулы завершен.';
+        t('app.aiDone');
 
       if (mode === 'reply_thread') {
         // Reuse the AI-generated blocks instead of the default template.
@@ -532,7 +532,7 @@ export default function App() {  const { t } = useI18n();
         type: 'ai_opponent_block' as const,
         author: persona,
         data: {
-          criticism: `Критический анализ рисков [${persona}]: в сценарии "${currentCapsule.subject}" необходимо учесть предел пропускной способности mmap при одновременной записи из нескольких процессов.`,
+          criticism: t('app.aiFallbackCriticism', { persona, subject: currentCapsule.subject }),
           confidence: 0.92,
           sourceClaim: currentCapsule.subject,
         },
@@ -559,7 +559,7 @@ export default function App() {  const { t } = useI18n();
         title: t('palette.action.new.title'),
         hint: t('palette.action.new.hint'),
         group: t('palette.group.actions'),
-        keywords: ['new', 'создать', 'eml', 'заметка', 'create'],
+        keywords: t('palette.action.new.keywords').split(' '),
         run: handleCreateNewCapsule,
       },
       {
@@ -569,7 +569,7 @@ export default function App() {  const { t } = useI18n();
           ? t('palette.action.undo.hintAvailable', { count: hist.depth })
           : t('palette.action.undo.hintEmpty'),
         group: t('palette.group.actions'),
-        keywords: ['undo', 'отмена', 'назад'],
+        keywords: t('palette.action.undo.keywords').split(' '),
         shortcut: '⌘Z',
         run: undo,
       },
@@ -578,7 +578,7 @@ export default function App() {  const { t } = useI18n();
         title: t('palette.action.redo.title'),
         hint: hist?.canRedo ? t('palette.action.redo.hintAvailable') : t('palette.action.redo.hintEmpty'),
         group: t('palette.group.actions'),
-        keywords: ['redo', 'повтор', 'вперёд'],
+        keywords: t('palette.action.redo.keywords').split(' '),
         shortcut: '⇧⌘Z',
         run: redo,
       },
@@ -587,7 +587,7 @@ export default function App() {  const { t } = useI18n();
         title: t('palette.action.export.title'),
         hint: t('palette.action.export.hint'),
         group: t('palette.group.actions'),
-        keywords: ['export', 'zip', 'backup', 'резерв'],
+        keywords: t('palette.action.export.keywords').split(' '),
         run: handleExportVaultZip,
       },
       {
@@ -595,7 +595,7 @@ export default function App() {  const { t } = useI18n();
         title: t('palette.action.bench.title'),
         hint: t('palette.action.bench.hint'),
         group: t('palette.group.tools'),
-        keywords: ['bench', 'speed', 'скорость', '50k'],
+        keywords: t('palette.action.bench.keywords').split(' '),
         run: () => setIsBenchmarkOpen(true),
       },
       {
@@ -603,7 +603,7 @@ export default function App() {  const { t } = useI18n();
         title: t('palette.action.cothink.title'),
         hint: t('palette.action.cothink.hint'),
         group: t('palette.group.tools'),
-        keywords: ['ai', 'критика', 'синтез', 'co-think'],
+        keywords: t('palette.action.cothink.keywords').split(' '),
         run: () => setIsAiModalOpen(true),
       },
       {
@@ -611,7 +611,7 @@ export default function App() {  const { t } = useI18n();
         title: t('mcp.title'),
         hint: 'Model Context Protocol (Claude, Antigravity, Cursor)',
         group: t('palette.group.tools'),
-        keywords: ['mcp', 'ai', 'agent', 'claude', 'antigravity', 'cursor', 'llm', 'ии'],
+        keywords: t('palette.action.mcp.keywords').split(' '),
         run: () => setIsMcpOpen(true),
       },
       {
@@ -619,7 +619,7 @@ export default function App() {  const { t } = useI18n();
         title: t('palette.action.faq.title'),
         hint: t('palette.action.faq.hint'),
         group: t('palette.group.tools'),
-        keywords: ['help', 'помощь', 'вопросы'],
+        keywords: t('palette.action.faq.keywords').split(' '),
         run: () => setIsFaqOpen(true),
       },
       { id: 'view-editor', title: t('palette.action.view.editor'), group: t('palette.group.navigation'), keywords: t('palette.action.view.editor.keywords').split(' '), run: () => setActiveView('canvas') },
