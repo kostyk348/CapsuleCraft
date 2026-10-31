@@ -1,12 +1,45 @@
 //! Data grid / table block renderer and CSV helpers.
+//!
+//! Roadmap item: `=…` formula cells evaluated by the same offline boa engine
+//! as code blocks — `=SUM(A1:A5)`, `=AVG(B2:B9)`, `=MIN`, `=MAX`, `=COUNT`,
+//! plain arithmetic and nested cell references. The raw formula is what gets
+//! stored; the computed value is what you normally see.
 
-use egui::{vec2, Align, FontId, Frame, Layout, Margin, ScrollArea, Stroke, TextEdit, Ui};
+use std::sync::{Mutex, OnceLock};
+
+use egui::{vec2, Align, Button, FontId, Frame, Layout, Margin, RichText, ScrollArea, Stroke, TextEdit, Ui};
 use serde_json::{json, Value};
 
 use crate::i18n::{t, Key, Locale};
 use crate::mime::Attachment;
 use crate::theme;
-use crate::{hud, text_button};
+use crate::{hud, js_engine, text_button};
+
+/// The formula cell currently being edited, across frames.
+/// `just` marks the frame right after entering, to request focus once.
+static EDIT_CELL: OnceLock<Mutex<Option<EditCell>>> = OnceLock::new();
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct EditCell {
+    block_id: String,
+    row: usize,
+    col: usize,
+    just_entered: bool,
+}
+
+fn editing_cell() -> Option<EditCell> {
+    EDIT_CELL
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .ok()?
+        .clone()
+}
+
+fn set_editing(cell: Option<EditCell>) {
+    if let Ok(mut slot) = EDIT_CELL.get_or_init(|| Mutex::new(None)).lock() {
+        *slot = cell;
+    }
+}
 
 /// Split CSV into rows. Deliberately simple: no quoted fields, no embedded
 /// commas — the same limitation the web grid has.
@@ -116,6 +149,14 @@ pub fn draw_grid_block(
             let columns = table.iter().map(Vec::len).max().unwrap_or(0).max(1);
             let cell_width = ((ui.available_width() - 24.0) / columns as f32 - 8.0).max(70.0);
             let mut table_changed = false;
+            let block_id = block
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            // Immutable copy for formula resolution: a formula may reference
+            // cells edited in this very frame; they resolve next frame.
+            let snapshot = table.clone();
 
             ScrollArea::horizontal()
                 .id_salt((
@@ -131,7 +172,55 @@ pub fn draw_grid_block(
                                 if row.len() <= column {
                                     row.push(String::new());
                                 }
-                                let mut cell = row[column].clone();
+                                let raw = row[column].clone();
+                                let is_formula_cell =
+                                    row_index > 0 && raw.trim_start().starts_with('=');
+                                let editing = editing_cell()
+                                    .is_some_and(|edit| {
+                                        edit.block_id == block_id
+                                            && edit.row == row_index
+                                            && edit.col == column
+                                    });
+
+                                if is_formula_cell && !editing {
+                                    // Computed display; click to edit the raw formula.
+                                    let expr = raw.trim_start()[1..].trim().to_string();
+                                    let computed = if expr.is_empty() {
+                                        None
+                                    } else {
+                                        js_engine::eval_formula(&expr, &snapshot, 0)
+                                    };
+                                    let text = computed.clone().unwrap_or_else(|| "#ERR".into());
+                                    let failed = computed.is_none();
+                                    let font = FontId::new(11.5, theme::mono());
+                                    let color = if failed {
+                                        theme::BAD
+                                    } else {
+                                        theme::ACCENT_INK
+                                    };
+                                    let response = ui.add_sized(
+                                        vec2(cell_width, 22.0),
+                                        Button::new(RichText::new(text).font(font).color(color))
+                                            .fill(theme::WASH)
+                                            .corner_radius(theme::RADIUS),
+                                    );
+                                    let response = if failed {
+                                        response.on_hover_text(t(locale, Key::FormulaHint))
+                                    } else {
+                                        response.on_hover_text(&raw)
+                                    };
+                                    if response.clicked() {
+                                        set_editing(Some(EditCell {
+                                            block_id: block_id.clone(),
+                                            row: row_index,
+                                            col: column,
+                                            just_entered: true,
+                                        }));
+                                    }
+                                    continue;
+                                }
+
+                                let mut cell = raw;
                                 let font = if row_index == 0 {
                                     FontId::new(11.0, theme::mono_bold())
                                 } else {
@@ -150,6 +239,17 @@ pub fn draw_grid_block(
                                         .margin(Margin::symmetric(4, 2))
                                         .desired_width(cell_width),
                                 );
+                                if editing {
+                                    let mut edit = editing_cell().expect("checked above");
+                                    if edit.just_entered {
+                                        response.request_focus();
+                                        edit.just_entered = false;
+                                        set_editing(Some(edit));
+                                    }
+                                    if response.lost_focus() {
+                                        set_editing(None);
+                                    }
+                                }
                                 if response.changed() {
                                     row[column] = cell;
                                     table_changed = true;
@@ -166,6 +266,9 @@ pub fn draw_grid_block(
                         ui.add_space(2.0);
                     }
                 });
+
+            ui.add_space(8.0);
+            let _ = hud(ui, t(locale, Key::FormulaHint), theme::FAINT);
 
             if table_changed || add_row || add_col {
                 attachments[index].content = to_csv(&table);
@@ -189,5 +292,22 @@ mod tests {
         assert_eq!(table[1], vec!["1", "2", "3"]);
         let serialized = to_csv(&table);
         assert_eq!(serialized, "a,b,c\n1,2,3");
+    }
+
+    #[test]
+    fn formulas_resolve_over_csv_table() {
+        let table = parse_csv("Price,Qty\n10,2\n30,4");
+        assert_eq!(
+            js_engine::eval_formula("SUM(A2:A3)", &table, 0),
+            Some("40".into())
+        );
+        assert_eq!(
+            js_engine::eval_formula("A2*B2 + A3*B3", &table, 0),
+            Some("140".into())
+        );
+        assert_eq!(
+            js_engine::eval_formula("COUNT(A2:A3)", &table, 0),
+            Some("2".into())
+        );
     }
 }

@@ -252,9 +252,26 @@ strings! {
     Copied => ("Скопировано", "Copied"),
     NotExecuted => ("Нативный прототип не исполняет код. Текст сохраняется в .eml.", "The native prototype never executes code. Source is stored in the .eml."),
     RunUnavailable => ("Запуск недоступен", "Run unavailable"),
+    CodeRun => ("Запустить", "Run"),
+    CodeExecuted => ("Выполнено", "Executed"),
+    CodeExecError => ("Ошибка выполнения", "Execution error"),
+    CodeUnsupported => (
+        "интерпретатор не входит в offline-сборку (zero-dependency). Код сохранён в .eml как текст. Исполняемые языки: JavaScript, JSON.",
+        "has no interpreter in the offline build (zero-dependency). The code is stored in the .eml as text. Executable languages: JavaScript, JSON."
+    ),
     AudioNoFile => ("Аудиофайл не приложен", "No audio file attached"),
     AudioAttach => ("Приложить аудио…", "Attach audio…"),
     AudioPlayback => ("Воспроизведение в нативном прототипе не реализовано.", "Playback is not implemented in the native prototype."),
+    AudioPlay => ("Играть", "Play"),
+    AudioPause => ("Пауза", "Pause"),
+    AudioStop => ("Стоп", "Stop"),
+    AudioPlaying => ("Играет…", "Playing…"),
+    AudioPaused => ("На паузе", "Paused"),
+    AudioUnsupportedFmt => (
+        "Веб-запись webm/opus не декодируется офлайн-плеером. Приложите mp3/wav/ogg/flac.",
+        "Browser-recorded webm/opus cannot be decoded by the offline player. Attach mp3/wav/ogg/flac instead."
+    ),
+    AudioDeviceFail => ("Аудиоустройство недоступно.", "No audio output device."),
     Transcript => ("Расшифровка", "Transcript"),
     CanvasEmpty => ("На доске пока нет элементов", "The board has no elements yet"),
     CanvasAddSticky => ("Стикер", "Sticky"),
@@ -274,6 +291,26 @@ strings! {
     CreateLinkedPage => ("Создать эту страницу", "Create this page"),
     PageCreated => ("Страница создана", "Page created"),
     LinksUpdated => ("Ссылки обновлены", "Links updated"),
+
+    // Grid formulas (boa)
+    FormulaHint => ("=SUM(A1:A5) · =AVG · =MIN · =MAX · =COUNT", "=SUM(A1:A5) · =AVG · =MIN · =MAX · =COUNT"),
+
+    // OpenPGP capsule encryption (rPGP)
+    EncryptCapsuleCmd => ("Зашифровать капсулу (.eml.asc)", "Encrypt capsule (.eml.asc)"),
+    DecryptEmlCmd => ("Расшифровать .eml.asc в хранилище", "Decrypt .eml.asc into the vault"),
+    EncryptTitle => ("Шифрование OpenPGP", "OpenPGP encryption"),
+    DecryptTitle => ("Расшифрование OpenPGP", "OpenPGP decryption"),
+    EncryptSource => ("Источник", "Source"),
+    Passphrase => ("Парольная фраза", "Passphrase"),
+    RepeatPassphrase => ("Повторите парольную фразу", "Repeat passphrase"),
+    PassMismatch => ("Парольные фразы не совпадают", "Passphrases do not match"),
+    PassEmpty => ("Пустая парольная фраза", "Empty passphrase"),
+    EncryptNow => ("Зашифровать", "Encrypt"),
+    DecryptNow => ("Расшифровать", "Decrypt"),
+    EncryptedDone => ("Зашифровано", "Encrypted"),
+    DecryptDone => ("Расшифровано и добавлено в хранилище", "Decrypted and added to the vault"),
+    CryptoFailed => ("Не удалось расшифровать: неверная парольная фраза или повреждённый файл", "Decryption failed: wrong passphrase or corrupted file"),
+    EncryptHint => ("AES-256 · SEIPD v1 · офлайн rPGP, без сети", "AES-256 · SEIPD v1 · offline rPGP, no network"),
 
     // Planning
     PlanningTitle => ("Планирование", "Planning"),

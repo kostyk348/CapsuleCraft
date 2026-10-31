@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use crate::i18n::{t, Key, Locale};
 use crate::icons::{self, Icon};
 use crate::mime::Attachment;
-use crate::theme;
+use crate::{audio_player, theme};
 use crate::{guess_mime, hud, sanitize_cid, text_button};
 
 pub fn draw_audio_block(
@@ -132,6 +132,82 @@ pub fn draw_audio_block(
             }
 
             ui.add_space(8.0);
+
+            // Playback controls (roadmap: native audio playback via rodio).
+            if let Some(attachment) = file {
+                let raw = attachment.raw_b64.as_deref().unwrap_or("");
+                let decode = || {
+                    base64::engine::general_purpose::STANDARD
+                        .decode(raw)
+                        .ok()
+                        .filter(|bytes| !bytes.is_empty())
+                };
+                let decodable = decode().is_some();
+                let playable = decodable
+                    && audio_player::supported_extension(&attachment.name)
+                    && !audio_player::is_webm(&attachment.mime_type, &attachment.name);
+                let playback = audio_player::state();
+                let is_mine = matches!(&playback,
+                    audio_player::Playback::Playing { cid } | audio_player::Playback::Paused { cid }
+                        if cid == &audio_cid);
+                let _ = is_mine;
+
+                ui.horizontal(|ui| {
+                    if playable {
+                        let label = match &playback {
+                            audio_player::Playback::Playing { cid } if cid == &audio_cid => {
+                                t(locale, Key::AudioPause)
+                            }
+                            _ => t(locale, Key::AudioPlay),
+                        };
+                        let active = matches!(&playback,
+                            audio_player::Playback::Playing { cid } | audio_player::Playback::Paused { cid }
+                                if cid == &audio_cid);
+                        if text_button(ui, Some(Icon::Audio), label, active).clicked() {
+                            match &playback {
+                                audio_player::Playback::Playing { cid } if cid == &audio_cid => {
+                                    audio_player::pause(&audio_cid);
+                                }
+                                audio_player::Playback::Paused { cid } if cid == &audio_cid => {
+                                    audio_player::resume(&audio_cid);
+                                }
+                                _ => match decode() {
+                                    Some(bytes) => {
+                                        // Errors are tracked inside the player;
+                                        // nothing is written into the block.
+                                        let _ = audio_player::play(&audio_cid, &bytes);
+                                    }
+                                    None => {}
+                                },
+                            }
+                        }
+                        if text_button(ui, Some(Icon::Close), t(locale, Key::AudioStop), false).clicked() {
+                            audio_player::stop();
+                        }
+                    }
+                });
+
+                let status = match &playback {
+                    audio_player::Playback::Playing { cid } if cid == &audio_cid => {
+                        Some(t(locale, Key::AudioPlaying).to_string())
+                    }
+                    audio_player::Playback::Paused { cid } if cid == &audio_cid => {
+                        Some(t(locale, Key::AudioPaused).to_string())
+                    }
+                    _ => None,
+                };
+                if let Some(status) = status {
+                    let _ = hud(ui, &status, theme::ACCENT_INK);
+                } else if !playable {
+                    if decodable {
+                        // Real bytes, but webm/opus from the MediaRecorder —
+                        // say so instead of a dead button.
+                        let _ = hud(ui, t(locale, Key::AudioUnsupportedFmt), theme::FAINT);
+                    }
+                }
+                ui.add_space(4.0);
+            }
+
             let mut transcript = block
                 .get("data")
                 .and_then(|data| data.get("transcript"))
@@ -154,7 +230,13 @@ pub fn draw_audio_block(
                 changed = true;
             }
             ui.add_space(6.0);
-            let _ = hud(ui, t(locale, Key::NoPlayback), theme::FAINT);
+            if let Some(err) = audio_player::error_for(&audio_cid) {
+                let message = match err {
+                    audio_player::PlayError::Device => t(locale, Key::AudioDeviceFail),
+                    audio_player::PlayError::Unsupported => t(locale, Key::AudioUnsupportedFmt),
+                };
+                let _ = hud(ui, message, theme::FAINT);
+            }
         });
     changed
 }
