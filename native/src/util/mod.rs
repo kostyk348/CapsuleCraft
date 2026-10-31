@@ -24,12 +24,18 @@ pub fn truncate_chars(text: &str, max_chars: usize) -> String {
 }
 
 pub fn truncate_to_width(ui: &Ui, text: &str, font: FontId, max_width: f32) -> String {
-    let galley = ui.painter().layout_no_wrap(text.to_string(), font.clone(), theme::INK);
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_string(), font.clone(), theme::INK);
     if galley.size().x <= max_width {
         return text.to_string();
     }
     let ellipsis = "…";
-    let ellipsis_w = ui.painter().layout_no_wrap(ellipsis.to_string(), font.clone(), theme::INK).size().x;
+    let ellipsis_w = ui
+        .painter()
+        .layout_no_wrap(ellipsis.to_string(), font.clone(), theme::INK)
+        .size()
+        .x;
     let target_w = (max_width - ellipsis_w).max(0.0);
 
     let mut result = String::new();
@@ -138,7 +144,10 @@ mod tests {
             "type": "heading",
             "data": { "level": 1, "text": "Другой заголовок" }
         });
-        assert!(!is_duplicate_heading(&h1_different_text, "Моя первая заметка"));
+        assert!(!is_duplicate_heading(
+            &h1_different_text,
+            "Моя первая заметка"
+        ));
 
         let text_block = json!({
             "type": "paragraph",

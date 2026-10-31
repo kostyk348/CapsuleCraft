@@ -33,7 +33,10 @@ pub fn draw(
     let mut action = ViewAction::default();
     let chains = build(capsules);
     let replies = capsules.iter().filter(|c| c.in_reply_to.is_some()).count();
-    let thread_count = chains.iter().filter(|chain| !chain.replies.is_empty()).count();
+    let thread_count = chains
+        .iter()
+        .filter(|chain| !chain.replies.is_empty())
+        .count();
     // A page with no replies is still a valid chain, but it is not a *thread*:
     // keep it behind the "All pages" toggle so the view answers its own title.
     let shown: Vec<&Chain> = chains
@@ -46,8 +49,20 @@ pub fn draw(
         t(locale, Key::ThreadsTitle),
         &format!(
             "{} · {}",
-            crate::i18n::plural(locale, thread_count, Key::ThreadOne, Key::ThreadFew, Key::ThreadMany),
-            crate::i18n::plural(locale, replies, Key::ReplyOne, Key::ReplyFew, Key::ReplyMany)
+            crate::i18n::plural(
+                locale,
+                thread_count,
+                Key::ThreadOne,
+                Key::ThreadFew,
+                Key::ThreadMany
+            ),
+            crate::i18n::plural(
+                locale,
+                replies,
+                Key::ReplyOne,
+                Key::ReplyFew,
+                Key::ReplyMany
+            )
         ),
     );
 
@@ -61,8 +76,20 @@ pub fn draw(
         &mut bar,
         &format!(
             "{} · {} · {}",
-            crate::i18n::plural(locale, shown.len(), Key::PageOne, Key::PageFew, Key::PageMany),
-            crate::i18n::plural(locale, replies, Key::ReplyOne, Key::ReplyFew, Key::ReplyMany),
+            crate::i18n::plural(
+                locale,
+                shown.len(),
+                Key::PageOne,
+                Key::PageFew,
+                Key::PageMany
+            ),
+            crate::i18n::plural(
+                locale,
+                replies,
+                Key::ReplyOne,
+                Key::ReplyFew,
+                Key::ReplyMany
+            ),
             if state.show_all {
                 t(locale, Key::AllPages)
             } else {
@@ -71,8 +98,9 @@ pub fn draw(
         ),
         theme::FAINT,
     );
-    bar.with_layout(Layout::right_to_left(Align::Center), |ui| {
-        match super::segments(
+    bar.with_layout(
+        Layout::right_to_left(Align::Center),
+        |ui| match super::segments(
             ui,
             &[
                 (t(locale, Key::ThreadsOnly), !state.show_all),
@@ -82,8 +110,8 @@ pub fn draw(
             Some(0) => state.show_all = false,
             Some(1) => state.show_all = true,
             _ => {}
-        }
-    });
+        },
+    );
 
     if shown.is_empty() {
         empty_state(
@@ -108,13 +136,17 @@ pub fn draw(
                         let root = &capsules[chain.root];
                         let is_selected = selected == Some(chain.root);
                         let collapsed = state.collapsed.contains(&root.message_id);
-                        let (rect, response) =
-                            ui.allocate_exact_size(vec2(ui.available_width(), 44.0), Sense::click());
+                        let (rect, response) = ui
+                            .allocate_exact_size(vec2(ui.available_width(), 44.0), Sense::click());
                         if response.hovered() || is_selected {
                             ui.painter().rect_filled(
                                 rect,
                                 theme::RADIUS,
-                                if is_selected { theme::WASH_HOVER } else { theme::WASH },
+                                if is_selected {
+                                    theme::WASH_HOVER
+                                } else {
+                                    theme::WASH
+                                },
                             );
                         }
                         let mut row = ui.new_child(
@@ -186,7 +218,8 @@ pub fn draw(
                                     let _ = tag_chip(ui, tag, theme::MUTED);
                                 }
                                 if !root.native {
-                                    let _ = tag_chip(ui, t(locale, Key::ReadOnly), theme::BADGE_BETA);
+                                    let _ =
+                                        tag_chip(ui, t(locale, Key::ReadOnly), theme::BADGE_BETA);
                                 }
                             });
                         }
@@ -326,7 +359,10 @@ pub fn build(capsules: &[Capsule]) -> Vec<Chain> {
             let mut replies = Vec::new();
             seen.insert(index);
             walk(index, 0, &children, &mut seen, &mut replies);
-            chains.push(Chain { root: index, replies });
+            chains.push(Chain {
+                root: index,
+                replies,
+            });
         }
     }
 

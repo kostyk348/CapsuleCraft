@@ -44,7 +44,11 @@ struct Shared {
 
 fn shared() -> &'static Arc<Mutex<Shared>> {
     static SHARED: OnceLock<Arc<Mutex<Shared>>> = OnceLock::new();
-    SHARED.get_or_init(|| Arc::new(Mutex::new(Shared { state: Playback::Stopped })))
+    SHARED.get_or_init(|| {
+        Arc::new(Mutex::new(Shared {
+            state: Playback::Stopped,
+        }))
+    })
 }
 
 fn sender_slot() -> &'static Mutex<Option<Sender<Cmd>>> {
@@ -112,25 +116,23 @@ fn audio_thread(rx: Receiver<Cmd>, shared: Arc<Mutex<Shared>>) {
             Some(Cmd::Play(cid, bytes)) => {
                 current_cid.clear();
                 match &device {
-                    Ok((_stream, sink)) => {
-                        match Decoder::new(Cursor::new(bytes)) {
-                            Ok(source) => {
-                                sink.clear();
-                                sink.append(source.buffered());
-                                sink.play();
-                                current_cid = cid.clone();
-                                if let Ok(mut shared) = shared.lock() {
-                                    shared.state = Playback::Playing { cid };
-                                }
-                            }
-                            Err(_) => {
-                                record_error(&cid, PlayError::Unsupported);
-                                if let Ok(mut shared) = shared.lock() {
-                                    shared.state = Playback::Stopped;
-                                }
+                    Ok((_stream, sink)) => match Decoder::new(Cursor::new(bytes)) {
+                        Ok(source) => {
+                            sink.clear();
+                            sink.append(source.buffered());
+                            sink.play();
+                            current_cid = cid.clone();
+                            if let Ok(mut shared) = shared.lock() {
+                                shared.state = Playback::Playing { cid };
                             }
                         }
-                    }
+                        Err(_) => {
+                            record_error(&cid, PlayError::Unsupported);
+                            if let Ok(mut shared) = shared.lock() {
+                                shared.state = Playback::Stopped;
+                            }
+                        }
+                    },
                     Err(err) => {
                         record_error(&cid, err.clone());
                         if let Ok(mut shared) = shared.lock() {
@@ -205,8 +207,7 @@ pub fn supported_extension(name: &str) -> bool {
 /// Media types produced by the web MediaRecorder; rodio cannot decode them.
 pub fn is_webm(mime: &str, name: &str) -> bool {
     let mime = mime.to_ascii_lowercase();
-    mime.starts_with("audio/webm")
-        || name.to_ascii_lowercase().ends_with(".webm")
+    mime.starts_with("audio/webm") || name.to_ascii_lowercase().ends_with(".webm")
 }
 
 /// Begin (or restart) playback of `bytes` tagged with `cid`. The source keeps
@@ -221,9 +222,7 @@ pub fn play(cid: &str, bytes: &[u8]) -> Result<(), PlayError> {
     clear_error();
 
     let tx = {
-        let mut slot = sender_slot()
-            .lock()
-            .map_err(|_| PlayError::Device)?;
+        let mut slot = sender_slot().lock().map_err(|_| PlayError::Device)?;
         match slot.as_ref() {
             Some(tx) if tx.send(Cmd::Stop).is_ok() => tx.clone(),
             _ => {

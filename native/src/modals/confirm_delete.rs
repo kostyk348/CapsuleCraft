@@ -12,11 +12,7 @@ pub enum ConfirmDeleteAction {
     Cancel,
 }
 
-pub fn draw_confirm_delete(
-    show: bool,
-    locale: Locale,
-    ctx: &egui::Context,
-) -> ConfirmDeleteAction {
+pub fn draw_confirm_delete(show: bool, locale: Locale, ctx: &egui::Context) -> ConfirmDeleteAction {
     if !show {
         return ConfirmDeleteAction::None;
     }

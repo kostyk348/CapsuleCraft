@@ -144,7 +144,11 @@ fn parse_inline_list(val: &str, target: &mut Vec<String>, is_tag: bool) {
     let clean = val.trim_matches(|c| c == '[' || c == ']' || c == '\'' || c == '"');
     for part in clean.split(',') {
         let item = part.trim().trim_matches(|c| c == '\'' || c == '"');
-        let item = if is_tag { item.trim_start_matches('#') } else { item };
+        let item = if is_tag {
+            item.trim_start_matches('#')
+        } else {
+            item
+        };
         if !item.is_empty() {
             target.push(item.to_string());
         }
@@ -426,11 +430,7 @@ pub fn extract_attachment_references(md: &str) -> Vec<String> {
 }
 
 pub fn guess_mime(name: &str) -> String {
-    let ext = name
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase();
+    let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
     match ext.as_str() {
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",

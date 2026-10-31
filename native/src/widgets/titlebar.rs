@@ -41,9 +41,16 @@ pub fn draw_titlebar(
 
     // 1. Right utility controls: rendered first with right-to-left layout so they
     // are guaranteed visible, anchored, and have strict layout boundaries.
-    let right_width = if chrome::custom_caption_buttons() { 450.0 } else { 340.0 };
+    let right_width = if chrome::custom_caption_buttons() {
+        450.0
+    } else {
+        340.0
+    };
     let right_rect = Rect::from_min_max(
-        pos2((total_rect.right() - right_width).max(total_rect.left()), total_rect.top()),
+        pos2(
+            (total_rect.right() - right_width).max(total_rect.left()),
+            total_rect.top(),
+        ),
         total_rect.right_bottom(),
     );
     let mut right_bar = ui.new_child(
@@ -116,13 +123,7 @@ pub fn draw_titlebar(
             _ => (theme::ACCENT, t(locale, Key::ImapSynced)),
         }
     };
-    let imap_resp = icon_button(
-        right_ui,
-        Icon::Mail,
-        imap_hint,
-        true,
-        false,
-    );
+    let imap_resp = icon_button(right_ui, Icon::Mail, imap_hint, true, false);
     // Draw status dot on the IMAP icon
     let dot_pos = pos2(imap_resp.rect.left() + 7.0, imap_resp.rect.top() + 7.0);
     right_ui.painter().circle_filled(dot_pos, 2.5, imap_color);
@@ -174,18 +175,15 @@ pub fn draw_titlebar(
         let (dot, _) = ui.allocate_exact_size(vec2(6.0, 6.0), Sense::hover());
         ui.painter().circle_filled(dot.center(), 2.5, dot_color);
         if total_rect.width() >= 1150.0 || status_error || dirty {
-            let label = ui.label(
-                RichText::new(text)
-                    .family(theme::mono())
-                    .size(9.5)
-                    .color(if status_error {
-                        theme::BAD
-                    } else if dirty {
-                        theme::BADGE_BETA
-                    } else {
-                        theme::FAINT
-                    }),
-            );
+            let label = ui.label(RichText::new(text).family(theme::mono()).size(9.5).color(
+                if status_error {
+                    theme::BAD
+                } else if dirty {
+                    theme::BADGE_BETA
+                } else {
+                    theme::FAINT
+                },
+            ));
             if status_error {
                 label.on_hover_text(status);
             }
@@ -198,7 +196,10 @@ pub fn draw_titlebar(
     // Constrained so it never extends past `right_used_left`.
     let left_rect = Rect::from_min_max(
         total_rect.left_top(),
-        pos2((right_used_left - 12.0).max(total_rect.left()), total_rect.bottom()),
+        pos2(
+            (right_used_left - 12.0).max(total_rect.left()),
+            total_rect.bottom(),
+        ),
     );
     let mut bar = ui.new_child(
         UiBuilder::new()
@@ -210,13 +211,22 @@ pub fn draw_titlebar(
     ui_left.add_space(chrome::leading_inset() + 12.0);
 
     let sidebar_hint = format!("{} (Ctrl + \\)", t(locale, Key::CommandToggleSidebar));
-    if icon_button(ui_left, Icon::Sidebar, &sidebar_hint, true, !sidebar_collapsed).clicked() {
+    if icon_button(
+        ui_left,
+        Icon::Sidebar,
+        &sidebar_hint,
+        true,
+        !sidebar_collapsed,
+    )
+    .clicked()
+    {
         action.toggle_sidebar = true;
     }
 
     ui_left.add_space(4.0);
     let (divider, _) = ui_left.allocate_exact_size(vec2(1.0, 18.0), Sense::hover());
-    ui_left.painter()
+    ui_left
+        .painter()
         .vline(divider.center().x, divider.y_range(), theme::hairline());
     ui_left.add_space(6.0);
 
@@ -242,11 +252,9 @@ pub fn draw_titlebar(
             Stroke::new(1.5, theme::ACCENT),
             egui::StrokeKind::Inside,
         );
-        ui_left.painter().circle_filled(
-            mark_rect.center() + vec2(-3.2, 0.0),
-            2.0,
-            theme::ACCENT,
-        );
+        ui_left
+            .painter()
+            .circle_filled(mark_rect.center() + vec2(-3.2, 0.0), 2.0, theme::ACCENT);
         ui_left.painter().circle_filled(
             mark_rect.center() + vec2(3.2, 0.0),
             2.0,
@@ -277,12 +285,16 @@ pub fn draw_titlebar(
         1.0,
         theme::FAINT,
     );
-    ui_left.painter()
-        .galley(badge_rect.center() - badge.size() / 2.0, badge, theme::FAINT);
+    ui_left.painter().galley(
+        badge_rect.center() - badge.size() / 2.0,
+        badge,
+        theme::FAINT,
+    );
 
     ui_left.add_space(8.0);
     let (divider, _) = ui_left.allocate_exact_size(vec2(1.0, 18.0), Sense::hover());
-    ui_left.painter()
+    ui_left
+        .painter()
         .vline(divider.center().x, divider.y_range(), theme::hairline());
     ui_left.add_space(6.0);
 
@@ -301,12 +313,14 @@ pub fn draw_titlebar(
         chrome::title_bar_drag_rect(ui, drag_rect);
     }
 
-    ui.painter()
-        .hline(total_rect.x_range(), total_rect.bottom() - 0.5, theme::hairline());
+    ui.painter().hline(
+        total_rect.x_range(),
+        total_rect.bottom() - 0.5,
+        theme::hairline(),
+    );
 
     action
 }
-
 
 // ---------------------------------------------------------------------------
 // Workspace Strip: tier 2 toolbar with views tabs and contextual actions
@@ -328,7 +342,10 @@ pub fn draw_workspace_strip(
     // 1. Right context actions
     let right_width = 400.0;
     let right_rect = Rect::from_min_max(
-        pos2((total_rect.right() - right_width).max(total_rect.left()), total_rect.top()),
+        pos2(
+            (total_rect.right() - right_width).max(total_rect.left()),
+            total_rect.top(),
+        ),
         total_rect.right_bottom(),
     );
     let mut right_bar = ui.new_child(
@@ -404,7 +421,10 @@ pub fn draw_workspace_strip(
     // 2. Left side: The 6 Navigation tabs
     let left_rect = Rect::from_min_max(
         pos2(total_rect.left(), total_rect.top()),
-        pos2((right_used_left - 8.0).max(total_rect.left()), total_rect.bottom()),
+        pos2(
+            (right_used_left - 8.0).max(total_rect.left()),
+            total_rect.bottom(),
+        ),
     );
     let mut left_bar = ui.new_child(
         UiBuilder::new()
@@ -420,8 +440,11 @@ pub fn draw_workspace_strip(
     }
 
     // Bottom hairline separator
-    ui.painter()
-        .hline(total_rect.x_range(), total_rect.bottom() - 0.5, theme::hairline());
+    ui.painter().hline(
+        total_rect.x_range(),
+        total_rect.bottom() - 0.5,
+        theme::hairline(),
+    );
 
     (chosen_view, editor_action)
 }

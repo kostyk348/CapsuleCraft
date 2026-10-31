@@ -49,7 +49,11 @@ pub fn run_javascript(code: &str) -> Result<String, String> {
     let value = context.eval(Source::from_bytes(code));
     let logs = context
         .eval(Source::from_bytes("__logs.join('\\n')"))
-        .map(|v| v.to_string(&mut context).map(|s| s.to_std_string_escaped()).unwrap_or_default())
+        .map(|v| {
+            v.to_string(&mut context)
+                .map(|s| s.to_std_string_escaped())
+                .unwrap_or_default()
+        })
         .unwrap_or_default();
 
     match value {
@@ -181,7 +185,9 @@ fn expand_refs(expr: &str, formulas: &[Vec<String>], depth: usize) -> Result<Str
                         for cc in c1..=c2 {
                             match cell_value(formulas, rr - 1, cc) {
                                 Some(v) => values.push(format_number(v)),
-                                None => return Err(format!("empty cell {}{}", column_name(cc), rr)),
+                                None => {
+                                    return Err(format!("empty cell {}{}", column_name(cc), rr))
+                                }
                             }
                         }
                     }

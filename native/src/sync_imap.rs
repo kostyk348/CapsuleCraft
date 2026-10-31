@@ -196,7 +196,11 @@ impl ImapSyncEngine {
         if let Ok(entries) = fs::read_dir(&self.vault_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map(|e| e.eq_ignore_ascii_case("eml")).unwrap_or(false) {
+                if path
+                    .extension()
+                    .map(|e| e.eq_ignore_ascii_case("eml"))
+                    .unwrap_or(false)
+                {
                     let file_name = path
                         .file_name()
                         .and_then(|n| n.to_str())
@@ -225,7 +229,9 @@ impl ImapSyncEngine {
         let local_by_msg_id: HashMap<String, (PathBuf, i64)> = local_files
             .iter()
             .filter_map(|(path, _, msg_id, mod_time)| {
-                msg_id.as_ref().map(|id| (normalize_message_id(id), (path.clone(), *mod_time)))
+                msg_id
+                    .as_ref()
+                    .map(|id| (normalize_message_id(id), (path.clone(), *mod_time)))
             })
             .collect();
 

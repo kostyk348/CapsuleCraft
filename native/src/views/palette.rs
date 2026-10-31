@@ -236,7 +236,10 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::ImapSyncNow).into(),
                 hint: "IMAP".into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: kw(&["sync", "imap", "email", "mail"], &["почта", "синхронизация"]),
+                keywords: kw(
+                    &["sync", "imap", "email", "mail"],
+                    &["почта", "синхронизация"],
+                ),
                 shortcut: Some("Ctrl Shift S".into()),
             },
         ),
@@ -259,14 +262,7 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 hint: t(locale, Key::EncryptHint).into(),
                 group: t(locale, Key::PaletteActions).into(),
                 keywords: kw(
-                    &[
-                        "encrypt",
-                        "gpg",
-                        "openpgp",
-                        "asc",
-                        "password",
-                        "security",
-                    ],
+                    &["encrypt", "gpg", "openpgp", "asc", "password", "security"],
                     &["шифровать", "шифрование", "пароль"],
                 ),
                 shortcut: None,
@@ -359,7 +355,10 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::CommandToggleIconStyle).into(),
                 hint: "Mascot / Document".into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: kw(&["icon", "brand", "mascot", "document"], &["логотип", "иконка", "маскот"]),
+                keywords: kw(
+                    &["icon", "brand", "mascot", "document"],
+                    &["логотип", "иконка", "маскот"],
+                ),
                 shortcut: None,
             },
         ),
@@ -370,7 +369,10 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::ImapSyncTitle).into(),
                 hint: t(locale, Key::ImapSyncDesc).into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: kw(&["imap", "email", "mail", "sync", "settings"], &["почта", "настройки"]),
+                keywords: kw(
+                    &["imap", "email", "mail", "sync", "settings"],
+                    &["почта", "настройки"],
+                ),
                 shortcut: None,
             },
         ),
@@ -381,7 +383,10 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 title: t(locale, Key::CoThinkTitle).into(),
                 hint: t(locale, Key::CoThinkSubtitle).into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: kw(&["cothink", "ai", "analysis", "offline"], &["мыслитель", "анализ"]),
+                keywords: kw(
+                    &["cothink", "ai", "analysis", "offline"],
+                    &["мыслитель", "анализ"],
+                ),
                 shortcut: Some("Ctrl Shift A".into()),
             },
         ),
@@ -389,7 +394,11 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
             Command::CoThinkMode(crate::cothinker::CoThinkMode::Critique),
             PaletteCommand {
                 id: "cothink_critique",
-                title: format!("{}: {}", t(locale, Key::CoThinkTitle), t(locale, Key::Critique)),
+                title: format!(
+                    "{}: {}",
+                    t(locale, Key::CoThinkTitle),
+                    t(locale, Key::Critique)
+                ),
                 hint: t(locale, Key::CritiqueDesc).into(),
                 group: t(locale, Key::PaletteActions).into(),
                 keywords: kw(&["critique", "criticism"], &["критика", "риски"]),
@@ -400,7 +409,11 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
             Command::CoThinkMode(crate::cothinker::CoThinkMode::Synthesis),
             PaletteCommand {
                 id: "cothink_synthesis",
-                title: format!("{}: {}", t(locale, Key::CoThinkTitle), t(locale, Key::Synthesis)),
+                title: format!(
+                    "{}: {}",
+                    t(locale, Key::CoThinkTitle),
+                    t(locale, Key::Synthesis)
+                ),
                 hint: t(locale, Key::SynthesisDesc).into(),
                 group: t(locale, Key::PaletteActions).into(),
                 keywords: kw(&["synthesis"], &["синтез", "шаги", "выводы"]),
@@ -411,10 +424,17 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
             Command::CoThinkMode(crate::cothinker::CoThinkMode::CounterArg),
             PaletteCommand {
                 id: "cothink_counterarg",
-                title: format!("{}: {}", t(locale, Key::CoThinkTitle), t(locale, Key::CounterArg)),
+                title: format!(
+                    "{}: {}",
+                    t(locale, Key::CoThinkTitle),
+                    t(locale, Key::CounterArg)
+                ),
                 hint: t(locale, Key::CounterArgDesc).into(),
                 group: t(locale, Key::PaletteActions).into(),
-                keywords: kw(&["counter", "counterarg", "reply"], &["контраргумент", "ответ", "тред"]),
+                keywords: kw(
+                    &["counter", "counterarg", "reply"],
+                    &["контраргумент", "ответ", "тред"],
+                ),
                 shortcut: None,
             },
         ),
@@ -422,7 +442,11 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
             Command::CoThinkMode(crate::cothinker::CoThinkMode::DataInsight),
             PaletteCommand {
                 id: "cothink_data",
-                title: format!("{}: {}", t(locale, Key::CoThinkTitle), t(locale, Key::DataInsight)),
+                title: format!(
+                    "{}: {}",
+                    t(locale, Key::CoThinkTitle),
+                    t(locale, Key::DataInsight)
+                ),
                 hint: t(locale, Key::DataInsightDesc).into(),
                 group: t(locale, Key::PaletteActions).into(),
                 keywords: kw(&["data", "csv", "ols", "trend"], &["данные", "тренд"]),
@@ -555,10 +579,12 @@ pub fn draw(
                 .show(ui, |ui| {
                     ui.set_width(width);
                     // Query row.
-                    let (row_rect, _) =
-                        ui.allocate_exact_size(vec2(width, 46.0), Sense::hover());
-                    ui.painter()
-                        .hline(row_rect.x_range(), row_rect.bottom() - 0.5, theme::hairline());
+                    let (row_rect, _) = ui.allocate_exact_size(vec2(width, 46.0), Sense::hover());
+                    ui.painter().hline(
+                        row_rect.x_range(),
+                        row_rect.bottom() - 0.5,
+                        theme::hairline(),
+                    );
                     icons::paint(
                         ui.painter(),
                         Rect::from_center_size(
@@ -700,10 +726,8 @@ pub fn draw(
                             last_group = group;
                         }
                         let active = position == state.cursor;
-                        let (rect, response) = ui.allocate_exact_size(
-                            vec2(width, 40.0),
-                            Sense::click(),
-                        );
+                        let (rect, response) =
+                            ui.allocate_exact_size(vec2(width, 40.0), Sense::click());
                         if active {
                             ui.painter().rect_filled(
                                 rect.shrink2(vec2(6.0, 0.0)),
@@ -776,11 +800,11 @@ fn command_row(
     ui.spacing_mut().item_spacing.x = 8.0;
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
-        ui.label(
-            RichText::new(title)
-                .size(12.5)
-                .color(if active { theme::INK } else { theme::MUTED }),
-        );
+        ui.label(RichText::new(title).size(12.5).color(if active {
+            theme::INK
+        } else {
+            theme::MUTED
+        }));
         if !hint.is_empty() {
             let _ = hud(ui, &truncate_chars(hint, 64), theme::FAINT);
         }
@@ -824,7 +848,11 @@ fn page_row(ui: &mut Ui, rect: Rect, capsule: &Capsule, query: &str, active: boo
             vec2(12.0, 12.0),
         ),
         Icon::Doc,
-        if active { theme::ACCENT_INK } else { theme::FAINT },
+        if active {
+            theme::ACCENT_INK
+        } else {
+            theme::FAINT
+        },
     );
     ui.add_space(18.0);
     ui.vertical(|ui| {
@@ -845,11 +873,11 @@ fn page_row(ui: &mut Ui, rect: Rect, capsule: &Capsule, query: &str, active: boo
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             for (text, hit) in snippet {
-                ui.label(
-                    RichText::new(text)
-                        .size(10.0)
-                        .color(if hit { theme::ACCENT_INK } else { theme::FAINT }),
-                );
+                ui.label(RichText::new(text).size(10.0).color(if hit {
+                    theme::ACCENT_INK
+                } else {
+                    theme::FAINT
+                }));
             }
         });
     });

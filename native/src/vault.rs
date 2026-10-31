@@ -28,16 +28,20 @@ impl Vault {
         self.load_errors.clear();
 
         if let Err(err) = fs::create_dir_all(&self.dir) {
-            self.load_errors
-                .push(format!("Cannot create vault folder {}: {err}", self.dir.display()));
+            self.load_errors.push(format!(
+                "Cannot create vault folder {}: {err}",
+                self.dir.display()
+            ));
             return;
         }
 
         let entries = match fs::read_dir(&self.dir) {
             Ok(entries) => entries,
             Err(err) => {
-                self.load_errors
-                    .push(format!("Cannot read vault folder {}: {err}", self.dir.display()));
+                self.load_errors.push(format!(
+                    "Cannot read vault folder {}: {err}",
+                    self.dir.display()
+                ));
                 return;
             }
         };
@@ -116,7 +120,10 @@ impl Vault {
             file_name = format!("capsule_native_{suffix}_{counter}.eml");
             counter += 1;
         }
-        let message_id = format!("<capsule-native-{suffix}-{stamp}-{}@vault.local>", self.capsules.len());
+        let message_id = format!(
+            "<capsule-native-{suffix}-{stamp}-{}@vault.local>",
+            self.capsules.len()
+        );
 
         let parent_capsule = parent
             .as_ref()
@@ -133,13 +140,21 @@ impl Vault {
         Ok(index)
     }
 
-    pub fn reparent_page(&mut self, index: usize, new_parent_id: Option<String>) -> Result<(), String> {
+    pub fn reparent_page(
+        &mut self,
+        index: usize,
+        new_parent_id: Option<String>,
+    ) -> Result<(), String> {
         if index >= self.capsules.len() {
             return Err("Invalid page index".to_string());
         }
 
         // Cycle check: verify new_parent_id is not the page itself and not a descendant of the page
-        if let Some(target_id) = new_parent_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(target_id) = new_parent_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             let this_id = &self.capsules[index].message_id;
             if target_id == this_id {
                 return Err("Cannot reparent page to itself".to_string());
@@ -148,7 +163,9 @@ impl Vault {
             let tree = PageTree::build(&self.capsules);
             if let Some(target_idx) = self.capsules.iter().position(|c| c.message_id == target_id) {
                 if tree.is_descendant_of(target_idx, index) {
-                    return Err("Cannot reparent page inside its own subtree (cycle detected)".to_string());
+                    return Err(
+                        "Cannot reparent page inside its own subtree (cycle detected)".to_string(),
+                    );
                 }
             }
         }
@@ -274,10 +291,7 @@ impl PageTree {
     }
 
     pub fn children_of(&self, parent: Option<usize>) -> &[usize] {
-        self.children
-            .get(&parent)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
+        self.children.get(&parent).map(Vec::as_slice).unwrap_or(&[])
     }
 
     pub fn parent_of(&self, index: usize) -> Option<usize> {
@@ -342,11 +356,7 @@ mod tests {
     use super::*;
 
     fn capsule(id: &str, subject: &str, parent: Option<&str>) -> Capsule {
-        let mut capsule = Capsule::blank(
-            id.to_string(),
-            format!("{id}.eml"),
-            subject.to_string(),
-        );
+        let mut capsule = Capsule::blank(id.to_string(), format!("{id}.eml"), subject.to_string());
         capsule.parent_id = parent.map(str::to_string);
         capsule
     }
@@ -409,7 +419,13 @@ mod tests {
 
     #[test]
     fn test_reparent_page() {
-        let dir = std::env::temp_dir().join(format!("capsuleos-reparent-test-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        let dir = std::env::temp_dir().join(format!(
+            "capsuleos-reparent-test-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         let mut vault = Vault::load(dir.clone());
 
         let p1 = vault.create_page(None).unwrap();

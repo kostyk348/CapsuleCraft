@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use egui::{
-    pos2, vec2, Align, Align2, Color32, FontFamily, FontId, Frame, Layout, Margin, Rect,
-    Response, RichText, ScrollArea, Sense, Stroke, TextEdit, Ui, UiBuilder,
+    pos2, vec2, Align, Align2, Color32, FontFamily, FontId, Frame, Layout, Margin, Rect, Response,
+    RichText, ScrollArea, Sense, Stroke, TextEdit, Ui, UiBuilder,
 };
 
 use crate::caps;
@@ -23,9 +23,7 @@ pub fn vault_switcher(ui: &mut Ui, vault: &Vault) -> Response {
     let name = folder_name(&vault.dir);
     let name = truncate_chars(&name, 30);
     let font = FontId::new(12.5, theme::medium());
-    let galley = ui
-        .painter()
-        .layout_no_wrap(name.clone(), font, theme::INK);
+    let galley = ui.painter().layout_no_wrap(name.clone(), font, theme::INK);
     let width = 12.0 + 14.0 + 8.0 + galley.size().x + 10.0 + 12.0;
     let (rect, response) = ui.allocate_exact_size(vec2(width, 28.0), Sense::click());
     if response.hovered() {
@@ -38,7 +36,10 @@ pub fn vault_switcher(ui: &mut Ui, vault: &Vault) -> Response {
     };
     icons::paint(
         ui.painter(),
-        Rect::from_center_size(pos2(rect.left() + 12.0 + 7.0, rect.center().y), vec2(14.0, 14.0)),
+        Rect::from_center_size(
+            pos2(rect.left() + 12.0 + 7.0, rect.center().y),
+            vec2(14.0, 14.0),
+        ),
         Icon::Folder,
         ink,
     );
@@ -86,10 +87,7 @@ pub fn draw_sidebar(
     let footer_h = 122.0;
 
     let header_rect = Rect::from_min_max(inner.min, pos2(inner.right(), inner.top() + header_h));
-    let footer_rect = Rect::from_min_max(
-        pos2(inner.left(), inner.bottom() - footer_h),
-        inner.max,
-    );
+    let footer_rect = Rect::from_min_max(pos2(inner.left(), inner.bottom() - footer_h), inner.max);
     let list_rect = Rect::from_min_max(
         pos2(inner.left(), header_rect.bottom()),
         pos2(inner.right(), footer_rect.top()),
@@ -113,10 +111,8 @@ pub fn draw_sidebar(
 
     let mut new_page_clicked = false;
     let section_rect = {
-        let (rect, _) = header.allocate_exact_size(
-            vec2(header.available_width(), 26.0),
-            Sense::hover(),
-        );
+        let (rect, _) =
+            header.allocate_exact_size(vec2(header.available_width(), 26.0), Sense::hover());
         let label = caps(
             &header,
             t(locale, Key::Pages),
@@ -138,13 +134,18 @@ pub fn draw_sidebar(
             theme::FAINT,
         );
 
-        let collapse_rect = Rect::from_center_size(
-            pos2(rect.right() - 35.0, rect.center().y),
-            vec2(22.0, 22.0),
-        );
+        let collapse_rect =
+            Rect::from_center_size(pos2(rect.right() - 35.0, rect.center().y), vec2(22.0, 22.0));
         let collapse = header
-            .interact(collapse_rect, header.scope_id().with("collapse-sidebar"), Sense::click())
-            .on_hover_text(format!("{} (Ctrl + \\)", t(locale, Key::CommandToggleSidebar)))
+            .interact(
+                collapse_rect,
+                header.scope_id().with("collapse-sidebar"),
+                Sense::click(),
+            )
+            .on_hover_text(format!(
+                "{} (Ctrl + \\)",
+                t(locale, Key::CommandToggleSidebar)
+            ))
             .on_hover_cursor(egui::CursorIcon::PointingHand);
         if collapse.hovered() {
             header
@@ -165,12 +166,14 @@ pub fn draw_sidebar(
             action.toggle_sidebar = true;
         }
 
-        let plus_rect = Rect::from_center_size(
-            pos2(rect.right() - 11.0, rect.center().y),
-            vec2(22.0, 22.0),
-        );
+        let plus_rect =
+            Rect::from_center_size(pos2(rect.right() - 11.0, rect.center().y), vec2(22.0, 22.0));
         let plus = header
-            .interact(plus_rect, header.scope_id().with("new-page"), Sense::click())
+            .interact(
+                plus_rect,
+                header.scope_id().with("new-page"),
+                Sense::click(),
+            )
             .on_hover_text(t(locale, Key::NewPage))
             .on_hover_cursor(egui::CursorIcon::PointingHand);
         if plus.hovered() {
@@ -230,10 +233,8 @@ pub fn draw_sidebar(
                     // Promote to root drop zone at the bottom of the list
                     if let Some(dragged) = *dragged_page {
                         ui.add_space(8.0);
-                        let (root_drop_rect, root_drop_resp) = ui.allocate_exact_size(
-                            vec2(ui.available_width(), 32.0),
-                            Sense::hover(),
-                        );
+                        let (root_drop_rect, root_drop_resp) = ui
+                            .allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::hover());
                         let is_already_root = tree.parent_of(dragged).is_none();
                         let hovered = root_drop_resp.hovered() && !is_already_root;
 
@@ -266,11 +267,7 @@ pub fn draw_sidebar(
                             Align2::CENTER_CENTER,
                             text,
                             FontId::new(11.0, theme::mono()),
-                            if hovered {
-                                theme::ACCENT
-                            } else {
-                                theme::FAINT
-                            },
+                            if hovered { theme::ACCENT } else { theme::FAINT },
                         );
                     }
 
@@ -305,9 +302,7 @@ pub fn draw_sidebar(
                         search::snippet(text, search, 16),
                     ));
                 }
-                rows.sort_by(|a, b| {
-                    b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-                });
+                rows.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 if rows.is_empty() {
                     ui.add_space(18.0);
                     ui.label(
@@ -403,8 +398,14 @@ pub fn draw_sidebar(
         if icon_button(ui, Icon::Copy, t(locale, Key::ExportVault), true, false).clicked() {
             action.export_vault = true;
         }
-        if icon_button(ui, Icon::Trash, t(locale, Key::DeletePage), selected.is_some(), false)
-            .clicked()
+        if icon_button(
+            ui,
+            Icon::Trash,
+            t(locale, Key::DeletePage),
+            selected.is_some(),
+            false,
+        )
+        .clicked()
         {
             action.delete_page = true;
         }
@@ -419,10 +420,7 @@ pub fn draw_sidebar(
 }
 
 fn vault_card(ui: &mut Ui, vault: &Vault) -> Response {
-    let (rect, response) = ui.allocate_exact_size(
-        vec2(ui.available_width(), 44.0),
-        Sense::click(),
-    );
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 44.0), Sense::click());
     ui.painter().rect(
         rect,
         theme::RADIUS,
@@ -434,10 +432,7 @@ fn vault_card(ui: &mut Ui, vault: &Vault) -> Response {
         theme::hairline(),
         egui::StrokeKind::Inside,
     );
-    let tile = Rect::from_center_size(
-        pos2(rect.left() + 22.0, rect.center().y),
-        vec2(28.0, 28.0),
-    );
+    let tile = Rect::from_center_size(pos2(rect.left() + 22.0, rect.center().y), vec2(28.0, 28.0));
     ui.painter()
         .rect_filled(tile, theme::RADIUS, theme::fade(theme::ACCENT, 0.14));
     icons::paint(
@@ -467,10 +462,7 @@ fn vault_card(ui: &mut Ui, vault: &Vault) -> Response {
 }
 
 fn search_box(ui: &mut Ui, search: &mut String) -> Response {
-    let (rect, _) = ui.allocate_exact_size(
-        vec2(ui.available_width(), 30.0),
-        Sense::hover(),
-    );
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
     ui.painter().rect(
         rect,
         theme::RADIUS,
@@ -551,10 +543,8 @@ fn draw_page_nodes(
         let depth = depth.min(4);
         let indent = depth as f32 * 12.0;
 
-        let (rect, response) = ui.allocate_exact_size(
-            vec2(ui.available_width(), 30.0),
-            Sense::click_and_drag(),
-        );
+        let (rect, response) =
+            ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click_and_drag());
 
         // Drag start / update
         if response.drag_started() && capsule.native {
@@ -592,11 +582,8 @@ fn draw_page_nodes(
                 Stroke::new(1.5, theme::ACCENT),
                 egui::StrokeKind::Inside,
             );
-            ui.painter().rect_filled(
-                rect,
-                theme::RADIUS,
-                theme::fade(theme::ACCENT, 0.15),
-            );
+            ui.painter()
+                .rect_filled(rect, theme::RADIUS, theme::fade(theme::ACCENT, 0.15));
         } else if is_cycle_target {
             ui.painter().rect_stroke(
                 rect,
@@ -604,25 +591,18 @@ fn draw_page_nodes(
                 Stroke::new(1.5, theme::BAD),
                 egui::StrokeKind::Inside,
             );
-            ui.painter().rect_filled(
-                rect,
-                theme::RADIUS,
-                theme::fade(theme::BAD, 0.15),
-            );
+            ui.painter()
+                .rect_filled(rect, theme::RADIUS, theme::fade(theme::BAD, 0.15));
         } else if is_selected {
             ui.painter()
                 .rect_filled(rect, theme::RADIUS, theme::WASH_SELECTED);
             ui.painter().rect_filled(
-                Rect::from_min_size(
-                    pos2(rect.left() - 7.0, rect.top() + 7.0),
-                    vec2(2.0, 16.0),
-                ),
+                Rect::from_min_size(pos2(rect.left() - 7.0, rect.top() + 7.0), vec2(2.0, 16.0)),
                 0.0,
                 Color32::WHITE,
             );
         } else if response.hovered() {
-            ui.painter()
-                .rect_filled(rect, theme::RADIUS, theme::WASH);
+            ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
         }
 
         let chevron_rect = Rect::from_center_size(
@@ -686,9 +666,13 @@ fn draw_page_nodes(
             pos2(title_x, rect.top()),
             pos2(rect.right() - 18.0, rect.bottom()),
         );
-        ui.painter()
-            .with_clip_rect(clip)
-            .text(pos2(title_x, rect.center().y), Align2::LEFT_CENTER, &title, font, ink);
+        ui.painter().with_clip_rect(clip).text(
+            pos2(title_x, rect.center().y),
+            Align2::LEFT_CENTER,
+            &title,
+            font,
+            ink,
+        );
 
         if !capsule.native {
             icons::paint(
@@ -743,7 +727,11 @@ fn draw_page_nodes(
         let response = if is_cycle_target {
             response.on_hover_text(t(locale, Key::CannotDropInsideSelf))
         } else if is_valid_drop_target {
-            response.on_hover_text(format!("{} «{}»", t(locale, Key::MakeChildOf), capsule.subject))
+            response.on_hover_text(format!(
+                "{} «{}»",
+                t(locale, Key::MakeChildOf),
+                capsule.subject
+            ))
         } else if !capsule.native {
             response.on_hover_text(format!("{} (read-only)", capsule.subject))
         } else {
@@ -783,25 +771,18 @@ fn draw_search_row(
     locale: Locale,
 ) -> bool {
     let capsule = &capsules[index];
-    let (rect, response) = ui.allocate_exact_size(
-        vec2(ui.available_width(), 42.0),
-        Sense::click(),
-    );
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 42.0), Sense::click());
     let is_selected = selected == Some(index);
     if is_selected {
         ui.painter()
             .rect_filled(rect, theme::RADIUS, theme::WASH_SELECTED);
         ui.painter().rect_filled(
-            Rect::from_min_size(
-                pos2(rect.left() - 7.0, rect.top() + 10.0),
-                vec2(2.0, 18.0),
-            ),
+            Rect::from_min_size(pos2(rect.left() - 7.0, rect.top() + 10.0), vec2(2.0, 18.0)),
             0.0,
             Color32::WHITE,
         );
     } else if response.hovered() {
-        ui.painter()
-            .rect_filled(rect, theme::RADIUS, theme::WASH);
+        ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
     }
     let ink = if is_selected || response.hovered() {
         Color32::WHITE
@@ -810,7 +791,10 @@ fn draw_search_row(
     };
     icons::paint(
         ui.painter(),
-        Rect::from_center_size(pos2(rect.left() + 15.0, rect.top() + 16.0), vec2(13.0, 13.0)),
+        Rect::from_center_size(
+            pos2(rect.left() + 15.0, rect.top() + 16.0),
+            vec2(13.0, 13.0),
+        ),
         Icon::Doc,
         ink,
     );
@@ -880,7 +864,10 @@ fn draw_search_row(
     if !capsule.native {
         icons::paint(
             ui.painter(),
-            Rect::from_center_size(pos2(rect.right() - 12.0, rect.top() + 30.0), vec2(11.0, 11.0)),
+            Rect::from_center_size(
+                pos2(rect.right() - 12.0, rect.top() + 30.0),
+                vec2(11.0, 11.0),
+            ),
             Icon::Lock,
             theme::BADGE_BETA,
         );

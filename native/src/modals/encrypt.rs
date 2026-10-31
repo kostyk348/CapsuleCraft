@@ -120,11 +120,7 @@ pub fn draw_encrypt_modal(
             } else {
                 t(locale, Key::Passphrase)
             };
-            body.label(
-                RichText::new(pass_label)
-                    .size(11.0)
-                    .color(theme::MUTED),
-            );
+            body.label(RichText::new(pass_label).size(11.0).color(theme::MUTED));
             let pass_response = body.add(
                 egui::TextEdit::singleline(&mut state.password)
                     .password(true)
@@ -148,11 +144,7 @@ pub fn draw_encrypt_modal(
 
             if let Some(error) = &state.error {
                 body.add_space(6.0);
-                body.label(
-                    RichText::new(error)
-                        .size(11.5)
-                        .color(theme::BAD),
-                );
+                body.label(RichText::new(error).size(11.5).color(theme::BAD));
             }
 
             body.add_space(12.0);
@@ -177,9 +169,7 @@ pub fn draw_encrypt_modal(
             });
 
             // Enter confirms, Escape cancels.
-            if pass_response.lost_focus()
-                && ui.input(|input| input.key_pressed(egui::Key::Enter))
-            {
+            if pass_response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) {
                 if state.password.is_empty() {
                     state.error = Some(t(locale, Key::PassEmpty).to_string());
                 } else if encrypting && state.password != state.confirm {

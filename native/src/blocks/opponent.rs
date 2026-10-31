@@ -3,9 +3,9 @@
 use egui::{Align, FontFamily, FontId, Frame, Layout, Margin, TextEdit, Ui};
 use serde_json::{json, Value};
 
+use crate::hud;
 use crate::i18n::{t, Key, Locale};
 use crate::theme;
-use crate::hud;
 
 pub fn draw_opponent_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
     let mut changed = false;

@@ -1,7 +1,7 @@
 //! Undecorated-window chrome: title-bar dragging, Windows-style caption
 //! buttons and edge resizing.
 
-use egui::{Color32, Rect, Response, Sense, Stroke, Ui, vec2};
+use egui::{vec2, Color32, Rect, Response, Sense, Stroke, Ui};
 
 use crate::theme;
 
@@ -29,8 +29,15 @@ pub fn leading_inset() -> f32 {
 /// Dragging empty title-bar space moves the window; double-click maximizes.
 pub fn title_bar_drag(ui: &mut Ui) {
     let r = ui.max_rect();
-    let rect = Rect::from_min_max(r.min + vec2(RESIZE_EDGE, RESIZE_EDGE), r.max - vec2(RESIZE_EDGE, 0.0));
-    let resp = ui.interact(rect, ui.scope_id().with("title-bar-drag"), Sense::click_and_drag());
+    let rect = Rect::from_min_max(
+        r.min + vec2(RESIZE_EDGE, RESIZE_EDGE),
+        r.max - vec2(RESIZE_EDGE, 0.0),
+    );
+    let resp = ui.interact(
+        rect,
+        ui.scope_id().with("title-bar-drag"),
+        Sense::click_and_drag(),
+    );
     if resp.drag_started_by(egui::PointerButton::Primary) {
         ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
     }
@@ -47,7 +54,11 @@ pub fn title_bar_drag_rect(ui: &mut Ui, rect: Rect) {
         return;
     }
     let edge_rect = Rect::from_min_max(rect.min + vec2(0.0, RESIZE_EDGE), rect.max);
-    let resp = ui.interact(edge_rect, ui.scope_id().with("title-bar-drag-rect"), Sense::click_and_drag());
+    let resp = ui.interact(
+        edge_rect,
+        ui.scope_id().with("title-bar-drag-rect"),
+        Sense::click_and_drag(),
+    );
     if resp.drag_started_by(egui::PointerButton::Primary) {
         ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
     }
@@ -93,9 +104,16 @@ fn caption_button(ui: &mut Ui, button: Caption, height: f32) -> Response {
     } else {
         0.0
     };
-    let hit = Rect::from_min_max(rect.min + vec2(0.0, RESIZE_EDGE), rect.max - vec2(right, 0.0));
+    let hit = Rect::from_min_max(
+        rect.min + vec2(0.0, RESIZE_EDGE),
+        rect.max - vec2(right, 0.0),
+    );
     let resp = ui
-        .interact(hit, ui.scope_id().with(("caption", button as u8)), Sense::click())
+        .interact(
+            hit,
+            ui.scope_id().with(("caption", button as u8)),
+            Sense::click(),
+        )
         .on_hover_cursor(egui::CursorIcon::Default);
     let (fill, ink) = match (button, resp.hovered()) {
         (Caption::Close, true) => (CLOSE_RED, Color32::WHITE),
@@ -122,7 +140,8 @@ fn caption_button(ui: &mut Ui, button: Caption, height: f32) -> Response {
             "Maximize"
         }
         Caption::Restore => {
-            let front = Rect::from_min_size(c + vec2(-s, -s + 2.0), vec2(2.0 * s - 2.0, 2.0 * s - 2.0));
+            let front =
+                Rect::from_min_size(c + vec2(-s, -s + 2.0), vec2(2.0 * s - 2.0, 2.0 * s - 2.0));
             p.rect_stroke(front, 0.0, stroke, egui::StrokeKind::Inside);
             p.hline(c.x - s + 2.0..=c.x + s, c.y - s, stroke);
             p.vline(c.x + s, c.y - s..=c.y + s - 2.0, stroke);
@@ -157,7 +176,10 @@ pub fn window_edges(ctx: &egui::Context) {
         egui::Id::unique("window-border"),
     ))
     .rect_stroke(r, 0.0, theme::hairline(), egui::StrokeKind::Inside);
-    let Some(p) = ctx.input(|i| i.pointer.hover_pos()).filter(|p| r.contains(*p)) else {
+    let Some(p) = ctx
+        .input(|i| i.pointer.hover_pos())
+        .filter(|p| r.contains(*p))
+    else {
         return;
     };
     let near = |d: f32| d < RESIZE_EDGE;

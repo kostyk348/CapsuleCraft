@@ -177,19 +177,20 @@ pub fn apply(ctx: &egui::Context) {
             (TextStyle::Heading, FontId::new(24.0, display())),
             (TextStyle::Body, FontId::new(14.0, FontFamily::Proportional)),
             (TextStyle::Button, FontId::new(13.0, medium())),
-            (TextStyle::Small, FontId::new(12.0, FontFamily::Proportional)),
-            (TextStyle::Monospace, FontId::new(12.0, FontFamily::Monospace)),
+            (
+                TextStyle::Small,
+                FontId::new(12.0, FontFamily::Proportional),
+            ),
+            (
+                TextStyle::Monospace,
+                FontId::new(12.0, FontFamily::Monospace),
+            ),
         ]
         .into();
     });
 }
 
-type Face<'a> = (
-    &'a str,
-    &'static [u8],
-    &'a [([u8; 4], f32)],
-    FontFamily,
-);
+type Face<'a> = (&'a str, &'static [u8], &'a [([u8; 4], f32)], FontFamily);
 
 fn install_fonts(ctx: &egui::Context) {
     const INTER: &[u8] = include_bytes!("../assets/fonts/Inter-Variable.ttf");
@@ -234,7 +235,12 @@ fn install_fonts(ctx: &egui::Context) {
             &[(*b"wght", 620.0), (*b"wdth", 118.0)],
             display(),
         ),
-        ("GeistMono", GEIST_MONO, &[(*b"wght", 400.0)], FontFamily::Monospace),
+        (
+            "GeistMono",
+            GEIST_MONO,
+            &[(*b"wght", 400.0)],
+            FontFamily::Monospace,
+        ),
         ("GeistMono-Medium", GEIST_MONO, &[(*b"wght", 500.0)], mono()),
         (
             "GeistMono-SemiBold",

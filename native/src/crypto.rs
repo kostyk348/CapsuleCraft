@@ -61,8 +61,8 @@ pub fn decrypt_from_armored(armored: &str, passphrase: &str) -> Result<Vec<u8>, 
         return Err(CryptoError::EmptyPassphrase);
     }
     let password = passphrase.to_string();
-    let (message, _headers) =
-        Message::from_string(armored.trim()).map_err(|err| CryptoError::Decryption(err.to_string()))?;
+    let (message, _headers) = Message::from_string(armored.trim())
+        .map_err(|err| CryptoError::Decryption(err.to_string()))?;
     let decrypted = message
         .decrypt_with_password(move || password.clone())
         .map_err(|_| CryptoError::Decryption("wrong passphrase or corrupted data".into()))?;

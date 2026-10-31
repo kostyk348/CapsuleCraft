@@ -14,10 +14,12 @@ pub mod threads_view;
 pub use document_view::{draw_document, draw_empty_state, EditorAction, LinkContext};
 pub use sidebar_view::{draw_sidebar, vault_switcher};
 
-use egui::{pos2, vec2, Align, Color32, FontId, Frame, Layout, Margin, Response, RichText, Sense, Ui};
+use egui::{
+    pos2, vec2, Align, Color32, FontId, Frame, Layout, Margin, Response, RichText, Sense, Ui,
+};
 
-use crate::icons::{self, Icon};
 use crate::i18n::{t, Key, Locale};
+use crate::icons::{self, Icon};
 use crate::theme;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -150,10 +152,7 @@ pub fn nav(ui: &mut Ui, current: View, locale: Locale) -> Option<View> {
             };
             icons::paint(
                 ui.painter(),
-                egui::Rect::from_center_size(
-                    icon_center,
-                    vec2(13.0, 13.0),
-                ),
+                egui::Rect::from_center_size(icon_center, vec2(13.0, 13.0)),
                 view.icon(),
                 ink,
             );
@@ -248,13 +247,10 @@ pub fn segments(ui: &mut Ui, options: &[(&str, bool)]) -> Option<usize> {
     for (index, (label, active)) in options.iter().enumerate() {
         let width = label.chars().count() as f32 * 6.6 + 26.0;
         let item = egui::Rect::from_min_size(pos2(x, rect.top() + 1.0), vec2(width, 24.0));
-        let response = ui.interact(
-            item,
-            ui.scope_id().with(("segment", index)),
-            Sense::click(),
-        );
+        let response = ui.interact(item, ui.scope_id().with(("segment", index)), Sense::click());
         if *active {
-            ui.painter().rect_filled(item, theme::RADIUS, theme::WASH_HOVER);
+            ui.painter()
+                .rect_filled(item, theme::RADIUS, theme::WASH_HOVER);
         } else if response.hovered() {
             ui.painter().rect_filled(item, theme::RADIUS, theme::WASH);
         }
@@ -279,20 +275,16 @@ pub fn segments(ui: &mut Ui, options: &[(&str, bool)]) -> Option<usize> {
 /// a right-to-left toolbar without the first one swallowing the whole row.
 pub fn stat(ui: &mut Ui, value: &str, label: &str, color: Color32) {
     let width = (label.chars().count() as f32 * 6.2).max(48.0) + 10.0;
-    ui.allocate_ui_with_layout(
-        vec2(width, 32.0),
-        Layout::top_down(Align::Max),
-        |ui| {
-            ui.spacing_mut().item_spacing.y = 1.0;
-            ui.label(
-                RichText::new(value)
-                    .family(theme::display())
-                    .size(20.0)
-                    .color(color),
-            );
-            let _ = crate::hud(ui, label, theme::FAINT);
-        },
-    );
+    ui.allocate_ui_with_layout(vec2(width, 32.0), Layout::top_down(Align::Max), |ui| {
+        ui.spacing_mut().item_spacing.y = 1.0;
+        ui.label(
+            RichText::new(value)
+                .family(theme::display())
+                .size(20.0)
+                .color(color),
+        );
+        let _ = crate::hud(ui, label, theme::FAINT);
+    });
 }
 
 /// Quiet empty state used by every view.
@@ -300,8 +292,13 @@ pub fn empty_state(ui: &mut Ui, icon: Icon, title: &str, body: &str) {
     ui.add_space(90.0);
     ui.vertical_centered(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(48.0, 48.0), Sense::hover());
-        ui.painter()
-            .rect(rect, theme::RADIUS, theme::WASH, theme::hairline(), egui::StrokeKind::Inside);
+        ui.painter().rect(
+            rect,
+            theme::RADIUS,
+            theme::WASH,
+            theme::hairline(),
+            egui::StrokeKind::Inside,
+        );
         icons::paint(
             ui.painter(),
             egui::Rect::from_center_size(rect.center(), vec2(22.0, 22.0)),
@@ -316,9 +313,7 @@ pub fn empty_state(ui: &mut Ui, icon: Icon, title: &str, body: &str) {
                 .color(theme::INK),
         );
         ui.add_space(6.0);
-        ui.add(
-            egui::Label::new(RichText::new(body).size(12.5).color(theme::MUTED)).wrap(),
-        );
+        ui.add(egui::Label::new(RichText::new(body).size(12.5).color(theme::MUTED)).wrap());
         ui.add_space(4.0);
     });
 }
@@ -372,11 +367,7 @@ pub fn section(ui: &mut Ui, label: &str) {
 }
 
 /// Two-column scroll body helper: content is centred and width-limited.
-pub fn centred<R>(
-    ui: &mut Ui,
-    max_width: f32,
-    add: impl FnOnce(&mut Ui) -> R,
-) -> R {
+pub fn centred<R>(ui: &mut Ui, max_width: f32, add: impl FnOnce(&mut Ui) -> R) -> R {
     let available = ui.available_width();
     let width = max_width.min(available - VIEW_PAD * 2.0).max(320.0);
     let pad = ((available - width) / 2.0).max(VIEW_PAD);

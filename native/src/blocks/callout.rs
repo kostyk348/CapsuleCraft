@@ -58,7 +58,13 @@ pub fn draw_callout_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> boo
                         block["data"]["title"] = json!(title);
                         changed = true;
                     }
-                    if ui.add(egui::Button::new(RichText::new("✓").size(12.0).color(theme::ACCENT)).fill(Color32::TRANSPARENT)).clicked() {
+                    if ui
+                        .add(
+                            egui::Button::new(RichText::new("✓").size(12.0).color(theme::ACCENT))
+                                .fill(Color32::TRANSPARENT),
+                        )
+                        .clicked()
+                    {
                         is_editing = false;
                         ui.data_mut(|d| d.insert_temp(editing_id, false));
                     }
@@ -107,74 +113,85 @@ pub fn draw_callout_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> boo
                 }
             } else {
                 let wrap_width = ui.available_width();
-                let click_area = ui.vertical(|ui| {
-                    if content.trim().is_empty() {
-                        ui.label(RichText::new("Empty note (double click to edit)…").size(12.0).color(theme::FAINT));
-                    }
-                    for line in content.lines() {
-                        let trimmed = line.trim();
-                        if trimmed.is_empty() {
-                            ui.add_space(4.0);
-                            continue;
+                let click_area = ui
+                    .vertical(|ui| {
+                        if content.trim().is_empty() {
+                            ui.label(
+                                RichText::new("Empty note (double click to edit)…")
+                                    .size(12.0)
+                                    .color(theme::FAINT),
+                            );
                         }
+                        for line in content.lines() {
+                            let trimmed = line.trim();
+                            if trimmed.is_empty() {
+                                ui.add_space(4.0);
+                                continue;
+                            }
 
-                        if trimmed.starts_with("### ") {
-                            ui.add_space(5.0);
-                            ui.label(
-                                RichText::new(&trimmed[4..])
-                                    .font(FontId::new(13.5, theme::semibold()))
-                                    .color(theme::INK),
-                            );
-                        } else if trimmed.starts_with("## ") {
-                            ui.add_space(7.0);
-                            ui.label(
-                                RichText::new(&trimmed[3..])
-                                    .font(FontId::new(15.0, theme::semibold()))
-                                    .color(theme::INK),
-                            );
-                        } else if trimmed.starts_with("# ") {
-                            ui.add_space(9.0);
-                            ui.label(
-                                RichText::new(&trimmed[2..])
-                                    .font(FontId::new(17.0, theme::semibold()))
-                                    .color(theme::INK),
-                            );
-                        } else if let Some(dot_pos) = trimmed.find(". ") {
-                            if trimmed[..dot_pos].chars().all(|c| c.is_ascii_digit()) && dot_pos <= 3 {
-                                let num = &trimmed[..dot_pos];
-                                let rest = trimmed[dot_pos + 2..].trim();
+                            if trimmed.starts_with("### ") {
+                                ui.add_space(5.0);
+                                ui.label(
+                                    RichText::new(&trimmed[4..])
+                                        .font(FontId::new(13.5, theme::semibold()))
+                                        .color(theme::INK),
+                                );
+                            } else if trimmed.starts_with("## ") {
+                                ui.add_space(7.0);
+                                ui.label(
+                                    RichText::new(&trimmed[3..])
+                                        .font(FontId::new(15.0, theme::semibold()))
+                                        .color(theme::INK),
+                                );
+                            } else if trimmed.starts_with("# ") {
+                                ui.add_space(9.0);
+                                ui.label(
+                                    RichText::new(&trimmed[2..])
+                                        .font(FontId::new(17.0, theme::semibold()))
+                                        .color(theme::INK),
+                                );
+                            } else if let Some(dot_pos) = trimmed.find(". ") {
+                                if trimmed[..dot_pos].chars().all(|c| c.is_ascii_digit())
+                                    && dot_pos <= 3
+                                {
+                                    let num = &trimmed[..dot_pos];
+                                    let rest = trimmed[dot_pos + 2..].trim();
+                                    ui.horizontal(|ui| {
+                                        ui.add_space(2.0);
+                                        ui.label(
+                                            RichText::new(format!("{num}."))
+                                                .font(FontId::new(11.5, theme::mono()))
+                                                .color(tone_color),
+                                        );
+                                        let galley =
+                                            links::layout_clean(ui, rest, 13.0, wrap_width - 24.0);
+                                        ui.label(galley);
+                                    });
+                                } else {
+                                    let galley = links::layout_clean(ui, line, 13.0, wrap_width);
+                                    ui.label(galley);
+                                }
+                            } else if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
+                                let rest = trimmed[2..].trim();
                                 ui.horizontal(|ui| {
-                                    ui.add_space(2.0);
+                                    ui.add_space(4.0);
                                     ui.label(
-                                        RichText::new(format!("{num}."))
-                                            .font(FontId::new(11.5, theme::mono()))
+                                        RichText::new("•")
+                                            .font(FontId::new(13.0, theme::semibold()))
                                             .color(tone_color),
                                     );
-                                    let galley = links::layout_clean(ui, rest, 13.0, wrap_width - 24.0);
+                                    let galley =
+                                        links::layout_clean(ui, rest, 13.0, wrap_width - 20.0);
                                     ui.label(galley);
                                 });
                             } else {
                                 let galley = links::layout_clean(ui, line, 13.0, wrap_width);
                                 ui.label(galley);
                             }
-                        } else if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
-                            let rest = trimmed[2..].trim();
-                            ui.horizontal(|ui| {
-                                ui.add_space(4.0);
-                                ui.label(
-                                    RichText::new("•")
-                                        .font(FontId::new(13.0, theme::semibold()))
-                                        .color(tone_color),
-                                );
-                                let galley = links::layout_clean(ui, rest, 13.0, wrap_width - 20.0);
-                                ui.label(galley);
-                            });
-                        } else {
-                            let galley = links::layout_clean(ui, line, 13.0, wrap_width);
-                            ui.label(galley);
                         }
-                    }
-                }).response.interact(Sense::click());
+                    })
+                    .response
+                    .interact(Sense::click());
 
                 if click_area.double_clicked() {
                     is_editing = true;

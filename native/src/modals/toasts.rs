@@ -22,11 +22,7 @@ pub fn draw_toast(toast: &mut Option<(String, Instant)>, ctx: &egui::Context) {
     };
     let screen = ctx.content_rect();
     let galley = ctx.fonts_mut(|fonts| {
-        fonts.layout_no_wrap(
-            text,
-            egui::FontId::new(12.0, theme::medium()),
-            theme::INK,
-        )
+        fonts.layout_no_wrap(text, egui::FontId::new(12.0, theme::medium()), theme::INK)
     });
     let size = galley.size() + vec2(28.0, 18.0);
     let rect = Rect::from_min_size(

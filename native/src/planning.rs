@@ -267,9 +267,8 @@ pub fn days_between(from: &str, to: &str) -> i64 {
 
 /// Six-week (42-cell) month grid starting on Monday.
 pub fn month_grid(year: i32, month: u32) -> Vec<String> {
-    let first = NaiveDate::from_ymd_opt(year, month, 1).unwrap_or_else(|| {
-        NaiveDate::from_ymd_opt(1970, 1, 1).expect("epoch is a valid date")
-    });
+    let first = NaiveDate::from_ymd_opt(year, month, 1)
+        .unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).expect("epoch is a valid date"));
     let offset = first.weekday().num_days_from_monday() as i64;
     let start = first - chrono::Duration::days(offset);
     (0..42)
@@ -279,12 +278,32 @@ pub fn month_grid(year: i32, month: u32) -> Vec<String> {
 
 pub fn month_label(year: i32, month: u32, locale: crate::i18n::Locale) -> String {
     const RU: [&str; 12] = [
-        "январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август",
-        "сентябрь", "октябрь", "ноябрь", "декабрь",
+        "январь",
+        "февраль",
+        "март",
+        "апрель",
+        "май",
+        "июнь",
+        "июль",
+        "август",
+        "сентябрь",
+        "октябрь",
+        "ноябрь",
+        "декабрь",
     ];
     const EN: [&str; 12] = [
-        "January", "February", "March", "April", "May", "June", "July", "August",
-        "September", "October", "November", "December",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
     ];
     let names = match locale {
         crate::i18n::Locale::Ru => RU,
@@ -325,7 +344,12 @@ pub fn human_date(key: &str, locale: crate::i18n::Locale) -> String {
 // ── Collection ───────────────────────────────────────────────────────────────
 
 /// Every task in one capsule, in block order.
-pub fn tasks_in_capsule(capsule_id: &str, subject: &str, tags: &[String], blocks: &[Value]) -> Vec<PlannedTask> {
+pub fn tasks_in_capsule(
+    capsule_id: &str,
+    subject: &str,
+    tags: &[String],
+    blocks: &[Value],
+) -> Vec<PlannedTask> {
     let mut tasks = Vec::new();
     for block in blocks {
         if block_type(block) != "todo_list" {
@@ -518,10 +542,7 @@ pub fn compare_tasks(a: &PlannedTask, b: &PlannedTask) -> std::cmp::Ordering {
     if pa != pb {
         return pa.cmp(&pb);
     }
-    a.item
-        .text
-        .to_lowercase()
-        .cmp(&b.item.text.to_lowercase())
+    a.item.text.to_lowercase().cmp(&b.item.text.to_lowercase())
 }
 
 pub fn sort_tasks(tasks: &[PlannedTask]) -> Vec<PlannedTask> {
@@ -677,8 +698,10 @@ pub fn is_blocked(task: &PlannedTask, tasks: &[PlannedTask]) -> bool {
     if task.item.is_done() {
         return false;
     }
-    let by_key: std::collections::HashMap<String, &PlannedTask> =
-        tasks.iter().map(|candidate| (candidate.key(), candidate)).collect();
+    let by_key: std::collections::HashMap<String, &PlannedTask> = tasks
+        .iter()
+        .map(|candidate| (candidate.key(), candidate))
+        .collect();
     task.item.blocked_by.iter().any(|key| {
         by_key
             .get(key)
@@ -802,7 +825,11 @@ impl IcsLabels {
 }
 
 /// `VCALENDAR` with one `VTODO` per task, CRLF-terminated.
-pub fn build_ics(tasks: &[PlannedTask], options: &IcsOptions, now: chrono::DateTime<chrono::Utc>) -> String {
+pub fn build_ics(
+    tasks: &[PlannedTask],
+    options: &IcsOptions,
+    now: chrono::DateTime<chrono::Utc>,
+) -> String {
     let stamp = now.format("%Y%m%dT%H%M%SZ").to_string();
     let labels = IcsLabels::for_lang(options.lang);
     let prodid_lang = match options.lang {
@@ -966,7 +993,10 @@ mod tests {
         assert_eq!(bucket_of(&tasks[1], today), Bucket::Today);
         assert_eq!(bucket_of(&tasks[2], today), Bucket::None);
         let stats = task_stats(&tasks, today);
-        assert_eq!((stats.total, stats.open, stats.overdue, stats.today), (3, 3, 1, 1));
+        assert_eq!(
+            (stats.total, stats.open, stats.overdue, stats.today),
+            (3, 3, 1, 1)
+        );
         assert_eq!(stats.completion_rate, 0);
     }
 

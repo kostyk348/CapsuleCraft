@@ -28,12 +28,7 @@ pub struct MailState {
     pub part: PartMode,
 }
 
-pub fn draw(
-    ui: &mut Ui,
-    capsule: &Capsule,
-    state: &mut MailState,
-    locale: Locale,
-) -> ViewAction {
+pub fn draw(ui: &mut Ui, capsule: &Capsule, state: &mut MailState, locale: Locale) -> ViewAction {
     let mut action = ViewAction::default();
     header(
         ui,
@@ -63,7 +58,11 @@ pub fn draw(
             (t(locale, Key::PlainPart), state.part == PartMode::Plain),
         ];
         if let Some(index) = super::segments(&mut bar, &options) {
-            state.part = if index == 0 { PartMode::Html } else { PartMode::Plain };
+            state.part = if index == 0 {
+                PartMode::Html
+            } else {
+                PartMode::Plain
+            };
         }
     } else {
         let _ = hud(
@@ -129,11 +128,7 @@ pub fn draw(
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = vec2(7.0, 5.0);
                     envelope_chip(ui, &capsule.from, theme::INK);
-                    ui.label(
-                        RichText::new("→")
-                            .size(11.0)
-                            .color(theme::FAINT),
-                    );
+                    ui.label(RichText::new("→").size(11.0).color(theme::FAINT));
                     envelope_chip(ui, &capsule.to, theme::MUTED);
                 });
                 ui.add_space(6.0);
@@ -250,7 +245,8 @@ fn render_block(ui: &mut Ui, block: &MailBlock) {
         MailBlock::Rule => {
             ui.add_space(10.0);
             let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
-            ui.painter().hline(rect.x_range(), rect.center().y, theme::hairline());
+            ui.painter()
+                .hline(rect.x_range(), rect.center().y, theme::hairline());
             ui.add_space(10.0);
         }
         MailBlock::Quote(spans) => {
@@ -266,7 +262,10 @@ fn render_block(ui: &mut Ui, block: &MailBlock) {
                     ui.horizontal_wrapped(|ui| render_spans(ui, spans, 12.5, theme::MUTED));
                 });
             ui.painter().rect_filled(
-                egui::Rect::from_min_size(inner.response.rect.min, vec2(2.0, inner.response.rect.height())),
+                egui::Rect::from_min_size(
+                    inner.response.rect.min,
+                    vec2(2.0, inner.response.rect.height()),
+                ),
                 0.0,
                 theme::fade(theme::ACCENT, 0.6),
             );
@@ -320,7 +319,10 @@ fn render_spans_styled(
         } else {
             family.clone()
         };
-        let mut text = RichText::new(&span.text).size(size).color(color).family(family);
+        let mut text = RichText::new(&span.text)
+            .size(size)
+            .color(color)
+            .family(family);
         if span.bold {
             text = text.strong();
         }
@@ -333,8 +335,7 @@ fn render_spans_styled(
                 .on_hover_text(url)
                 .clicked()
                 .then(|| {
-                    ui.ctx()
-                        .open_url(egui::OpenUrl::new_tab(url.clone()));
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(url.clone()));
                 });
         } else {
             ui.add(egui::Label::new(text));
@@ -446,7 +447,9 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                                         .color(theme::INK),
                                 );
                             } else if let Some(dot_pos) = trimmed.find(". ") {
-                                if trimmed[..dot_pos].chars().all(|c| c.is_ascii_digit()) && dot_pos <= 3 {
+                                if trimmed[..dot_pos].chars().all(|c| c.is_ascii_digit())
+                                    && dot_pos <= 3
+                                {
                                     let num = &trimmed[..dot_pos];
                                     let rest = trimmed[dot_pos + 2..].trim();
                                     ui.horizontal(|ui| {
@@ -456,11 +459,17 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                                                 .font(egui::FontId::new(11.0, theme::mono()))
                                                 .color(accent),
                                         );
-                                        let galley = crate::links::layout_clean(ui, rest, 12.5, wrap_width - 24.0);
+                                        let galley = crate::links::layout_clean(
+                                            ui,
+                                            rest,
+                                            12.5,
+                                            wrap_width - 24.0,
+                                        );
                                         ui.label(galley);
                                     });
                                 } else {
-                                    let galley = crate::links::layout_clean(ui, line, 12.5, wrap_width);
+                                    let galley =
+                                        crate::links::layout_clean(ui, line, 12.5, wrap_width);
                                     ui.label(galley);
                                 }
                             } else if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
@@ -472,7 +481,12 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                                             .font(egui::FontId::new(12.5, theme::semibold()))
                                             .color(accent),
                                     );
-                                    let galley = crate::links::layout_clean(ui, rest, 12.5, wrap_width - 20.0);
+                                    let galley = crate::links::layout_clean(
+                                        ui,
+                                        rest,
+                                        12.5,
+                                        wrap_width - 20.0,
+                                    );
                                     ui.label(galley);
                                 });
                             } else {
@@ -513,15 +527,32 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                     .cloned()
                     .unwrap_or_default();
                 for item in items {
-                    let done = item.get("done").and_then(|done| done.as_bool()).unwrap_or(false);
-                    let text = item.get("text").and_then(|text| text.as_str()).unwrap_or("");
+                    let done = item
+                        .get("done")
+                        .and_then(|done| done.as_bool())
+                        .unwrap_or(false);
+                    let text = item
+                        .get("text")
+                        .and_then(|text| text.as_str())
+                        .unwrap_or("");
                     ui.horizontal(|ui| {
                         let (rect, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
                         ui.painter().rect(
                             rect,
                             theme::RADIUS,
-                            if done { theme::ACCENT } else { Color32::TRANSPARENT },
-                            Stroke::new(1.0, if done { theme::ACCENT } else { theme::LINE_STRONG }),
+                            if done {
+                                theme::ACCENT
+                            } else {
+                                Color32::TRANSPARENT
+                            },
+                            Stroke::new(
+                                1.0,
+                                if done {
+                                    theme::ACCENT
+                                } else {
+                                    theme::LINE_STRONG
+                                },
+                            ),
                             egui::StrokeKind::Inside,
                         );
                         if done {
@@ -533,13 +564,11 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                             );
                         }
                         ui.add(
-                            egui::Label::new(
-                                RichText::new(text).size(12.5).color(if done {
-                                    theme::FAINT
-                                } else {
-                                    theme::INK
-                                }),
-                            )
+                            egui::Label::new(RichText::new(text).size(12.5).color(if done {
+                                theme::FAINT
+                            } else {
+                                theme::INK
+                            }))
                             .wrap(),
                         );
                     });
@@ -577,16 +606,15 @@ fn attachments(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                 ui.horizontal(|ui| {
                     crate::icons::paint(
                         ui.painter(),
-                        egui::Rect::from_min_size(ui.cursor().min + vec2(0.0, 4.0), vec2(13.0, 13.0)),
+                        egui::Rect::from_min_size(
+                            ui.cursor().min + vec2(0.0, 4.0),
+                            vec2(13.0, 13.0),
+                        ),
                         Icon::Doc,
                         theme::MUTED,
                     );
                     ui.add_space(18.0);
-                    ui.label(
-                        RichText::new(&attachment.name)
-                            .size(12.0)
-                            .color(theme::INK),
-                    );
+                    ui.label(RichText::new(&attachment.name).size(12.0).color(theme::INK));
                     ui.label(
                         RichText::new(format!(
                             "{} · {}",
@@ -598,7 +626,9 @@ fn attachments(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                         .color(theme::FAINT),
                     );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ghost(ui, Icon::Download, None, t(locale, Key::SaveAs), true, 22.0).clicked() {
+                        if ghost(ui, Icon::Download, None, t(locale, Key::SaveAs), true, 22.0)
+                            .clicked()
+                        {
                             if let Some(path) = rfd::FileDialog::new()
                                 .set_title(t(locale, Key::SaveAs))
                                 .set_file_name(&attachment.name)
@@ -609,7 +639,9 @@ fn attachments(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                                         use base64::Engine as _;
                                         base64::engine::general_purpose::STANDARD
                                             .decode(b64)
-                                            .unwrap_or_else(|_| attachment.content.as_bytes().to_vec())
+                                            .unwrap_or_else(|_| {
+                                                attachment.content.as_bytes().to_vec()
+                                            })
                                     }
                                     None => attachment.content.as_bytes().to_vec(),
                                 };

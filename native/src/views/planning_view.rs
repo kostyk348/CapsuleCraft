@@ -23,9 +23,12 @@ use crate::planning::{
 };
 use crate::theme;
 use crate::vault::Vault;
-use crate::{ghost, hud, icon_button, menu_header, menu_row, menu_separator, popover_frame, status_pill, tag_chip, text_button, truncate_chars, checkbox};
+use crate::{
+    checkbox, ghost, hud, icon_button, menu_header, menu_row, menu_separator, popover_frame,
+    status_pill, tag_chip, text_button, truncate_chars,
+};
 
-use super::{centred, empty_state, header, section, stat, segments, ViewAction};
+use super::{centred, empty_state, header, section, segments, stat, ViewAction};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -174,7 +177,11 @@ pub fn draw(
         &mut right,
         &stats.overdue.to_string(),
         t(locale, Key::TasksOverdue),
-        if stats.overdue > 0 { theme::BAD } else { theme::FAINT },
+        if stats.overdue > 0 {
+            theme::BAD
+        } else {
+            theme::FAINT
+        },
     );
     right.add_space(10.0);
     stat(
@@ -184,13 +191,24 @@ pub fn draw(
         theme::INK,
     );
     right.add_space(10.0);
-    stat(&mut right, &stats.open.to_string(), t(locale, Key::TasksOpen), theme::INK);
+    stat(
+        &mut right,
+        &stats.open.to_string(),
+        t(locale, Key::TasksOpen),
+        theme::INK,
+    );
 
     if state.show_filters {
         filter_bar(ui, state, &all_tasks, locale);
     }
 
-    quick_add(ui, state, locale, &mut edits, !all_tasks.is_empty() || !vault.capsules.is_empty());
+    quick_add(
+        ui,
+        state,
+        locale,
+        &mut edits,
+        !all_tasks.is_empty() || !vault.capsules.is_empty(),
+    );
 
     let body = Rect::from_min_max(
         pos2(ui.max_rect().left(), ui.cursor().top()),
@@ -224,10 +242,28 @@ pub fn draw(
                 return;
             }
             match state.mode {
-                Mode::Agenda => agenda(ui, &visible, &all_tasks, &today, locale, &mut edits, &mut action),
-                Mode::Kanban => kanban(ui, &visible, &all_tasks, &today, locale, &mut edits, &mut action),
+                Mode::Agenda => agenda(
+                    ui,
+                    &visible,
+                    &all_tasks,
+                    &today,
+                    locale,
+                    &mut edits,
+                    &mut action,
+                ),
+                Mode::Kanban => kanban(
+                    ui,
+                    &visible,
+                    &all_tasks,
+                    &today,
+                    locale,
+                    &mut edits,
+                    &mut action,
+                ),
                 Mode::Gantt => gantt(ui, &visible, &today, locale, &mut edits, &mut action),
-                Mode::Calendar => calendar(ui, &visible, &today, state, locale, &mut edits, &mut action),
+                Mode::Calendar => {
+                    calendar(ui, &visible, &today, state, locale, &mut edits, &mut action)
+                }
             }
             ui.add_space(60.0);
         });
@@ -256,11 +292,17 @@ fn apply(vault: &mut Vault, edits: &[Edit], locale: Locale, action: &mut ViewAct
             Edit::Toggle(capsule_id, block_id, item) => {
                 patch_item(vault, capsule_id, block_id, item)
             }
-            Edit::Patch(capsule_id, block_id, item) => patch_item(vault, capsule_id, block_id, item),
+            Edit::Patch(capsule_id, block_id, item) => {
+                patch_item(vault, capsule_id, block_id, item)
+            }
             Edit::Delete(capsule_id, block_id, item_id) => {
                 delete_item(vault, capsule_id, block_id, item_id)
             }
-            Edit::Add { text, due, priority } => add_task(vault, text, due.clone(), priority),
+            Edit::Add {
+                text,
+                due,
+                priority,
+            } => add_task(vault, text, due.clone(), priority),
         };
         if changed {
             action.changed = true;
@@ -279,9 +321,11 @@ fn patch_item(vault: &mut Vault, capsule_id: &str, block_id: &str, item: &TodoIt
     else {
         return false;
     };
-    let Some(block) = capsule.blocks.iter_mut().find(|block| {
-        block.get("id").and_then(|id| id.as_str()) == Some(block_id)
-    }) else {
+    let Some(block) = capsule
+        .blocks
+        .iter_mut()
+        .find(|block| block.get("id").and_then(|id| id.as_str()) == Some(block_id))
+    else {
         return false;
     };
     planning::patch_item(block, &item.id, item)
@@ -295,9 +339,11 @@ fn delete_item(vault: &mut Vault, capsule_id: &str, block_id: &str, item_id: &st
     else {
         return false;
     };
-    let Some(block) = capsule.blocks.iter_mut().find(|block| {
-        block.get("id").and_then(|id| id.as_str()) == Some(block_id)
-    }) else {
+    let Some(block) = capsule
+        .blocks
+        .iter_mut()
+        .find(|block| block.get("id").and_then(|id| id.as_str()) == Some(block_id))
+    else {
         return false;
     };
     let Some(items) = block
@@ -329,7 +375,11 @@ fn add_task(vault: &mut Vault, text: &str, due: Option<String>, priority: &str) 
         .capsules
         .iter()
         .position(|capsule| capsule.tags.iter().any(|tag| tag == "#inbox"))
-        .or(if vault.capsules.is_empty() { None } else { Some(0) });
+        .or(if vault.capsules.is_empty() {
+            None
+        } else {
+            Some(0)
+        });
     let Some(index) = inbox else {
         return false;
     };
@@ -343,7 +393,10 @@ fn add_task(vault: &mut Vault, text: &str, due: Option<String>, priority: &str) 
             if !block.get("data").is_some_and(|data| data.is_object()) {
                 block["data"] = serde_json::json!({ "items": [] });
             }
-            if !block["data"].get("items").is_some_and(|items| items.is_array()) {
+            if !block["data"]
+                .get("items")
+                .is_some_and(|items| items.is_array())
+            {
                 block["data"]["items"] = serde_json::json!([]);
             }
             block["data"]["items"]
@@ -459,27 +512,50 @@ fn filter_bar(ui: &mut Ui, state: &mut PlanningState, all: &[PlannedTask], local
         seen
     };
     capsules.truncate(12);
-    let capsule_current = state
-        .filters
-        .capsule_id
-        .clone()
-        .unwrap_or_default();
+    let capsule_current = state.filters.capsule_id.clone().unwrap_or_default();
     let capsule_label = capsules
         .iter()
         .find(|(id, _)| id == &capsule_current)
         .map(|(_, subject)| truncate_chars(subject, 18))
         .unwrap_or_else(|| t(locale, Key::FilterCapsule).to_string());
-    let response = ghost(ui, Icon::Doc, Some(&capsule_label), t(locale, Key::FilterCapsule), true, 26.0);
+    let response = ghost(
+        ui,
+        Icon::Doc,
+        Some(&capsule_label),
+        t(locale, Key::FilterCapsule),
+        true,
+        26.0,
+    );
     egui::Popup::menu(&response)
         .frame(popover_frame())
         .align(egui::RectAlign::BOTTOM_START)
         .show(|ui| {
             ui.set_min_width(200.0);
-            if menu_row(ui, None, t(locale, Key::All), None, capsule_current.is_empty(), true, false).clicked() {
+            if menu_row(
+                ui,
+                None,
+                t(locale, Key::All),
+                None,
+                capsule_current.is_empty(),
+                true,
+                false,
+            )
+            .clicked()
+            {
                 state.filters.capsule_id = None;
             }
             for (id, subject) in &capsules {
-                if menu_row(ui, Some(Icon::Doc), &truncate_chars(subject, 34), None, &capsule_current == id, true, false).clicked() {
+                if menu_row(
+                    ui,
+                    Some(Icon::Doc),
+                    &truncate_chars(subject, 34),
+                    None,
+                    &capsule_current == id,
+                    true,
+                    false,
+                )
+                .clicked()
+                {
                     state.filters.capsule_id = Some(id.clone());
                 }
             }
@@ -492,17 +568,44 @@ fn filter_bar(ui: &mut Ui, state: &mut PlanningState, all: &[PlannedTask], local
         .tag
         .clone()
         .unwrap_or_else(|| t(locale, Key::FilterTag).to_string());
-    let response = ghost(ui, Icon::Tag, Some(&tag_label), t(locale, Key::FilterTag), true, 26.0);
+    let response = ghost(
+        ui,
+        Icon::Tag,
+        Some(&tag_label),
+        t(locale, Key::FilterTag),
+        true,
+        26.0,
+    );
     egui::Popup::menu(&response)
         .frame(popover_frame())
         .align(egui::RectAlign::BOTTOM_START)
         .show(|ui| {
             ui.set_min_width(180.0);
-            if menu_row(ui, None, t(locale, Key::All), None, state.filters.tag.is_none(), true, false).clicked() {
+            if menu_row(
+                ui,
+                None,
+                t(locale, Key::All),
+                None,
+                state.filters.tag.is_none(),
+                true,
+                false,
+            )
+            .clicked()
+            {
                 state.filters.tag = None;
             }
             for tag in &tags {
-                if menu_row(ui, Some(Icon::Tag), tag, None, state.filters.tag.as_deref() == Some(tag.as_str()), true, false).clicked() {
+                if menu_row(
+                    ui,
+                    Some(Icon::Tag),
+                    tag,
+                    None,
+                    state.filters.tag.as_deref() == Some(tag.as_str()),
+                    true,
+                    false,
+                )
+                .clicked()
+                {
                     state.filters.tag = Some(tag.clone());
                 }
             }
@@ -531,7 +634,13 @@ fn menu_choice(ui: &mut Ui, current: &str, options: &[(&str, &str)]) -> Option<S
     picked
 }
 
-fn quick_add(ui: &mut Ui, state: &mut PlanningState, locale: Locale, edits: &mut Vec<Edit>, enabled: bool) {
+fn quick_add(
+    ui: &mut Ui,
+    state: &mut PlanningState,
+    locale: Locale,
+    edits: &mut Vec<Edit>,
+    enabled: bool,
+) {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), Sense::hover());
     ui.painter().rect_filled(rect, 0.0, theme::SUNKEN);
     ui.painter()
@@ -569,7 +678,11 @@ fn quick_add(ui: &mut Ui, state: &mut PlanningState, locale: Locale, edits: &mut
             .frame(Frame::NONE)
             .margin(Margin::same(2))
             .font(FontId::new(10.5, theme::mono()))
-            .text_color(if due_invalid { theme::BAD } else { theme::MUTED }),
+            .text_color(if due_invalid {
+                theme::BAD
+            } else {
+                theme::MUTED
+            }),
     );
     if due_response.changed() {
         state.quick_due = due.clone();
@@ -580,7 +693,14 @@ fn quick_add(ui: &mut Ui, state: &mut PlanningState, locale: Locale, edits: &mut
         "low" => t(locale, Key::PriorityLow),
         _ => t(locale, Key::PriorityNormal),
     };
-    let priority_response = ghost(ui, Icon::ChevronDown, Some(priority), t(locale, Key::Priority), true, 26.0);
+    let priority_response = ghost(
+        ui,
+        Icon::ChevronDown,
+        Some(priority),
+        t(locale, Key::Priority),
+        true,
+        26.0,
+    );
     egui::Popup::menu(&priority_response)
         .frame(popover_frame())
         .align(egui::RectAlign::BOTTOM_END)
@@ -590,14 +710,27 @@ fn quick_add(ui: &mut Ui, state: &mut PlanningState, locale: Locale, edits: &mut
                 ("normal", t(locale, Key::PriorityNormal)),
                 ("low", t(locale, Key::PriorityLow)),
             ] {
-                if menu_row(ui, None, label, None, state.quick_priority == id, true, false).clicked() {
+                if menu_row(
+                    ui,
+                    None,
+                    label,
+                    None,
+                    state.quick_priority == id,
+                    true,
+                    false,
+                )
+                .clicked()
+                {
                     state.quick_priority = id.to_string();
                 }
             }
         });
 
     if ui
-        .add_enabled(enabled, egui::Button::new(RichText::new(t(locale, Key::AddTask)).size(11.5)))
+        .add_enabled(
+            enabled,
+            egui::Button::new(RichText::new(t(locale, Key::AddTask)).size(11.5)),
+        )
         .clicked()
         || submit
     {
@@ -758,7 +891,17 @@ fn task_row(
             }
             menu_separator(ui);
             menu_header(ui, t(locale, Key::BlockedBy));
-            if menu_row(ui, None, t(locale, Key::NoDependency), None, item.blocked_by.is_empty(), true, false).clicked() {
+            if menu_row(
+                ui,
+                None,
+                t(locale, Key::NoDependency),
+                None,
+                item.blocked_by.is_empty(),
+                true,
+                false,
+            )
+            .clicked()
+            {
                 item.blocked_by.clear();
                 touched = true;
             }
@@ -779,7 +922,17 @@ fn task_row(
                 }
             }
             menu_separator(ui);
-            if menu_row(ui, Some(Icon::Trash), t(locale, Key::Remove), None, false, true, true).clicked() {
+            if menu_row(
+                ui,
+                Some(Icon::Trash),
+                t(locale, Key::Remove),
+                None,
+                false,
+                true,
+                true,
+            )
+            .clicked()
+            {
                 edits.push(Edit::Delete(
                     task.capsule_id.clone(),
                     task.block_id.clone(),
@@ -806,9 +959,12 @@ fn task_row(
         ));
     }
 
-    ui.painter()
-        .hline(rect.x_range(), rect.bottom(), Stroke::new(1.0, theme::fade(theme::LINE, 0.5)));
-        let _ = key;
+    ui.painter().hline(
+        rect.x_range(),
+        rect.bottom(),
+        Stroke::new(1.0, theme::fade(theme::LINE, 0.5)),
+    );
+    let _ = key;
 }
 
 /// The shell resolves the message id to a page index after drawing; the view
@@ -844,41 +1000,37 @@ fn kanban(
         ui.add_space(super::VIEW_PAD);
         ui.spacing_mut().item_spacing.x = 10.0;
         for (index, column) in columns.iter().enumerate() {
-            ui.allocate_ui_with_layout(
-                vec2(width, 0.0),
-                Layout::top_down(Align::Min),
-                |ui| {
-                    ui.set_width(width);
-                    Frame::new()
-                        .fill(theme::WASH)
-                        .corner_radius(theme::RADIUS)
-                        .stroke(theme::hairline())
-                        .inner_margin(Margin::same(8))
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                let _ = hud(ui, labels[index], theme::MUTED);
-                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                    ui.label(
-                                        RichText::new(column.len().to_string())
-                                            .family(theme::mono())
-                                            .size(9.5)
-                                            .color(theme::FAINT),
-                                    );
-                                });
+            ui.allocate_ui_with_layout(vec2(width, 0.0), Layout::top_down(Align::Min), |ui| {
+                ui.set_width(width);
+                Frame::new()
+                    .fill(theme::WASH)
+                    .corner_radius(theme::RADIUS)
+                    .stroke(theme::hairline())
+                    .inner_margin(Margin::same(8))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let _ = hud(ui, labels[index], theme::MUTED);
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                ui.label(
+                                    RichText::new(column.len().to_string())
+                                        .family(theme::mono())
+                                        .size(9.5)
+                                        .color(theme::FAINT),
+                                );
                             });
-                            ui.add_space(6.0);
-                            ScrollArea::vertical()
-                                .id_salt(("kanban", index))
-                                .max_height(ui.available_height() - 40.0)
-                                .auto_shrink([false, false])
-                                .show(ui, |ui| {
-                                    for task in column {
-                                        kanban_card(ui, task, all, today, locale, edits, action, index);
-                                    }
-                                });
                         });
-                },
-            );
+                        ui.add_space(6.0);
+                        ScrollArea::vertical()
+                            .id_salt(("kanban", index))
+                            .max_height(ui.available_height() - 40.0)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                for task in column {
+                                    kanban_card(ui, task, all, today, locale, edits, action, index);
+                                }
+                            });
+                    });
+            });
         }
     });
 }
@@ -943,7 +1095,11 @@ fn kanban_card(
                         })
                         .family(theme::mono())
                         .size(9.0)
-                        .color(if overdue { theme::BAD } else { theme::FAINT }),
+                        .color(if overdue {
+                            theme::BAD
+                        } else {
+                            theme::FAINT
+                        }),
                     );
                 }
                 if blocked {
@@ -966,7 +1122,14 @@ fn kanban_card(
                     }
                 });
             });
-            if text_button(ui, Some(Icon::Doc), &truncate_chars(&task.capsule_subject, 24), false).clicked() {
+            if text_button(
+                ui,
+                Some(Icon::Doc),
+                &truncate_chars(&task.capsule_subject, 24),
+                false,
+            )
+            .clicked()
+            {
                 action.select = capsule_index(action, &task.capsule_id);
             }
             if touched {
@@ -996,7 +1159,8 @@ fn gantt(
     let range = planning::gantt_range(visible, today);
     let days = planning::days_between(&range.start, &range.end).max(1) + 1;
     let label_w = 230.0;
-    let cell_w = ((ui.available_width() - super::VIEW_PAD * 2.0 - label_w) / days as f32).clamp(14.0, 40.0);
+    let cell_w =
+        ((ui.available_width() - super::VIEW_PAD * 2.0 - label_w) / days as f32).clamp(14.0, 40.0);
     let graph_w = cell_w * days as f32;
 
     ui.add_space(12.0);
@@ -1010,22 +1174,34 @@ fn gantt(
                 for i in 0..days {
                     let day = add_days(&range.start, i);
                     let is_today = day == today;
-                    ui.allocate_ui_with_layout(vec2(cell_w, 20.0), Layout::top_down(Align::Center), |ui| {
-                        ui.label(
-                            RichText::new(&day[8..10])
-                                .family(theme::mono())
-                                .size(8.5)
-                                .color(if is_today { theme::ACCENT_INK } else { theme::FAINT }),
-                        );
-                    });
+                    ui.allocate_ui_with_layout(
+                        vec2(cell_w, 20.0),
+                        Layout::top_down(Align::Center),
+                        |ui| {
+                            ui.label(
+                                RichText::new(&day[8..10])
+                                    .family(theme::mono())
+                                    .size(8.5)
+                                    .color(if is_today {
+                                        theme::ACCENT_INK
+                                    } else {
+                                        theme::FAINT
+                                    }),
+                            );
+                        },
+                    );
                 }
             });
-            ui.painter()
-                .hline(ui.cursor().min.x..=(ui.cursor().min.x + label_w + graph_w), ui.cursor().min.y, theme::hairline());
+            ui.painter().hline(
+                ui.cursor().min.x..=(ui.cursor().min.x + label_w + graph_w),
+                ui.cursor().min.y,
+                theme::hairline(),
+            );
             ui.add_space(6.0);
 
             for task in visible {
-                let (rect, _) = ui.allocate_exact_size(vec2(label_w + graph_w, 32.0), Sense::hover());
+                let (rect, _) =
+                    ui.allocate_exact_size(vec2(label_w + graph_w, 32.0), Sense::hover());
                 let hovered = ui.rect_contains_pointer(rect);
                 if hovered {
                     ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
@@ -1051,25 +1227,34 @@ fn gantt(
                     let mut item = task.item.clone();
                     item.done = !task.item.is_done();
                     item.status = Some(if item.done { "done" } else { "todo" }.into());
-                    edits.push(Edit::Patch(task.capsule_id.clone(), task.block_id.clone(), item));
+                    edits.push(Edit::Patch(
+                        task.capsule_id.clone(),
+                        task.block_id.clone(),
+                        item,
+                    ));
                 }
                 let text = truncate_chars(&task.item.text, 24);
                 let response = label.add(
-                    egui::Label::new(
-                        RichText::new(text)
-                            .size(11.5)
-                            .color(if task.item.is_done() { theme::FAINT } else { theme::INK }),
-                    )
+                    egui::Label::new(RichText::new(text).size(11.5).color(
+                        if task.item.is_done() {
+                            theme::FAINT
+                        } else {
+                            theme::INK
+                        },
+                    ))
                     .truncate()
                     .sense(Sense::click()),
                 );
                 if response.clicked() {
                     action.select = capsule_index(action, &task.capsule_id);
                 }
-                if let Some((left, span)) = task_bar(task, &GanttRange {
-                    start: range.start.clone(),
-                    end: range.end.clone(),
-                }) {
+                if let Some((left, span)) = task_bar(
+                    task,
+                    &GanttRange {
+                        start: range.start.clone(),
+                        end: range.end.clone(),
+                    },
+                ) {
                     let x = rect.left() + label_w + left as f32 * cell_w + 1.0;
                     let w = (span as f32 * cell_w - 2.0).max(4.0);
                     let bar = Rect::from_min_size(pos2(x, rect.center().y - 6.0), vec2(w, 12.0));
@@ -1100,8 +1285,11 @@ fn gantt(
                         );
                     }
                 }
-                ui.painter()
-                    .hline(rect.x_range(), rect.bottom(), Stroke::new(1.0, theme::fade(theme::LINE, 0.5)));
+                ui.painter().hline(
+                    rect.x_range(),
+                    rect.bottom(),
+                    Stroke::new(1.0, theme::fade(theme::LINE, 0.5)),
+                );
             }
         });
     });
@@ -1161,9 +1349,13 @@ fn calendar(
         ui.horizontal(|ui| {
             let cell = (ui.available_width() - 6.0 * 6.0) / 7.0;
             for label in weekday_labels(locale) {
-                ui.allocate_ui_with_layout(vec2(cell, 18.0), Layout::top_down(Align::Center), |ui| {
-                    let _ = hud(ui, label, theme::FAINT);
-                });
+                ui.allocate_ui_with_layout(
+                    vec2(cell, 18.0),
+                    Layout::top_down(Align::Center),
+                    |ui| {
+                        let _ = hud(ui, label, theme::FAINT);
+                    },
+                );
             }
         });
         ui.add_space(4.0);
@@ -1177,7 +1369,8 @@ fn calendar(
                     let date = planning::parse_key(key);
                     let in_month = date.map(|d| d.month() == state.month).unwrap_or(false);
                     let tasks = tasks_on_day(visible, key, true);
-                    let (rect, response) = ui.allocate_exact_size(vec2(cell_w, 74.0), Sense::click());
+                    let (rect, response) =
+                        ui.allocate_exact_size(vec2(cell_w, 74.0), Sense::click());
                     let is_today = key == today;
                     let focused = state.focus_day.as_deref() == Some(key.as_str());
                     let fill = if focused {
@@ -1207,7 +1400,11 @@ fn calendar(
                         Align2::LEFT_TOP,
                         day_number.to_string(),
                         FontId::new(10.0, theme::mono_bold()),
-                        if in_month { theme::MUTED } else { theme::fade(theme::FAINT, 0.5) },
+                        if in_month {
+                            theme::MUTED
+                        } else {
+                            theme::fade(theme::FAINT, 0.5)
+                        },
                     );
                     let mut y = rect.top() + 22.0;
                     for task in tasks.iter().take(3) {
@@ -1225,7 +1422,11 @@ fn calendar(
                             Align2::LEFT_CENTER,
                             truncate_chars(&task.item.text, 14),
                             FontId::new(9.0, egui::FontFamily::Proportional),
-                            if task.item.is_done() { theme::FAINT } else { theme::MUTED },
+                            if task.item.is_done() {
+                                theme::FAINT
+                            } else {
+                                theme::MUTED
+                            },
                         );
                         y += 14.0;
                     }
@@ -1250,11 +1451,7 @@ fn calendar(
         section(ui, &format!("{focus}"));
         let day_tasks = tasks_on_day(visible, &focus, true);
         if day_tasks.is_empty() {
-            ui.label(
-                RichText::new("—")
-                    .size(12.0)
-                    .color(theme::FAINT),
-            );
+            ui.label(RichText::new("—").size(12.0).color(theme::FAINT));
         }
         let all = visible.to_vec();
         for task in &day_tasks {

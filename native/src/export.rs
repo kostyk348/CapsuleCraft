@@ -25,11 +25,7 @@ pub fn page_markdown(capsule: &Capsule) -> String {
     out.push_str("\n\n");
 
     if !capsule.tags.is_empty() {
-        let tags: Vec<String> = capsule
-            .tags
-            .iter()
-            .map(|tag| format!("#{tag}"))
-            .collect();
+        let tags: Vec<String> = capsule.tags.iter().map(|tag| format!("#{tag}")).collect();
         out.push_str(&tags.join(" "));
         out.push_str("\n\n");
     }
@@ -133,7 +129,11 @@ fn render_block(block: &Value, out: &mut String) {
         "code_repl" => {
             let language = text("language");
             out.push_str("```");
-            out.push_str(if language.is_empty() { "text" } else { &language });
+            out.push_str(if language.is_empty() {
+                "text"
+            } else {
+                &language
+            });
             out.push('\n');
             out.push_str(&text("code"));
             out.push_str("\n```\n\n");
@@ -160,10 +160,7 @@ fn render_block(block: &Value, out: &mut String) {
                         .get("type")
                         .and_then(Value::as_str)
                         .unwrap_or("element");
-                    let label = element
-                        .get("text")
-                        .and_then(Value::as_str)
-                        .unwrap_or("");
+                    let label = element.get("text").and_then(Value::as_str).unwrap_or("");
                     out.push_str(&format!("- {kind}: {label}\n"));
                 }
                 out.push('\n');

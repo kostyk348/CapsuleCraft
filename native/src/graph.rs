@@ -94,7 +94,14 @@ pub fn build(capsules: &[Capsule], tag_filter: Option<&str>) -> Graph {
             .and_then(|id| by_id.get(id).copied())
         {
             if allowed.contains(&parent) && parent != index {
-                push_edge(&mut edges, &mut seen, parent, index, EdgeKind::PageParent, None);
+                push_edge(
+                    &mut edges,
+                    &mut seen,
+                    parent,
+                    index,
+                    EdgeKind::PageParent,
+                    None,
+                );
             }
         }
         if let Some(parent) = capsule
@@ -350,10 +357,9 @@ mod tests {
             .edges
             .iter()
             .any(|edge| edge.kind == EdgeKind::Reply && edge.source == 0 && edge.target == 2));
-        assert!(graph
-            .edges
-            .iter()
-            .any(|edge| edge.kind == EdgeKind::TagCluster && edge.label.as_deref() == Some("#spec")));
+        assert!(graph.edges.iter().any(
+            |edge| edge.kind == EdgeKind::TagCluster && edge.label.as_deref() == Some("#spec")
+        ));
         assert_eq!(graph.tags, vec!["#plan".to_string(), "#spec".to_string()]);
     }
 
