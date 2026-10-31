@@ -5,8 +5,7 @@
 //! - Smart transform detection (`# `, `## `, `[] `, `> `)
 
 use egui::{
-    pos2, vec2, Area, Color32, CornerRadius, Frame, Margin, Order,
-    Rect, RichText, Stroke, Ui,
+    pos2, vec2, Area, Color32, CornerRadius, Frame, Margin, Order, Rect, RichText, Stroke, Ui,
 };
 
 use crate::i18n::Locale;
@@ -273,7 +272,8 @@ pub fn draw_bubble_toolbar(
                             pos2(ui.cursor().min.x, ui.cursor().min.y + 4.0),
                             vec2(1.0, 16.0),
                         );
-                        ui.painter().rect_filled(sep_rect, 0.0, Color32::from_rgb(60, 66, 75));
+                        ui.painter()
+                            .rect_filled(sep_rect, 0.0, Color32::from_rgb(60, 66, 75));
                         ui.add_space(3.0);
 
                         // Dropdown for "Turn into"
@@ -283,9 +283,13 @@ pub fn draw_bubble_toolbar(
 
                         let transform_btn = ui.add(
                             egui::Button::new(
-                                RichText::new(if dropdown_open { "Type ▲" } else { "Type ▼" })
-                                    .font(egui::FontId::new(11.5, theme::medium()))
-                                    .color(theme::MUTED),
+                                RichText::new(if dropdown_open {
+                                    "Type ▲"
+                                } else {
+                                    "Type ▼"
+                                })
+                                .font(egui::FontId::new(11.5, theme::medium()))
+                                .color(theme::MUTED),
                             )
                             .min_size(vec2(52.0, 24.0))
                             .fill(Color32::TRANSPARENT),

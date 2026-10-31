@@ -98,7 +98,8 @@ impl Capsule {
     }
 }
 
-pub fn new_block_id(kind: &str) -> String {    let nanos = std::time::SystemTime::now()
+pub fn new_block_id(kind: &str) -> String {
+    let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
@@ -106,7 +107,10 @@ pub fn new_block_id(kind: &str) -> String {    let nanos = std::time::SystemTime
 }
 
 pub fn block_type(block: &Value) -> &str {
-    block.get("type").and_then(Value::as_str).unwrap_or("unknown")
+    block
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
 }
 
 pub fn block_data_text(block: &Value) -> String {
@@ -198,9 +202,8 @@ pub fn parse_eml(raw: &str, file_name: &str, fallback_timestamp: i64) -> Capsule
                     native = true;
                 }
                 None => {
-                    parse_note = Some(
-                        "canvas_state.json has no blocks array; opened read-only".to_string(),
-                    );
+                    parse_note =
+                        Some("canvas_state.json has no blocks array; opened read-only".to_string());
                 }
             },
             Err(err) => {
@@ -340,14 +343,7 @@ fn collect_text_parts(
             .to_ascii_lowercase();
         let nested = header_param(&content_type, "boundary");
         if mime.starts_with("multipart/") {
-            collect_text_parts(
-                nested.as_deref(),
-                raw_body,
-                depth + 1,
-                None,
-                None,
-                out,
-            );
+            collect_text_parts(nested.as_deref(), raw_body, depth + 1, None, None, out);
             continue;
         }
         let is_attachment = headers
@@ -383,7 +379,9 @@ fn decode_part(body: &str, encoding: &str, content_type: &str) -> String {
     let bytes = match encoding.as_str() {
         "base64" => {
             let compact: String = body.chars().filter(|c| !c.is_whitespace()).collect();
-            BASE64.decode(compact).unwrap_or_else(|_| body.as_bytes().to_vec())
+            BASE64
+                .decode(compact)
+                .unwrap_or_else(|_| body.as_bytes().to_vec())
         }
         "quoted-printable" => decode_q_encoding(body),
         _ => body.as_bytes().to_vec(),
@@ -411,7 +409,10 @@ pub fn assemble_eml(capsule: &Capsule) -> String {
         capsule.attachments.len()
     );
     let root_boundary = format!("BOUNDARY_ROOT_{}", stable_hash(&seed));
-    let payload_boundary = format!("BOUNDARY_PAYLOAD_{}", stable_hash(&format!("{seed}|payload")));
+    let payload_boundary = format!(
+        "BOUNDARY_PAYLOAD_{}",
+        stable_hash(&format!("{seed}|payload"))
+    );
 
     let mut headers: Vec<String> = vec![
         format!("From: {}", clean_header(&capsule.from)),
@@ -445,7 +446,10 @@ pub fn assemble_eml(capsule: &Capsule) -> String {
             .join(", ");
         headers.push(format!("X-Capsule-Tags: {tags}"));
     }
-    headers.push(format!("X-Capsule-Status: {}", clean_header(&capsule.status)));
+    headers.push(format!(
+        "X-Capsule-Status: {}",
+        clean_header(&capsule.status)
+    ));
     headers.push("MIME-Version: 1.0".to_string());
     headers.push(format!(
         "Content-Type: multipart/mixed; boundary=\"{root_boundary}\""
@@ -492,9 +496,10 @@ pub fn assemble_eml(capsule: &Capsule) -> String {
             .trim_start_matches("cid:");
         let (encoding, payload) = match &attachment.raw_b64 {
             Some(raw) => ("base64".to_string(), raw.trim().to_string()),
-            None if needs_base64(&attachment.content) => {
-                ("base64".to_string(), BASE64.encode(attachment.content.as_bytes()))
-            }
+            None if needs_base64(&attachment.content) => (
+                "base64".to_string(),
+                BASE64.encode(attachment.content.as_bytes()),
+            ),
             None => ("8bit".to_string(), attachment.content.clone()),
         };
         parts.push(
@@ -689,7 +694,12 @@ fn parse_attachments(boundary: Option<&str>, body: &str) -> Vec<Attachment> {
 
         let cid = headers
             .get("content-id")
-            .map(|s| s.trim().trim_start_matches('<').trim_end_matches('>').to_string())
+            .map(|s| {
+                s.trim()
+                    .trim_start_matches('<')
+                    .trim_end_matches('>')
+                    .to_string()
+            })
             .unwrap_or_else(|| name.replace(|c: char| !c.is_ascii_alphanumeric(), "_"));
         let mime_type = content_type
             .split(';')
@@ -952,7 +962,10 @@ mod tests {
         assert_eq!(parsed.blocks, capsule.blocks);
         assert_eq!(parsed.attachments.len(), 1);
         assert_eq!(parsed.attachments[0].name, "data.csv");
-        assert_eq!(parsed.attachments[0].content, capsule.attachments[0].content);
+        assert_eq!(
+            parsed.attachments[0].content,
+            capsule.attachments[0].content
+        );
     }
 
     #[test]

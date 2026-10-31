@@ -1,4 +1,4 @@
-﻿pub mod controls;
+pub mod controls;
 pub mod titlebar;
 
 pub use controls::*;

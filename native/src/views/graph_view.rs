@@ -63,7 +63,10 @@ pub fn draw(
             .max_rect(bar_rect.shrink2(vec2(VIEW_PAD, 0.0)))
             .layout(Layout::left_to_right(Align::Center)),
     );
-    let label = state.tag.clone().unwrap_or_else(|| t(locale, Key::All).to_string());
+    let label = state
+        .tag
+        .clone()
+        .unwrap_or_else(|| t(locale, Key::All).to_string());
     let tag_button = ghost(
         &mut bar,
         Icon::Tag,
@@ -77,11 +80,31 @@ pub fn draw(
         .align(egui::RectAlign::BOTTOM_START)
         .show(|ui| {
             ui.set_min_width(180.0);
-            if menu_row(ui, None, t(locale, Key::All), None, state.tag.is_none(), true, false).clicked() {
+            if menu_row(
+                ui,
+                None,
+                t(locale, Key::All),
+                None,
+                state.tag.is_none(),
+                true,
+                false,
+            )
+            .clicked()
+            {
                 state.tag = None;
             }
             for tag in &graph.tags {
-                if menu_row(ui, Some(Icon::Tag), tag, None, state.tag.as_deref() == Some(tag.as_str()), true, false).clicked() {
+                if menu_row(
+                    ui,
+                    Some(Icon::Tag),
+                    tag,
+                    None,
+                    state.tag.as_deref() == Some(tag.as_str()),
+                    true,
+                    false,
+                )
+                .clicked()
+                {
                     state.tag = Some(tag.clone());
                 }
             }
@@ -89,7 +112,11 @@ pub fn draw(
 
     if ghost(
         &mut bar,
-        if state.edges { Icon::Check } else { Icon::Close },
+        if state.edges {
+            Icon::Check
+        } else {
+            Icon::Close
+        },
         Some(if state.edges { "edges on" } else { "edges off" }),
         "Toggle relation edges",
         true,
@@ -101,7 +128,16 @@ pub fn draw(
     }
 
     bar.with_layout(Layout::right_to_left(Align::Center), |ui| {
-        if ghost(ui, Icon::Reload, Some(t(locale, Key::Fit)), t(locale, Key::GraphHint), true, 26.0).clicked() {
+        if ghost(
+            ui,
+            Icon::Reload,
+            Some(t(locale, Key::Fit)),
+            t(locale, Key::GraphHint),
+            true,
+            26.0,
+        )
+        .clicked()
+        {
             state.pan = egui::Vec2::ZERO;
             state.zoom = 1.0;
         }
@@ -183,7 +219,11 @@ pub fn draw(
         }
         let is_selected = selected == Some(node.capsule);
         let color = if capsule.native {
-            if is_selected { theme::ACCENT_INK } else { theme::ACCENT }
+            if is_selected {
+                theme::ACCENT_INK
+            } else {
+                theme::ACCENT
+            }
         } else if is_selected {
             theme::BADGE_BETA
         } else {
@@ -193,7 +233,11 @@ pub fn draw(
             painter.circle_filled(pos, node_radius + 4.0, theme::fade(color, 0.18));
         }
         painter.circle_filled(pos, node_radius, color);
-        painter.circle_stroke(pos, node_radius, Stroke::new(1.0, theme::fade(theme::BG, 0.8)));
+        painter.circle_stroke(
+            pos,
+            node_radius,
+            Stroke::new(1.0, theme::fade(theme::BG, 0.8)),
+        );
     }
 
     // Labels: a graph of anonymous dots is not a relationship graph. They stay
@@ -269,10 +313,7 @@ pub fn draw(
             EdgeKind::Reference => theme::fade(theme::INK, 0.35),
             EdgeKind::TagCluster => theme::fade(theme::ACCENT_INK, 0.3),
         };
-        painter.line_segment(
-            [pos2(x, y), pos2(x + 16.0, y)],
-            Stroke::new(1.5, color),
-        );
+        painter.line_segment([pos2(x, y), pos2(x + 16.0, y)], Stroke::new(1.5, color));
         painter.text(
             pos2(x + 22.0, y),
             egui::Align2::LEFT_CENTER,

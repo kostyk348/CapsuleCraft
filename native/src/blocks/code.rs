@@ -38,7 +38,9 @@ fn run_code(block: &mut Value, code: &str) {
         "javascript" => match js_engine::run_javascript(code) {
             Ok(output) => {
                 block["data"]["output"] = json!(output);
-                block["data"].as_object_mut().map(|data| data.remove("error"));
+                block["data"]
+                    .as_object_mut()
+                    .map(|data| data.remove("error"));
             }
             Err(err) => {
                 block["data"]["error"] = json!(err);
@@ -51,7 +53,9 @@ fn run_code(block: &mut Value, code: &str) {
             Ok(parsed) => {
                 let pretty = serde_json::to_string_pretty(&parsed).unwrap_or_default();
                 block["data"]["output"] = json!(pretty);
-                block["data"].as_object_mut().map(|data| data.remove("error"));
+                block["data"]
+                    .as_object_mut()
+                    .map(|data| data.remove("error"));
             }
             Err(err) => {
                 block["data"]["error"] = json!(err.to_string());
@@ -105,7 +109,8 @@ pub fn draw_code_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
                     .show(|ui| {
                         ui.set_min_width(150.0);
                         menu_header(ui, t(locale, Key::Language));
-                        for candidate in ["javascript", "typescript", "python", "rust", "sql", "json"]
+                        for candidate in
+                            ["javascript", "typescript", "python", "rust", "sql", "json"]
                         {
                             if menu_row(
                                 ui,
@@ -133,7 +138,9 @@ pub fn draw_code_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
                         }
                         other => {
                             let note = match language_label(other) {
-                                Some(label) => format!("{label} — {}", t(locale, Key::CodeUnsupported)),
+                                Some(label) => {
+                                    format!("{label} — {}", t(locale, Key::CodeUnsupported))
+                                }
                                 _ => t(locale, Key::CodeUnsupported).to_string(),
                             };
                             let _ = hud(ui, &note, theme::FAINT);
@@ -181,11 +188,7 @@ pub fn draw_code_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
                     } else {
                         t(locale, Key::CodeOutput)
                     },
-                    if is_error {
-                        theme::BAD
-                    } else {
-                        theme::FAINT
-                    },
+                    if is_error { theme::BAD } else { theme::FAINT },
                 );
                 ui.add_space(3.0);
                 ui.add(

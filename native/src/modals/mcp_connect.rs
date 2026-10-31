@@ -10,8 +10,8 @@ use egui::{
 use crate::i18n::{t, Key, Locale};
 use crate::icons::Icon;
 use crate::mcp;
-use crate::theme;
 use crate::secondary_button;
+use crate::theme;
 
 pub enum McpModalAction {
     None,
@@ -110,11 +110,7 @@ pub fn draw_mcp_modal(
                         .inner_margin(Margin::symmetric(10, 5));
                     let resp = frame
                         .show(ui, |ui| {
-                            let text_color = if active {
-                                theme::INK
-                            } else {
-                                theme::MUTED
-                            };
+                            let text_color = if active { theme::INK } else { theme::MUTED };
                             ui.label(
                                 RichText::new(label)
                                     .family(theme::medium())

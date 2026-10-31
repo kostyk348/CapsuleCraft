@@ -77,10 +77,7 @@ mod tests {
 
     #[test]
     fn reports_a_file_written_after_start() {
-        let dir = std::env::temp_dir().join(format!(
-            "capsuleos-watch-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("capsuleos-watch-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let Some(watcher) = VaultWatch::start(&dir) else {
             // Some CI containers cannot watch the filesystem; the fallback is

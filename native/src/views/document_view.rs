@@ -9,7 +9,6 @@ use crate::blocks::{add_block_menu, draw_block_row, BlockKind, BlockOp};
 use crate::caps;
 use crate::crumb_button;
 use crate::dot_sep;
-use crate::widgets::draw_breadcrumbs;
 use crate::format_date;
 use crate::hud;
 use crate::human_bytes;
@@ -30,6 +29,7 @@ use crate::text_button;
 use crate::theme;
 use crate::truncate_chars;
 use crate::views::View;
+use crate::widgets::draw_breadcrumbs;
 
 #[derive(Default)]
 pub struct EditorAction {
@@ -88,234 +88,243 @@ pub fn draw_document(
     if let Some(offset) = scroll {
         area = area.vertical_scroll_offset(offset);
     }
-    area
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            let available = ui.available_width();
-            let (content_w, pad) = if wide_canvas {
-                let w = (available - 96.0).max(480.0);
-                let p = ((available - w) / 2.0).max(48.0);
-                (w, p)
-            } else {
-                let w = (available - 96.0).clamp(480.0, 960.0);
-                let p = ((available - w) / 2.0).max(28.0);
-                (w, p)
-            };
-            ui.horizontal(|ui| {
-                ui.add_space(pad);
-                ui.allocate_ui_with_layout(
-                    vec2(content_w, 0.0),
-                    Layout::top_down(Align::Min),
-                    |ui| {
-                        ui.set_width(content_w);
-                        ui.add_space(24.0);
+    area.auto_shrink([false, false]).show(ui, |ui| {
+        let available = ui.available_width();
+        let (content_w, pad) = if wide_canvas {
+            let w = (available - 96.0).max(480.0);
+            let p = ((available - w) / 2.0).max(48.0);
+            (w, p)
+        } else {
+            let w = (available - 96.0).clamp(480.0, 960.0);
+            let p = ((available - w) / 2.0).max(28.0);
+            (w, p)
+        };
+        ui.horizontal(|ui| {
+            ui.add_space(pad);
+            ui.allocate_ui_with_layout(vec2(content_w, 0.0), Layout::top_down(Align::Min), |ui| {
+                ui.set_width(content_w);
+                ui.add_space(24.0);
 
-                        draw_breadcrumbs(ui, ancestors, locale, &mut action);
-                        ui.add_space(12.0);
+                draw_breadcrumbs(ui, ancestors, locale, &mut action);
+                ui.add_space(12.0);
 
-                        if capsule.native {
-                            // Strip newlines if pasted or typed, ensuring subject remains single-concept
-                            if capsule.subject.contains('\n') || capsule.subject.contains('\r') {
-                                capsule.subject = capsule.subject.replace(['\r', '\n'], " ");
-                                action.changed = true;
+                if capsule.native {
+                    // Strip newlines if pasted or typed, ensuring subject remains single-concept
+                    if capsule.subject.contains('\n') || capsule.subject.contains('\r') {
+                        capsule.subject = capsule.subject.replace(['\r', '\n'], " ");
+                        action.changed = true;
+                    }
+                    let response = ui.add(
+                        TextEdit::multiline(&mut capsule.subject)
+                            .font(FontId::new(34.0, theme::display()))
+                            .text_color(theme::INK)
+                            .frame(Frame::NONE)
+                            .margin(Margin::same(0))
+                            .desired_width(content_w)
+                            .desired_rows(1)
+                            .hint_text(t(locale, Key::UntitledPage)),
+                    );
+                    if response.changed() {
+                        if capsule.subject.contains('\n') || capsule.subject.contains('\r') {
+                            capsule.subject = capsule.subject.replace(['\r', '\n'], " ");
+                        }
+                        action.changed = true;
+                    }
+                    // A rename is committed when the title loses focus,
+                    // not on every keystroke: rewriting every `[[link]]`
+                    // in the vault mid-word would be destructive.
+                    let title_id =
+                        egui::Id::new(("subject-before-edit", capsule.message_id.clone()));
+                    if response.gained_focus() {
+                        ui.ctx()
+                            .data_mut(|data| data.insert_temp(title_id, capsule.subject.clone()));
+                    }
+                    if response.lost_focus() {
+                        let before = ui
+                            .ctx()
+                            .data_mut(|data| data.remove_temp::<String>(title_id));
+                        if let Some(before) = before {
+                            if !before.trim().is_empty()
+                                && links::normalise(&before) != links::normalise(&capsule.subject)
+                            {
+                                action.rename_from = Some(before);
                             }
-                            let response = ui.add(
-                                TextEdit::multiline(&mut capsule.subject)
-                                    .font(FontId::new(34.0, theme::display()))
-                                    .text_color(theme::INK)
-                                    .frame(Frame::NONE)
-                                    .margin(Margin::same(0))
-                                    .desired_width(content_w)
-                                    .desired_rows(1)
-                                    .hint_text(t(locale, Key::UntitledPage)),
-                            );
-                            if response.changed() {
-                                if capsule.subject.contains('\n') || capsule.subject.contains('\r') {
-                                    capsule.subject = capsule.subject.replace(['\r', '\n'], " ");
-                                }
-                                action.changed = true;
-                            }
-                            // A rename is committed when the title loses focus,
-                            // not on every keystroke: rewriting every `[[link]]`
-                            // in the vault mid-word would be destructive.
-                            let title_id =
-                                egui::Id::new(("subject-before-edit", capsule.message_id.clone()));
-                            if response.gained_focus() {
-                                ui.ctx().data_mut(|data| {
-                                    data.insert_temp(title_id, capsule.subject.clone())
-                                });
-                            }
-                            if response.lost_focus() {
-                                let before = ui
-                                    .ctx()
-                                    .data_mut(|data| data.remove_temp::<String>(title_id));
-                                if let Some(before) = before {
-                                    if !before.trim().is_empty()
-                                        && links::normalise(&before)
-                                            != links::normalise(&capsule.subject)
-                                    {
-                                        action.rename_from = Some(before);
-                                    }
-                                }
-                            }
-                        } else {
-                            ui.add(
-                                Label::new(
-                                    RichText::new(if capsule.subject.is_empty() {
-                                        t(locale, Key::Untitled)
-                                    } else {
-                                        &capsule.subject
-                                    })
-                                    .family(theme::display())
-                                    .size(34.0)
-                                    .color(theme::INK),
-                                )
-                                .wrap(),
-                            );
+                        }
+                    }
+                } else {
+                    ui.add(
+                        Label::new(
+                            RichText::new(if capsule.subject.is_empty() {
+                                t(locale, Key::Untitled)
+                            } else {
+                                &capsule.subject
+                            })
+                            .family(theme::display())
+                            .size(34.0)
+                            .color(theme::INK),
+                        )
+                        .wrap(),
+                    );
+                }
+
+                ui.add_space(12.0);
+                if document_meta(ui, capsule, locale) {
+                    action.changed = true;
+                }
+                ui.add_space(28.0);
+
+                if !capsule.native {
+                    read_only_notice(ui, capsule, locale);
+                    ui.add_space(18.0);
+                    if secondary_button(ui, Some(Icon::Mail), t(locale, Key::NavPreview), 30.0)
+                        .clicked()
+                    {
+                        action.view = Some(View::Mail);
+                    }
+                    ui.add_space(70.0);
+                } else {
+                    let mut block_op: Option<(usize, BlockOp)> = None;
+                    let block_count = capsule.blocks.len();
+                    for index in 0..block_count {
+                        let mut block = capsule.blocks[index].clone();
+                        let kind = block_type(&block).to_string();
+
+                        // Eliminate duplicate title: if block 0 is an H1 with identical subject text, skip rendering it.
+                        if index == 0 && is_duplicate_heading(&block, &capsule.subject) {
+                            continue;
                         }
 
-                        ui.add_space(12.0);
-                        if document_meta(ui, capsule, locale) {
+                        let (changed, op) = draw_block_row(
+                            ui,
+                            &mut block,
+                            index,
+                            block_count,
+                            &mut capsule.attachments,
+                            locale,
+                        );
+                        if changed {
+                            capsule.blocks[index] = block;
                             action.changed = true;
                         }
-                        ui.add_space(28.0);
+                        if op.is_some() {
+                            block_op = op.map(|op| (index, op));
+                        }
+                        ui.add_space(match kind.as_str() {
+                            "heading" => 20.0,
+                            "todo_list" => 16.0,
+                            "callout" => 16.0,
+                            "unsupported" => 12.0,
+                            _ => 10.0,
+                        });
+                    }
 
-                        if !capsule.native {
-                            read_only_notice(ui, capsule, locale);
-                            ui.add_space(18.0);
-                            if secondary_button(ui, Some(Icon::Mail), t(locale, Key::NavPreview), 30.0)
-                                .clicked()
-                            {
-                                action.view = Some(View::Mail);
-                            }
-                            ui.add_space(70.0);
-                        } else {
-                            let mut block_op: Option<(usize, BlockOp)> = None;
-                            let block_count = capsule.blocks.len();
-                            for index in 0..block_count {
-                                let mut block = capsule.blocks[index].clone();
-                                let kind = block_type(&block).to_string();
-
-                                // Eliminate duplicate title: if block 0 is an H1 with identical subject text, skip rendering it.
-                                if index == 0 && is_duplicate_heading(&block, &capsule.subject) {
-                                    continue;
-                                }
-
-                                let (changed, op) = draw_block_row(
-                                    ui,
-                                    &mut block,
-                                    index,
-                                    block_count,
-                                    &mut capsule.attachments,
-                                    locale,
-                                );
-                                if changed {
-                                    capsule.blocks[index] = block;
+                    if let Some((index, op)) = block_op {
+                        match op {
+                            BlockOp::Delete => {
+                                if index < capsule.blocks.len() {
+                                    capsule.blocks.remove(index);
                                     action.changed = true;
                                 }
-                                if op.is_some() {
-                                    block_op = op.map(|op| (index, op));
-                                }
-                                ui.add_space(match kind.as_str() {
-                                    "heading" => 20.0,
-                                    "todo_list" => 16.0,
-                                    "callout" => 16.0,
-                                    "unsupported" => 12.0,
-                                    _ => 10.0,
-                                });
                             }
-
-                            if let Some((index, op)) = block_op {
-                                match op {
-                                    BlockOp::Delete => {
-                                        if index < capsule.blocks.len() {
-                                            capsule.blocks.remove(index);
-                                            action.changed = true;
-                                        }
-                                    }
-                                    BlockOp::Up if index > 0 => {
-                                        capsule.blocks.swap(index, index - 1);
-                                        action.changed = true;
-                                    }
-                                    BlockOp::Down if index + 1 < capsule.blocks.len() => {
-                                        capsule.blocks.swap(index, index + 1);
-                                        action.changed = true;
-                                    }
-                                    BlockOp::SetLevel(level) => {
-                                        if let Some(block) = capsule.blocks.get_mut(index) {
-                                            block["data"]["level"] = json!(level);
-                                            action.changed = true;
-                                        }
-                                    }
-                                    BlockOp::TransformTo(target) => {
-                                        if let Some(block) = capsule.blocks.get_mut(index) {
-                                            crate::blocks::transform_block(block, target, locale);
-                                            action.changed = true;
-                                        }
-                                    }
-                                    BlockOp::InsertBelow(kind, text) => {
-                                        let mut new_b = kind.block(locale);
-                                        crate::mime::set_block_text(&mut new_b, text);
-                                        if index + 1 <= capsule.blocks.len() {
-                                            capsule.blocks.insert(index + 1, new_b);
-                                        } else {
-                                            capsule.blocks.push(new_b);
-                                        }
-                                        action.changed = true;
-                                    }
-                                    BlockOp::SplitParagraph {
-                                        before,
-                                        target_kind,
-                                        target_level,
-                                        target_text,
-                                        after,
-                                    } => {
-                                        let mut new_blocks = Vec::new();
-                                        if !before.is_empty() {
-                                            let mut b_before = BlockKind::Text.block(locale);
-                                            crate::mime::set_block_text(&mut b_before, before);
-                                            new_blocks.push(b_before);
-                                        }
-                                        let mut b_target = target_kind.block(locale);
-                                        crate::mime::set_block_text(&mut b_target, target_text);
-                                        if let Some(lvl) = target_level {
-                                            b_target["data"]["level"] = json!(lvl);
-                                        }
-                                        new_blocks.push(b_target);
-                                        if !after.is_empty() {
-                                            let mut b_after = BlockKind::Text.block(locale);
-                                            crate::mime::set_block_text(&mut b_after, after);
-                                            new_blocks.push(b_after);
-                                        }
-                                        capsule.blocks.splice(index..=index, new_blocks);
-                                        action.changed = true;
-                                    }
-                                    _ => {}
-                                }
-                            }
-
-                            ui.add_space(8.0);
-                            ui.horizontal(|ui| {
-                                ui.add_space(2.0);
-                                if let Some(kind) = add_block_menu(ui, locale) {
-                                    capsule.blocks.push(kind.block(locale));
-                                    action.changed = true;
-                                }
-                                ui.add_space(4.0);
-                                let _ = hud(ui, t(locale, Key::SlashHint), theme::FAINT);
-                            });
-                            ui.add_space(18.0);
-                            links_panel(ui, link_context, locale, &mut action);
-                            ui.add_space(18.0);
-                            if attachments_editor(ui, capsule, locale) {
+                            BlockOp::Up if index > 0 => {
+                                capsule.blocks.swap(index, index - 1);
                                 action.changed = true;
                             }
-                            ui.add_space(90.0);
+                            BlockOp::Down if index + 1 < capsule.blocks.len() => {
+                                capsule.blocks.swap(index, index + 1);
+                                action.changed = true;
+                            }
+                            BlockOp::SetLevel(level) => {
+                                if let Some(block) = capsule.blocks.get_mut(index) {
+                                    block["data"]["level"] = json!(level);
+                                    action.changed = true;
+                                }
+                            }
+                            BlockOp::TransformTo(target) => {
+                                if let Some(block) = capsule.blocks.get_mut(index) {
+                                    crate::blocks::transform_block(block, target, locale);
+                                    action.changed = true;
+                                }
+                            }
+                            BlockOp::InsertBelow(kind, text) => {
+                                let mut new_b = kind.block(locale);
+                                crate::mime::set_block_text(&mut new_b, text);
+                                if index + 1 <= capsule.blocks.len() {
+                                    capsule.blocks.insert(index + 1, new_b);
+                                } else {
+                                    capsule.blocks.push(new_b);
+                                }
+                                action.changed = true;
+                            }
+                            BlockOp::AttachAudio {
+                                name,
+                                cid,
+                                mime,
+                                b64,
+                                size,
+                            } => {
+                                capsule.attachments.push(crate::mime::Attachment {
+                                    name,
+                                    cid,
+                                    mime_type: mime,
+                                    content: String::new(),
+                                    size_bytes: size,
+                                    raw_b64: Some(b64),
+                                });
+                                action.changed = true;
+                            }
+                            BlockOp::SplitParagraph {
+                                before,
+                                target_kind,
+                                target_level,
+                                target_text,
+                                after,
+                            } => {
+                                let mut new_blocks = Vec::new();
+                                if !before.is_empty() {
+                                    let mut b_before = BlockKind::Text.block(locale);
+                                    crate::mime::set_block_text(&mut b_before, before);
+                                    new_blocks.push(b_before);
+                                }
+                                let mut b_target = target_kind.block(locale);
+                                crate::mime::set_block_text(&mut b_target, target_text);
+                                if let Some(lvl) = target_level {
+                                    b_target["data"]["level"] = json!(lvl);
+                                }
+                                new_blocks.push(b_target);
+                                if !after.is_empty() {
+                                    let mut b_after = BlockKind::Text.block(locale);
+                                    crate::mime::set_block_text(&mut b_after, after);
+                                    new_blocks.push(b_after);
+                                }
+                                capsule.blocks.splice(index..=index, new_blocks);
+                                action.changed = true;
+                            }
+                            _ => {}
                         }
-                    },
-                );
+                    }
+
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space(2.0);
+                        if let Some(kind) = add_block_menu(ui, locale) {
+                            capsule.blocks.push(kind.block(locale));
+                            action.changed = true;
+                        }
+                        ui.add_space(4.0);
+                        let _ = hud(ui, t(locale, Key::SlashHint), theme::FAINT);
+                    });
+                    ui.add_space(18.0);
+                    links_panel(ui, link_context, locale, &mut action);
+                    ui.add_space(18.0);
+                    if attachments_editor(ui, capsule, locale) {
+                        action.changed = true;
+                    }
+                    ui.add_space(90.0);
+                }
             });
         });
+    });
     action
 }
 
@@ -432,7 +441,11 @@ pub fn link_chip(ui: &mut Ui, label: &str, missing: bool) -> Response {
     let galley = ui.painter().layout_no_wrap(
         text,
         FontId::new(11.5, theme::medium()),
-        if missing { theme::MUTED } else { theme::ACCENT_INK },
+        if missing {
+            theme::MUTED
+        } else {
+            theme::ACCENT_INK
+        },
     );
     let size = galley.size() + vec2(18.0, 10.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
@@ -441,12 +454,21 @@ pub fn link_chip(ui: &mut Ui, label: &str, missing: bool) -> Response {
     } else {
         theme::WASH
     };
-    ui.painter()
-        .rect(rect, theme::RADIUS, fill, theme::hairline(), egui::StrokeKind::Inside);
+    ui.painter().rect(
+        rect,
+        theme::RADIUS,
+        fill,
+        theme::hairline(),
+        egui::StrokeKind::Inside,
+    );
     ui.painter().galley_with_override_text_color(
         rect.min + vec2(9.0, 5.0),
         galley,
-        if missing { theme::MUTED } else { theme::ACCENT_INK },
+        if missing {
+            theme::MUTED
+        } else {
+            theme::ACCENT_INK
+        },
     );
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
@@ -568,19 +590,11 @@ pub fn document_meta(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool
                     if response.changed() {
                         ui.data_mut(|data| data.insert_temp(tag_id, buffer.clone()));
                     }
-                    let enter =
-                        response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+                    let enter = response.lost_focus()
+                        && ui.input(|input| input.key_pressed(egui::Key::Enter));
                     if enter
-                        || menu_row(
-                            ui,
-                            None,
-                            t(locale, Key::AddTag),
-                            None,
-                            false,
-                            true,
-                            false,
-                        )
-                        .clicked()
+                        || menu_row(ui, None, t(locale, Key::AddTag), None, false, true, false)
+                            .clicked()
                     {
                         let tag = buffer.trim().to_string();
                         if !tag.is_empty() && !capsule.tags.iter().any(|existing| existing == &tag)
@@ -627,7 +641,11 @@ pub fn read_only_notice(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
             bottom: 12,
         })
         .show(ui, |ui| {
-            let _ = hud(ui, t(locale, Key::ExternalReadOnlyNotice), theme::BADGE_BETA);
+            let _ = hud(
+                ui,
+                t(locale, Key::ExternalReadOnlyNotice),
+                theme::BADGE_BETA,
+            );
             ui.add_space(7.0);
             ui.add(
                 Label::new(
@@ -738,9 +756,7 @@ pub fn attachments_editor(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) ->
                             mime_type: guess_mime(&name),
                             content: String::from_utf8_lossy(&bytes).to_string(),
                             size_bytes: bytes.len(),
-                            raw_b64: Some(
-                                base64::engine::general_purpose::STANDARD.encode(&bytes),
-                            ),
+                            raw_b64: Some(base64::engine::general_purpose::STANDARD.encode(&bytes)),
                         });
                         changed = true;
                     }
@@ -773,8 +789,14 @@ pub fn attachments_editor(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) ->
             ui.add_space(6.0);
             let _ = hud(ui, &human_bytes(attachment.size_bytes), theme::FAINT);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if icon_button(ui, Icon::Trash, t(locale, Key::RemoveAttachment), true, false)
-                    .clicked()
+                if icon_button(
+                    ui,
+                    Icon::Trash,
+                    t(locale, Key::RemoveAttachment),
+                    true,
+                    false,
+                )
+                .clicked()
                 {
                     remove = Some(index);
                 }
@@ -801,11 +823,7 @@ pub(crate) fn sanitize_cid(name: &str) -> String {
 }
 
 pub(crate) fn guess_mime(name: &str) -> String {
-    let extension = name
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase();
+    let extension = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
     match extension.as_str() {
         "csv" => "text/csv",
         "json" => "application/json",
@@ -828,4 +846,3 @@ pub(crate) fn guess_mime(name: &str) -> String {
     }
     .to_string()
 }
-

@@ -324,16 +324,16 @@ pub fn score_command(query: &str, command: &PaletteCommand) -> i32 {
     score
 }
 
-pub fn rank_commands<'a>(query: &str, commands: &'a [PaletteCommand]) -> Vec<(&'a PaletteCommand, i32)> {
+pub fn rank_commands<'a>(
+    query: &str,
+    commands: &'a [PaletteCommand],
+) -> Vec<(&'a PaletteCommand, i32)> {
     let mut ranked: Vec<(&PaletteCommand, i32)> = commands
         .iter()
         .map(|command| (command, score_command(query, command)))
         .filter(|(_, score)| *score > 0)
         .collect();
-    ranked.sort_by(|a, b| {
-        b.1.cmp(&a.1)
-            .then_with(|| a.0.title.cmp(&b.0.title))
-    });
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.title.cmp(&b.0.title)));
     ranked
 }
 
@@ -480,7 +480,12 @@ pub fn subject_boost(query: &str, subject: &str, tags: &[String]) -> f32 {
 }
 
 /// Cheap full-text haystack for one capsule, used to re-check BM25 hits.
-pub fn capsule_tokens(subject: &str, tags: &[String], blocks: &str, attachments: &str) -> Vec<String> {
+pub fn capsule_tokens(
+    subject: &str,
+    tags: &[String],
+    blocks: &str,
+    attachments: &str,
+) -> Vec<String> {
     let mut text = String::with_capacity(subject.len() + blocks.len() + 64);
     text.push_str(subject);
     text.push(' ');
@@ -509,10 +514,7 @@ mod tests {
 
     fn index() -> Bm25Index {
         let mut index = Bm25Index::default();
-        index.add(
-            "a",
-            tokenize("mmap arena allocator zero copy vault"),
-        );
+        index.add("a", tokenize("mmap arena allocator zero copy vault"));
         index.add(
             "b",
             tokenize("allocator latency budget and mmap experiments"),
@@ -602,7 +604,10 @@ mod tests {
     fn related_index() -> Bm25Index {
         let mut index = Bm25Index::default();
         index.add("a", tokenize("mmap arena allocator zero copy vault"));
-        index.add("b", tokenize("allocator latency budget and mmap experiments"));
+        index.add(
+            "b",
+            tokenize("allocator latency budget and mmap experiments"),
+        );
         index.add("c", tokenize("цветы и кофе"));
         index
     }

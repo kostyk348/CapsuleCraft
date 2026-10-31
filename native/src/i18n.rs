@@ -63,7 +63,10 @@ impl Locale {
             return;
         };
         let _ = fs::create_dir_all(&dir);
-        let _ = fs::write(dir.join("native-settings.json"), format!("{}\n", self.code()));
+        let _ = fs::write(
+            dir.join("native-settings.json"),
+            format!("{}\n", self.code()),
+        );
     }
 }
 
@@ -272,6 +275,10 @@ strings! {
         "Browser-recorded webm/opus cannot be decoded by the offline player. Attach mp3/wav/ogg/flac instead."
     ),
     AudioDeviceFail => ("Аудиоустройство недоступно.", "No audio output device."),
+    AudioRecord => ("Записать с микрофона", "Record from mic"),
+    AudioRecStop => ("Остановить запись", "Stop recording"),
+    AudioRecLive => ("Идёт запись", "Recording"),
+    AudioNoMic => ("Микрофон недоступен.", "No microphone available."),
     Transcript => ("Расшифровка", "Transcript"),
     CanvasEmpty => ("На доске пока нет элементов", "The board has no elements yet"),
     CanvasAddSticky => ("Стикер", "Sticky"),

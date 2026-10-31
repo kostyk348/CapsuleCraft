@@ -235,7 +235,7 @@ fn strip_invisible(html: &str) -> String {
         };
         out.push_str(&rest[..index]);
         let close = match needle {
-            "<!--" => "-->" .to_string(),
+            "<!--" => "-->".to_string(),
             "<style" => "</style>".to_string(),
             _ => "</script>".to_string(),
         };
@@ -328,7 +328,10 @@ fn collapse_spaces(text: &str) -> String {
     let mut out = String::with_capacity(decoded.len());
     let mut pending_space = false;
     for ch in decoded.chars() {
-        if matches!(ch, '\u{034f}' | '\u{200b}' | '\u{200c}' | '\u{200d}' | '\u{feff}') {
+        if matches!(
+            ch,
+            '\u{034f}' | '\u{200b}' | '\u{200c}' | '\u{200d}' | '\u{feff}'
+        ) {
             continue;
         }
         if ch.is_whitespace() {
@@ -382,7 +385,10 @@ pub fn decode_entities(input: &str) -> String {
             _ => None,
         };
         let decoded = decoded.or_else(|| {
-            if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
+            if let Some(hex) = entity
+                .strip_prefix("#x")
+                .or_else(|| entity.strip_prefix("#X"))
+            {
                 u32::from_str_radix(hex, 16).ok().and_then(char::from_u32)
             } else if let Some(dec) = entity.strip_prefix('#') {
                 dec.parse::<u32>().ok().and_then(char::from_u32)
@@ -419,14 +425,20 @@ mod tests {
             .spans()
             .iter()
             .any(|span| span.bold && span.text == "42 €"));
-        assert_eq!(blocks[2], MailBlock::Bullet(vec![Span::plain("one".into())]));
+        assert_eq!(
+            blocks[2],
+            MailBlock::Bullet(vec![Span::plain("one".into())])
+        );
         assert_eq!(blocks[3].text(), "two");
     }
 
     #[test]
     fn decodes_entities_and_drops_zero_width_padding() {
         assert_eq!(decode_entities("a&amp;b &#8212; c"), "a&b — c");
-        assert_eq!(collapse_spaces("a&amp;b &#8212; c&nbsp;&#x200B;d"), "a&b — c d");
+        assert_eq!(
+            collapse_spaces("a&amp;b &#8212; c&nbsp;&#x200B;d"),
+            "a&b — c d"
+        );
     }
 
     #[test]
@@ -438,10 +450,14 @@ mod tests {
 
     #[test]
     fn keeps_links_but_only_safe_schemes() {
-        let blocks = html_to_blocks("<p><a href=\"https://example.com\">site</a> <a href=\"javascript:evil\">bad</a></p>");
+        let blocks = html_to_blocks(
+            "<p><a href=\"https://example.com\">site</a> <a href=\"javascript:evil\">bad</a></p>",
+        );
         let spans = blocks[0].spans();
         assert_eq!(spans[0].link.as_deref(), Some("https://example.com"));
-        assert!(spans.iter().any(|span| span.text.contains("bad") && span.link.is_none()));
+        assert!(spans
+            .iter()
+            .any(|span| span.text.contains("bad") && span.link.is_none()));
     }
 
     #[test]

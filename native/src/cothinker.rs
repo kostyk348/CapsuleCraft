@@ -76,14 +76,108 @@ pub fn extract_keywords(text: &str, limit: usize) -> Vec<String> {
     use std::collections::HashMap;
 
     let stop: &[&str] = &[
-        "и", "в", "во", "не", "что", "он", "на", "я", "с", "со", "как", "а", "то", "все", "она",
-        "так", "его", "но", "да", "ты", "к", "у", "же", "вы", "за", "бы", "по", "только", "ее",
-        "мне", "было", "вот", "от", "меня", "еще", "нет", "о", "из", "ему", "теперь", "когда",
-        "даже", "ну", "если", "уже", "или", "ни", "быть", "был", "до", "вас", "там", "потом",
-        "себя", "может", "они", "где", "есть", "надо", "для", "мы", "тебя", "их", "чем", "это",
-        "the", "of", "to", "and", "a", "in", "that", "is", "was", "for", "it", "with", "as",
-        "on", "be", "at", "by", "this", "had", "not", "are", "but", "from", "or", "have", "an",
-        "they", "which", "one", "you", "were", "her", "all", "there", "would", "their", "we",
+        "и",
+        "в",
+        "во",
+        "не",
+        "что",
+        "он",
+        "на",
+        "я",
+        "с",
+        "со",
+        "как",
+        "а",
+        "то",
+        "все",
+        "она",
+        "так",
+        "его",
+        "но",
+        "да",
+        "ты",
+        "к",
+        "у",
+        "же",
+        "вы",
+        "за",
+        "бы",
+        "по",
+        "только",
+        "ее",
+        "мне",
+        "было",
+        "вот",
+        "от",
+        "меня",
+        "еще",
+        "нет",
+        "о",
+        "из",
+        "ему",
+        "теперь",
+        "когда",
+        "даже",
+        "ну",
+        "если",
+        "уже",
+        "или",
+        "ни",
+        "быть",
+        "был",
+        "до",
+        "вас",
+        "там",
+        "потом",
+        "себя",
+        "может",
+        "они",
+        "где",
+        "есть",
+        "надо",
+        "для",
+        "мы",
+        "тебя",
+        "их",
+        "чем",
+        "это",
+        "the",
+        "of",
+        "to",
+        "and",
+        "a",
+        "in",
+        "that",
+        "is",
+        "was",
+        "for",
+        "it",
+        "with",
+        "as",
+        "on",
+        "be",
+        "at",
+        "by",
+        "this",
+        "had",
+        "not",
+        "are",
+        "but",
+        "from",
+        "or",
+        "have",
+        "an",
+        "they",
+        "which",
+        "one",
+        "you",
+        "were",
+        "her",
+        "all",
+        "there",
+        "would",
+        "their",
+        "we",
     ];
 
     let mut freqs: HashMap<String, usize> = HashMap::new();
@@ -141,9 +235,25 @@ pub fn detect_risks(text: &str, data_points: usize, lang: Locale) -> Vec<RiskFin
     let mut risks = Vec::new();
 
     let abs_words = if lang == Locale::Ru {
-        &["всегда", "никогда", "100%", "гарантированно", "абсолютно", "точно", "без сомнений"][..]
+        &[
+            "всегда",
+            "никогда",
+            "100%",
+            "гарантированно",
+            "абсолютно",
+            "точно",
+            "без сомнений",
+        ][..]
     } else {
-        &["always", "never", "100%", "guaranteed", "absolutely", "definitely", "without doubt"][..]
+        &[
+            "always",
+            "never",
+            "100%",
+            "guaranteed",
+            "absolutely",
+            "definitely",
+            "without doubt",
+        ][..]
     };
 
     for w in abs_words {
@@ -167,9 +277,15 @@ pub fn detect_risks(text: &str, data_points: usize, lang: Locale) -> Vec<RiskFin
     }
 
     let has_safety = if lang == Locale::Ru {
-        lower.contains("риск") || lower.contains("буфер") || lower.contains("резерв") || lower.contains("fallback")
+        lower.contains("риск")
+            || lower.contains("буфер")
+            || lower.contains("резерв")
+            || lower.contains("fallback")
     } else {
-        lower.contains("risk") || lower.contains("buffer") || lower.contains("reserve") || lower.contains("fallback")
+        lower.contains("risk")
+            || lower.contains("buffer")
+            || lower.contains("reserve")
+            || lower.contains("fallback")
     };
 
     if !has_safety && text.len() > 100 {
@@ -198,9 +314,15 @@ pub fn detect_risks(text: &str, data_points: usize, lang: Locale) -> Vec<RiskFin
                 "Thin data points".into()
             },
             detail: if lang == Locale::Ru {
-                format!("В таблице всего {} точек данных. Тренды и выводы статистически неустойчивы.", data_points)
+                format!(
+                    "В таблице всего {} точек данных. Тренды и выводы статистически неустойчивы.",
+                    data_points
+                )
             } else {
-                format!("Only {} data points detected. Predictions are statistically fragile.", data_points)
+                format!(
+                    "Only {} data points detected. Predictions are statistically fragile.",
+                    data_points
+                )
             },
             quote: None,
         });
@@ -215,9 +337,25 @@ pub fn inspect_phrasing(text: &str, lang: Locale) -> PhrasingReport {
     let mut rep = PhrasingReport::default();
 
     let vague_list = if lang == Locale::Ru {
-        &["скоро", "быстро", "лучше", "оптимизировать", "гибкий", "проще", "эффективнее"][..]
+        &[
+            "скоро",
+            "быстро",
+            "лучше",
+            "оптимизировать",
+            "гибкий",
+            "проще",
+            "эффективнее",
+        ][..]
     } else {
-        &["soon", "quickly", "better", "optimize", "flexible", "easier", "efficient"][..]
+        &[
+            "soon",
+            "quickly",
+            "better",
+            "optimize",
+            "flexible",
+            "easier",
+            "efficient",
+        ][..]
     };
 
     for w in vague_list {
@@ -228,7 +366,10 @@ pub fn inspect_phrasing(text: &str, lang: Locale) -> PhrasingReport {
 
     for line in text.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("- [ ]") || trimmed.starts_with("- [x]") || trimmed.starts_with("TODO:") {
+        if trimmed.starts_with("- [ ]")
+            || trimmed.starts_with("- [x]")
+            || trimmed.starts_with("TODO:")
+        {
             rep.action_items_found += 1;
         }
         let words_cnt = trimmed.split_whitespace().count();
@@ -248,7 +389,10 @@ pub fn analyze_csv(csv: &str) -> Vec<CsvSeriesStat> {
         None => return Vec::new(),
     };
 
-    let headers: Vec<String> = header_line.split(',').map(|s| s.trim_matches('"').trim().to_string()).collect();
+    let headers: Vec<String> = header_line
+        .split(',')
+        .map(|s| s.trim_matches('"').trim().to_string())
+        .collect();
     if headers.is_empty() {
         return Vec::new();
     }
@@ -259,7 +403,12 @@ pub fn analyze_csv(csv: &str) -> Vec<CsvSeriesStat> {
         let parts: Vec<&str> = line.split(',').collect();
         for (i, p) in parts.iter().enumerate() {
             if i < numeric_data.len() {
-                let cleaned = p.trim_matches('"').trim().replace('$', "").replace('€', "").replace('%', "");
+                let cleaned = p
+                    .trim_matches('"')
+                    .trim()
+                    .replace('$', "")
+                    .replace('€', "")
+                    .replace('%', "");
                 if let Ok(v) = cleaned.parse::<f64>() {
                     numeric_data[i].push(v);
                 }
@@ -304,7 +453,10 @@ pub fn analyze_csv(csv: &str) -> Vec<CsvSeriesStat> {
             };
 
             stats.push(CsvSeriesStat {
-                column: headers.get(i).cloned().unwrap_or_else(|| format!("Col {}", i + 1)),
+                column: headers
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("Col {}", i + 1)),
                 count: n,
                 min,
                 max,
@@ -379,7 +531,10 @@ pub fn generate_cothink(
                 });
                 for c in &claims {
                     if lang == Locale::Ru {
-                        crit.push_str(&format!("• «{}» — на чем основана эта цифра? Заложен ли буфер на отклонение?\n", c));
+                        crit.push_str(&format!(
+                            "• «{}» — на чем основана эта цифра? Заложен ли буфер на отклонение?\n",
+                            c
+                        ));
                     } else {
                         crit.push_str(&format!("• “{}” — what is this figure based on? Is there a buffer for deviation?\n", c));
                     }
@@ -448,7 +603,11 @@ pub fn generate_cothink(
                 "### Core Essence & Context\n"
             });
             if !kw.is_empty() {
-                let topics_label = if lang == Locale::Ru { "Темы" } else { "Topics" };
+                let topics_label = if lang == Locale::Ru {
+                    "Темы"
+                } else {
+                    "Topics"
+                };
                 synth.push_str(&format!("**{}:** {}\n\n", topics_label, kw.join(" · ")));
             }
 
@@ -537,7 +696,14 @@ pub fn generate_cothink(
         }
 
         CoThinkMode::CounterArg => {
-            let reply_sub = format!("Re: {} (Co-Thinker)", if subject.is_empty() { "Capsule" } else { subject });
+            let reply_sub = format!(
+                "Re: {} (Co-Thinker)",
+                if subject.is_empty() {
+                    "Capsule"
+                } else {
+                    subject
+                }
+            );
             let mut body = String::new();
             body.push_str(if lang == Locale::Ru {
                 "## Альтернативный взгляд и контраргументы\n\n"
@@ -588,7 +754,10 @@ mod tests {
 
     #[test]
     fn test_lang_detect() {
-        assert_eq!(detect_lang("Привет, мир! Это тестовая страница"), Locale::Ru);
+        assert_eq!(
+            detect_lang("Привет, мир! Это тестовая страница"),
+            Locale::Ru
+        );
         assert_eq!(detect_lang("Hello world, this is English text"), Locale::En);
     }
 
@@ -649,7 +818,9 @@ mod tests {
         // 3. CounterArg
         let counter = generate_cothink(CoThinkMode::CounterArg, "Запуск", &blocks, &[], "");
         match counter {
-            CoThinkOutcome::ReplyCapsule { subject, blocks, .. } => {
+            CoThinkOutcome::ReplyCapsule {
+                subject, blocks, ..
+            } => {
                 assert_eq!(subject, "Re: Запуск (Co-Thinker)");
                 assert!(!blocks.is_empty());
             }
@@ -658,7 +829,13 @@ mod tests {
 
         // 4. DataInsight
         let csv = "Day,Sales\n1,10\n2,20";
-        let data = generate_cothink(CoThinkMode::DataInsight, "Запуск", &blocks, &[("sales.csv", csv)], "");
+        let data = generate_cothink(
+            CoThinkMode::DataInsight,
+            "Запуск",
+            &blocks,
+            &[("sales.csv", csv)],
+            "",
+        );
         match data {
             CoThinkOutcome::CalloutBlock(b) => {
                 assert_eq!(b["type"], "callout");
@@ -712,7 +889,13 @@ mod tests {
         }
 
         let csv = "Day,Sales\n1,10\n2,20\n3,35";
-        let data = generate_cothink(CoThinkMode::DataInsight, "Launch", &blocks, &[("sales.csv", csv)], "");
+        let data = generate_cothink(
+            CoThinkMode::DataInsight,
+            "Launch",
+            &blocks,
+            &[("sales.csv", csv)],
+            "",
+        );
         match data {
             CoThinkOutcome::CalloutBlock(b) => {
                 let c = b["data"]["content"].as_str().unwrap();

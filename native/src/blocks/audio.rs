@@ -1,23 +1,30 @@
 //! Audio player / note block renderer.
 
 use base64::Engine;
+use chrono::Local;
 use egui::{
-    vec2, Align, FontFamily, FontId, Frame, Layout, Margin, Rect, RichText, Sense, Stroke,
+    vec2, Align, Color32, FontFamily, FontId, Frame, Layout, Margin, Rect, RichText, Sense, Stroke,
     TextEdit, Ui,
 };
 use serde_json::{json, Value};
 
+use super::BlockOp;
+use crate::audio_recorder::{self, RecState};
 use crate::i18n::{t, Key, Locale};
 use crate::icons::{self, Icon};
 use crate::mime::Attachment;
 use crate::{audio_player, theme};
 use crate::{guess_mime, hud, sanitize_cid, text_button};
 
+/// The one non-palette color in the app: a live mic take is universally red.
+const REC_RED: Color32 = Color32::from_rgb(0xe5, 0x48, 0x3d);
+
 pub fn draw_audio_block(
     ui: &mut Ui,
     block: &mut Value,
     attachments: &[Attachment],
     locale: Locale,
+    op: &mut Option<BlockOp>,
 ) -> bool {
     let mut changed = false;
     let audio_cid = block
@@ -77,29 +84,123 @@ pub fn draw_audio_block(
                                     .to_string();
                                 let cid = format!("audio-{}", sanitize_cid(&name));
                                 let mime = guess_mime(&name);
+                                let size = bytes.len();
                                 let encoded =
                                     base64::engine::general_purpose::STANDARD.encode(&bytes);
-                                let size = bytes.len();
                                 block["data"]["audioCid"] = json!(format!("cid:{cid}"));
                                 block["data"]["audioMime"] = json!(mime.clone());
                                 block["data"]["audioName"] = json!(name.clone());
-                                block["data"]["__attach"] = json!({
-                                    "name": name,
-                                    "cid": cid,
-                                    "mime": mime,
-                                    "b64": encoded,
-                                    "size": size,
+                                // The renderer only sees an immutable attachment
+                                // slice — ask the document view to add it.
+                                *op = Some(BlockOp::AttachAudio {
+                                    name,
+                                    cid,
+                                    mime,
+                                    b64: encoded,
+                                    size,
+                                });
+                                changed = true;
+                            }
+                        }
+                    }
+                    let recording = matches!(audio_recorder::state(), RecState::Recording { .. });
+                    if !recording
+                        && text_button(
+                            ui,
+                            Some(Icon::Record),
+                            t(locale, Key::AudioRecord),
+                            false,
+                        )
+                        .clicked()
+                    {
+                        // Playback and capture share the device; keep them apart.
+                        audio_player::stop();
+                        let _ = audio_recorder::record();
+                    }
+                });
+            });
+            ui.add_space(10.0);
+
+            if matches!(audio_recorder::state(), RecState::Recording { .. }) {
+                // ── Live take: pulsing dot, honest clock, RMS level meter ──
+                ui.horizontal(|ui| {
+                    let now = ui.input(|input| input.time);
+                    let pulse = (0.55 + 0.45 * (now * 4.0).sin()) as f32;
+                    let (dot_rect, _) =
+                        ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
+                    ui.painter().circle_filled(
+                        dot_rect.center(),
+                        4.0 * pulse,
+                        theme::fade(REC_RED, pulse),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(t(locale, Key::AudioRecLive))
+                            .size(12.0)
+                            .color(REC_RED),
+                    );
+                    ui.add_space(6.0);
+                    let _ = hud(
+                        ui,
+                        &audio_recorder::format_clock(audio_recorder::elapsed_secs()),
+                        REC_RED,
+                    );
+                    let level = audio_recorder::level().clamp(0.0, 1.0);
+                    let meter_width = (ui.available_width() - 150.0).max(40.0);
+                    let (meter, _) = ui
+                        .allocate_exact_size(vec2(meter_width, 8.0), Sense::hover());
+                    ui.painter().rect_filled(
+                        Rect::from_min_size(meter.min, vec2(meter.width(), 8.0)),
+                        4.0,
+                        theme::WASH,
+                    );
+                    if level > 0.001 {
+                        ui.painter().rect_filled(
+                            Rect::from_min_size(
+                                meter.min,
+                                vec2(meter.width() * level, 8.0),
+                            ),
+                            4.0,
+                            REC_RED,
+                        );
+                    }
+                    if text_button(ui, Some(Icon::Close), t(locale, Key::AudioRecStop), true)
+                        .clicked()
+                    {
+                        if let Some(clip) = audio_recorder::stop() {
+                            // A clicked-then-released empty take is not a note.
+                            if clip.duration_secs >= 0.2 {
+                                let name =
+                                    format!("voice-{}.wav", Local::now().format("%Y%m%d-%H%M%S"));
+                                let cid = format!(
+                                    "voice-{}",
+                                    chrono::Utc::now().timestamp_millis()
+                                );
+                                let mime = "audio/wav".to_string();
+                                let size = clip.wav.len();
+                                let b64 = base64::engine::general_purpose::STANDARD
+                                    .encode(&clip.wav);
+                                block["data"]["audioCid"] = json!(format!("cid:{cid}"));
+                                block["data"]["audioMime"] = json!(mime.clone());
+                                block["data"]["audioName"] = json!(name.clone());
+                                block["data"]["duration"] =
+                                    json!(audio_recorder::format_clock(clip.duration_secs as f64));
+                                block["data"]["waveform"] = json!(clip.bars);
+                                *op = Some(BlockOp::AttachAudio {
+                                    name,
+                                    cid,
+                                    mime,
+                                    b64,
+                                    size,
                                 });
                                 changed = true;
                             }
                         }
                     }
                 });
-            });
-            ui.add_space(10.0);
-
-            // Waveform: real amplitude values when the file carried them, bars otherwise.
-            let waveform: Vec<f32> = block
+            } else {
+                // Waveform: real amplitude values when the file carried them, bars otherwise.
+                let waveform: Vec<f32> = block
                 .get("data")
                 .and_then(|data| data.get("waveform"))
                 .and_then(Value::as_array)
@@ -129,6 +230,7 @@ pub fn draw_audio_block(
                     ),
                     Stroke::new(1.0, theme::fade(theme::ACCENT_INK, 0.55)),
                 );
+            }
             }
 
             ui.add_space(8.0);
@@ -236,6 +338,9 @@ pub fn draw_audio_block(
                     audio_player::PlayError::Unsupported => t(locale, Key::AudioUnsupportedFmt),
                 };
                 let _ = hud(ui, message, theme::FAINT);
+            }
+            if audio_recorder::last_error().is_some() {
+                let _ = hud(ui, t(locale, Key::AudioNoMic), theme::FAINT);
             }
         });
     changed

@@ -173,13 +173,8 @@ pub fn draw_imap_modal(
                 }
                 if config.enabled {
                     ui.add_space(8.0);
-                    if secondary_button(
-                        ui,
-                        Some(Icon::Reload),
-                        t(locale, Key::ImapSyncNow),
-                        28.0,
-                    )
-                    .clicked()
+                    if secondary_button(ui, Some(Icon::Reload), t(locale, Key::ImapSyncNow), 28.0)
+                        .clicked()
                     {
                         action = ImapModalAction::SyncNow;
                     }

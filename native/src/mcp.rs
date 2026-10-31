@@ -38,9 +38,11 @@ pub fn mcp_config_json(exe_path: &Path, _vault_dir: &Path) -> Value {
 
 /// Print MCP configuration snippets for various clients and exit.
 pub fn print_config(launch: &Launch) {
-    let exe = std::env::current_exe()
-        .unwrap_or_else(|_| PathBuf::from("capsuleos-native.exe"));
-    let vault = launch.vault.clone().unwrap_or_else(crate::vault::get_active_vault_dir);
+    let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("capsuleos-native.exe"));
+    let vault = launch
+        .vault
+        .clone()
+        .unwrap_or_else(crate::vault::get_active_vault_dir);
     let cfg = mcp_config_json(&exe, &vault);
 
     println!("=== CapsuleCraft MCP Server Configuration ===");
@@ -52,10 +54,7 @@ pub fn print_config(launch: &Launch) {
     println!("{}", serde_json::to_string_pretty(&cfg).unwrap_or_default());
     println!();
     println!("--- Claude Code CLI Command ---");
-    println!(
-        "claude mcp add capsulecraft \"{}\" --mcp",
-        exe.display()
-    );
+    println!("claude mcp add capsulecraft \"{}\" --mcp", exe.display());
     println!();
 }
 
@@ -329,7 +328,10 @@ impl McpHandler {
         } else {
             let active = crate::vault::get_active_vault_dir();
             if self.vault.dir != active {
-                eprintln!("[capsulecraft-mcp] Active vault changed to: {}", active.display());
+                eprintln!(
+                    "[capsulecraft-mcp] Active vault changed to: {}",
+                    active.display()
+                );
                 self.vault = Vault::load(active);
             } else {
                 self.vault.reload();
@@ -578,16 +580,12 @@ impl McpHandler {
 
     fn find_capsule(&self, id: &str) -> Option<(usize, &Capsule)> {
         let clean = id.trim();
-        self.vault
-            .capsules
-            .iter()
-            .enumerate()
-            .find(|(_, c)| {
-                c.message_id == clean
-                    || c.message_id.trim_matches(|ch| ch == '<' || ch == '>') == clean
-                    || c.file_name.eq_ignore_ascii_case(clean)
-                    || c.subject.eq_ignore_ascii_case(clean)
-            })
+        self.vault.capsules.iter().enumerate().find(|(_, c)| {
+            c.message_id == clean
+                || c.message_id.trim_matches(|ch| ch == '<' || ch == '>') == clean
+                || c.file_name.eq_ignore_ascii_case(clean)
+                || c.subject.eq_ignore_ascii_case(clean)
+        })
     }
 
     fn tool_capsule_read(&self, args: &Value) -> Result<Value, String> {
@@ -659,11 +657,10 @@ impl McpHandler {
         let mut results: Vec<Value> = Vec::new();
         for hit in hits.into_iter().take(limit) {
             if let Some((text, capsule)) = capsule_texts.get(&hit.id) {
-                let snippet = search::snippet(text, query, 160)
-                    .unwrap_or_else(|| {
-                        let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-                        lines.first().copied().unwrap_or("").to_string()
-                    });
+                let snippet = search::snippet(text, query, 160).unwrap_or_else(|| {
+                    let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+                    lines.first().copied().unwrap_or("").to_string()
+                });
 
                 results.push(json!({
                     "id": capsule.message_id,
@@ -877,7 +874,11 @@ impl McpHandler {
         capsule.tags = inherited_tags;
 
         let mut blocks = Vec::new();
-        for p in content.split("\n\n").map(str::trim).filter(|p| !p.is_empty()) {
+        for p in content
+            .split("\n\n")
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+        {
             blocks.push(json!({
                 "id": new_block_id("paragraph"),
                 "type": "paragraph",
@@ -924,12 +925,21 @@ impl McpHandler {
         let append_markdown = args
             .get("append_markdown")
             .and_then(Value::as_str)
-            .or_else(|| if action == Some("append_text") { content.or(target) } else { None });
+            .or_else(|| {
+                if action == Some("append_text") {
+                    content.or(target)
+                } else {
+                    None
+                }
+            });
 
-        let toggle_task = args
-            .get("toggle_task")
-            .and_then(Value::as_str)
-            .or_else(|| if action == Some("toggle_task") { target.or(content) } else { None });
+        let toggle_task = args.get("toggle_task").and_then(Value::as_str).or_else(|| {
+            if action == Some("toggle_task") {
+                target.or(content)
+            } else {
+                None
+            }
+        });
 
         let mut tags_to_add: Vec<String> = args
             .get("add_tags")
@@ -956,19 +966,31 @@ impl McpHandler {
         let replace_req = if action == Some("replace_text") {
             match (target, content) {
                 (Some(tgt), Some(cnt)) => Some((tgt, cnt)),
-                _ => return Err("Action 'replace_text' requires both 'target' and 'content' parameters".to_string()),
+                _ => {
+                    return Err(
+                        "Action 'replace_text' requires both 'target' and 'content' parameters"
+                            .to_string(),
+                    )
+                }
             }
         } else {
             None
         };
 
-        if append_markdown.is_none() && toggle_task.is_none() && tags_to_add.is_empty() && replace_req.is_none() {
+        if append_markdown.is_none()
+            && toggle_task.is_none()
+            && tags_to_add.is_empty()
+            && replace_req.is_none()
+        {
             return Err("No patch operation specified. Provide 'append_markdown', 'toggle_task', 'add_tags', or 'action'".to_string());
         }
 
         let capsule = &mut self.vault.capsules[index];
         if !capsule.native {
-            return Err(format!("Capsule '{}' is read-only in the native runtime", capsule.message_id));
+            return Err(format!(
+                "Capsule '{}' is read-only in the native runtime",
+                capsule.message_id
+            ));
         }
 
         let mut patch_summary = Vec::new();
@@ -1007,11 +1029,17 @@ impl McpHandler {
         if let Some(task_target) = toggle_task {
             match toggle_task_in_blocks(&mut capsule.blocks, task_target) {
                 Some((text, next_done)) => {
-                    let status_str = if next_done { "done ([x])" } else { "todo ([ ])" };
+                    let status_str = if next_done {
+                        "done ([x])"
+                    } else {
+                        "todo ([ ])"
+                    };
                     patch_summary.push(format!("Toggled task '{text}' -> {status_str}"));
                 }
                 None => {
-                    return Err(format!("Task matching '{task_target}' was not found in any todo block"));
+                    return Err(format!(
+                        "Task matching '{task_target}' was not found in any todo block"
+                    ));
                 }
             }
         }
@@ -1034,7 +1062,9 @@ impl McpHandler {
         if let Some((tgt, cnt)) = replace_req {
             let replacements = replace_in_blocks(&mut capsule.blocks, tgt, cnt);
             if replacements == 0 {
-                return Err(format!("Target text '{tgt}' was not found in any content block"));
+                return Err(format!(
+                    "Target text '{tgt}' was not found in any content block"
+                ));
             }
             patch_summary.push(format!("Replaced {replacements} occurrence(s) of '{tgt}'"));
         }
@@ -1159,10 +1189,7 @@ impl McpHandler {
             .and_then(Value::as_str)
             .unwrap_or("all")
             .to_string();
-        let due = args
-            .get("due")
-            .and_then(Value::as_str)
-            .unwrap_or("all");
+        let due = args.get("due").and_then(Value::as_str).unwrap_or("all");
         let priority = args
             .get("priority")
             .and_then(Value::as_str)
@@ -1177,10 +1204,7 @@ impl McpHandler {
             .get("capsule_id")
             .and_then(Value::as_str)
             .map(str::to_string);
-        let tag = args
-            .get("tag")
-            .and_then(Value::as_str)
-            .map(str::to_string);
+        let tag = args.get("tag").and_then(Value::as_str).map(str::to_string);
 
         let mut all_tasks = Vec::new();
         for c in &self.vault.capsules {
@@ -1295,13 +1319,22 @@ fn toggle_task_in_blocks(blocks: &mut [Value], target: &str) -> Option<(String, 
                 .and_then(Value::as_array_mut)
             {
                 for item in items.iter_mut() {
-                    let id = item.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-                    let text = item.get("text").and_then(Value::as_str).unwrap_or("").to_string();
+                    let id = item
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let text = item
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
                     let matches = id == target_clean
                         || text.eq_ignore_ascii_case(target_clean)
                         || text.to_lowercase().contains(&target_clean.to_lowercase());
                     if matches {
-                        let current_done = item.get("done").and_then(Value::as_bool).unwrap_or(false);
+                        let current_done =
+                            item.get("done").and_then(Value::as_bool).unwrap_or(false);
                         let next_done = !current_done;
                         item["done"] = json!(next_done);
                         item["status"] = json!(if next_done { "done" } else { "todo" });
@@ -1413,7 +1446,9 @@ mod tests {
             "method": "tools/list"
         })
         .to_string();
-        let resp = handler.handle_message(&list_req).expect("tools list response");
+        let resp = handler
+            .handle_message(&list_req)
+            .expect("tools list response");
         let val: Value = serde_json::from_str(&resp).unwrap();
         let tools = val["result"]["tools"].as_array().expect("tools array");
         assert!(tools.iter().any(|t| t["name"] == "capsule_create"));
@@ -1440,7 +1475,9 @@ mod tests {
         })
         .to_string();
 
-        let resp = handler.handle_message(&create_req).expect("create response");
+        let resp = handler
+            .handle_message(&create_req)
+            .expect("create response");
         let val: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(val["result"]["isError"], false);
 
@@ -1458,12 +1495,17 @@ mod tests {
         })
         .to_string();
 
-        let resp = handler.handle_message(&search_req).expect("search response");
+        let resp = handler
+            .handle_message(&search_req)
+            .expect("search response");
         let val: Value = serde_json::from_str(&resp).unwrap();
         let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
         let search_result: Value = serde_json::from_str(text_content).unwrap();
         assert_eq!(search_result["total_matches"], 1);
-        assert_eq!(search_result["results"][0]["subject"], "AI Sharding Strategy");
+        assert_eq!(
+            search_result["results"][0]["subject"],
+            "AI Sharding Strategy"
+        );
 
         // 4. Read it
         let read_req = json!({
@@ -1647,13 +1689,18 @@ mod tests {
             }
         })
         .to_string();
-        let resp = handler.handle_message(&backlinks_req).expect("backlinks response");
+        let resp = handler
+            .handle_message(&backlinks_req)
+            .expect("backlinks response");
         let val: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(val["result"]["isError"], false);
         let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
         let backlinks_val: Value = serde_json::from_str(text_content).unwrap();
         assert_eq!(backlinks_val["count"], 1);
-        assert_eq!(backlinks_val["backlinks"][0]["subject"], "Replication Architecture");
+        assert_eq!(
+            backlinks_val["backlinks"][0]["subject"],
+            "Replication Architecture"
+        );
 
         // 4. Query related for Note A
         let related_req = json!({
@@ -1668,13 +1715,18 @@ mod tests {
             }
         })
         .to_string();
-        let resp = handler.handle_message(&related_req).expect("related response");
+        let resp = handler
+            .handle_message(&related_req)
+            .expect("related response");
         let val: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(val["result"]["isError"], false);
         let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
         let related_val: Value = serde_json::from_str(text_content).unwrap();
         assert_eq!(related_val["count"], 1);
-        assert_eq!(related_val["related"][0]["subject"], "Replication Architecture");
+        assert_eq!(
+            related_val["related"][0]["subject"],
+            "Replication Architecture"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1730,7 +1782,9 @@ mod tests {
             }
         })
         .to_string();
-        let resp = handler.handle_message(&tasks_all_req).expect("tasks all response");
+        let resp = handler
+            .handle_message(&tasks_all_req)
+            .expect("tasks all response");
         let val: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(val["result"]["isError"], false);
         let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
@@ -1750,7 +1804,9 @@ mod tests {
             }
         })
         .to_string();
-        let resp = handler.handle_message(&tasks_open_req).expect("tasks open response");
+        let resp = handler
+            .handle_message(&tasks_open_req)
+            .expect("tasks open response");
         let val: Value = serde_json::from_str(&resp).unwrap();
         let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
         let tasks_val: Value = serde_json::from_str(text_content).unwrap();
@@ -1769,7 +1825,9 @@ mod tests {
             }
         })
         .to_string();
-        let resp = handler.handle_message(&tasks_done_req).expect("tasks done response");
+        let resp = handler
+            .handle_message(&tasks_done_req)
+            .expect("tasks done response");
         let val: Value = serde_json::from_str(&resp).unwrap();
         let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
         let tasks_val: Value = serde_json::from_str(text_content).unwrap();

@@ -12,6 +12,8 @@
 //! typography. The product remains CapsuleCraft: local folder, one `.eml` per
 //! page, no telemetry.
 
+mod audio_player;
+mod audio_recorder;
 mod blocks;
 mod brand;
 mod chrome;
@@ -34,14 +36,13 @@ mod planning;
 pub mod rich_text;
 mod search;
 mod snapshot;
+mod sync_imap;
 mod theme;
+mod ui_state;
+mod util;
 mod vault;
 mod views;
 mod watch;
-mod audio_player;
-mod sync_imap;
-mod ui_state;
-mod util;
 mod widgets;
 
 use std::collections::HashSet;
@@ -50,23 +51,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use eframe::egui::{
-    self, Align2, Color32, FontId, Frame, Margin, Stroke,
-};
+use eframe::egui::{self, Align2, Color32, FontId, Frame, Margin, Stroke};
 use i18n::{t, Key, Locale};
 use icons::Icon;
 use mime::Capsule;
 use serde_json::{json, Value};
 use ui_state::UiState;
+pub(crate) use util::*;
 use vault::{PageTree, Vault};
+pub(crate) use views::document_view::{guess_mime, sanitize_cid};
 use views::graph_view::GraphState;
 use views::mail_view::MailState;
 use views::palette::{Command as PaletteCommand, PaletteState};
 use views::planning_view::PlanningState;
 use views::threads_view::ThreadsState;
 use views::{draw_document, EditorAction, LinkContext, View, ViewAction};
-pub(crate) use views::document_view::{guess_mime, sanitize_cid};
-pub(crate) use util::*;
 pub(crate) use widgets::*;
 
 const CONTENT_MAX_WIDTH: f32 = 752.0;
@@ -101,10 +100,7 @@ fn main() -> eframe::Result<()> {
                 );
                 println!("- Pages imported: {}", summary.imported_pages);
                 println!("- Folders created: {}", summary.created_folders);
-                println!(
-                    "- Attachments imported: {}",
-                    summary.imported_attachments
-                );
+                println!("- Attachments imported: {}", summary.imported_attachments);
                 if !summary.errors.is_empty() {
                     eprintln!("Warnings/errors ({}):", summary.errors.len());
                     for err in &summary.errors {
@@ -256,7 +252,10 @@ struct SnapshotJob {
 
 impl NativeApp {
     fn new(launch: cli::Launch) -> Self {
-        let dir = launch.vault.clone().unwrap_or_else(vault::get_active_vault_dir);
+        let dir = launch
+            .vault
+            .clone()
+            .unwrap_or_else(vault::get_active_vault_dir);
         vault::set_active_vault_dir(&dir);
         let imap_config = sync_imap::ImapConfig::load_from_vault(&dir);
         let vault = Vault::load(dir);
@@ -398,9 +397,7 @@ impl NativeApp {
         self.related = self
             .selected
             .and_then(|index| self.vault.capsules.get(index))
-            .map(|capsule| {
-                search::related(&self.search_index, &capsule.message_id, &ids, 0.08, 5)
-            })
+            .map(|capsule| search::related(&self.search_index, &capsule.message_id, &ids, 0.08, 5))
             .unwrap_or_default();
     }
 
@@ -487,7 +484,11 @@ impl NativeApp {
         self.link_index
             .iter()
             .find(|(_, id, _)| id == &wanted)
-            .or_else(|| self.link_index.iter().find(|(subject, _, _)| subject == &wanted))
+            .or_else(|| {
+                self.link_index
+                    .iter()
+                    .find(|(subject, _, _)| subject == &wanted)
+            })
             .map(|(_, _, index)| *index)
     }
 
@@ -817,7 +818,8 @@ impl NativeApp {
         let Some(capsule) = self.vault.capsules.get(index) else {
             return;
         };
-        let armored = match crypto::encrypt_to_armored(capsule.export_eml().as_bytes(), passphrase) {
+        let armored = match crypto::encrypt_to_armored(capsule.export_eml().as_bytes(), passphrase)
+        {
             Ok(text) => text,
             Err(err) => {
                 self.status = err.to_string();
@@ -841,10 +843,7 @@ impl NativeApp {
                     .file_name()
                     .and_then(|name| name.to_str())
                     .unwrap_or("capsule.eml.asc");
-                self.toast(format!(
-                    "{}: {name}",
-                    t(self.locale, Key::EncryptedDone)
-                ));
+                self.toast(format!("{}: {name}", t(self.locale, Key::EncryptedDone)));
             }
             Err(err) => {
                 self.status = err.to_string();
@@ -871,7 +870,8 @@ impl NativeApp {
             .unwrap_or("capsule.eml.asc")
             .to_string();
         self.pending_decrypt_path = Some(path);
-        self.encrypt.open(modals::EncryptMode::Decrypt { file_name });
+        self.encrypt
+            .open(modals::EncryptMode::Decrypt { file_name });
     }
 
     /// Called after the passphrase modal confirms in decrypt mode. A wrong
@@ -903,8 +903,9 @@ impl NativeApp {
             }
             Err(_) => {
                 // Keep the picked file and reopen the modal for another try.
-                self.encrypt
-                    .open(modals::EncryptMode::Decrypt { file_name: file_name.to_string() });
+                self.encrypt.open(modals::EncryptMode::Decrypt {
+                    file_name: file_name.to_string(),
+                });
                 self.encrypt.error = Some(t(self.locale, Key::CryptoFailed).to_string());
             }
         }
@@ -943,7 +944,10 @@ impl NativeApp {
         let Some(capsule) = self.vault.capsules.get(index) else {
             return;
         };
-        let stem = capsule.file_name.trim_end_matches(".eml").trim_end_matches(".EML");
+        let stem = capsule
+            .file_name
+            .trim_end_matches(".eml")
+            .trim_end_matches(".EML");
         let default_name = format!("{stem}.md");
         let Some(path) = rfd::FileDialog::new()
             .set_title(t(self.locale, Key::ExportMarkdown))
@@ -1167,7 +1171,10 @@ fn unique_path(dir: &Path, name: &str) -> PathBuf {
         .file_stem()
         .and_then(|stem| stem.to_str())
         .unwrap_or("imported");
-    let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("eml");
+    let ext = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("eml");
     for suffix in 2..1000 {
         let candidate = dir.join(format!("{stem}-{suffix}.{ext}"));
         if !candidate.exists() {
@@ -1261,7 +1268,10 @@ impl eframe::App for NativeApp {
         if cmd && shift && ctx.input(|i| i.key_pressed(egui::Key::W)) {
             self.toggle_wide_canvas();
         }
-        if cmd && (ctx.input(|i| i.key_pressed(egui::Key::Plus)) || ctx.input(|i| i.key_pressed(egui::Key::Equals))) {
+        if cmd
+            && (ctx.input(|i| i.key_pressed(egui::Key::Plus))
+                || ctx.input(|i| i.key_pressed(egui::Key::Equals)))
+        {
             self.zoom_in(&ctx);
         }
         if cmd && ctx.input(|i| i.key_pressed(egui::Key::Minus)) {
@@ -1456,29 +1466,30 @@ impl eframe::App for NativeApp {
                     .stroke(theme::hairline())
                     .inner_margin(Margin::same(0))
                     .show(ui, |ui| match self.view {
-                        View::Page => {
-                            match self.selected {
-                                Some(index) if index < self.vault.capsules.len() => {
-                                    let ancestors: Vec<(usize, String)> = tree
-                                        .ancestors(index)
-                                        .into_iter()
-                                        .filter_map(|idx| {
-                                            self.vault.capsules.get(idx).map(|c| (idx, c.subject.clone()))
-                                        })
-                                        .collect();
-                                    editor.absorb(draw_document(
-                                        ui,
-                                        &mut self.vault.capsules[index],
-                                        &ancestors,
-                                        self.locale,
-                                        &link_context,
-                                        self.document_scroll,
-                                        self.ui_state.wide_canvas,
-                                    ));
-                                }
-                                _ => views::draw_empty_state(ui, &mut editor, self.locale),
+                        View::Page => match self.selected {
+                            Some(index) if index < self.vault.capsules.len() => {
+                                let ancestors: Vec<(usize, String)> = tree
+                                    .ancestors(index)
+                                    .into_iter()
+                                    .filter_map(|idx| {
+                                        self.vault
+                                            .capsules
+                                            .get(idx)
+                                            .map(|c| (idx, c.subject.clone()))
+                                    })
+                                    .collect();
+                                editor.absorb(draw_document(
+                                    ui,
+                                    &mut self.vault.capsules[index],
+                                    &ancestors,
+                                    self.locale,
+                                    &link_context,
+                                    self.document_scroll,
+                                    self.ui_state.wide_canvas,
+                                ));
                             }
-                        }
+                            _ => views::draw_empty_state(ui, &mut editor, self.locale),
+                        },
                         View::Planning => view_action.absorb(views::planning_view::draw(
                             ui,
                             &mut self.vault,
@@ -1505,9 +1516,11 @@ impl eframe::App for NativeApp {
                                 .selected
                                 .and_then(|index| self.vault.capsules.get(index));
                             match selected {
-                                Some(capsule) => view_action.absorb(
-                                    views::mime_view::draw(ui, capsule, self.locale),
-                                ),
+                                Some(capsule) => view_action.absorb(views::mime_view::draw(
+                                    ui,
+                                    capsule,
+                                    self.locale,
+                                )),
                                 None => views::empty_state(
                                     ui,
                                     Icon::Code,
@@ -1805,7 +1818,11 @@ impl NativeApp {
         let wide = self.ui_state.toggle_wide_canvas();
         self.ui_state.save();
         let label = if wide { "Wide" } else { "Standard (960px)" };
-        self.toast(format!("{}: {}", t(self.locale, Key::CommandWideCanvas), label));
+        self.toast(format!(
+            "{}: {}",
+            t(self.locale, Key::CommandWideCanvas),
+            label
+        ));
     }
 
     fn run_command(&mut self, ctx: &egui::Context, command: PaletteCommand) {
@@ -1871,7 +1888,8 @@ impl NativeApp {
         }
 
         self.imap_status = sync_imap::SyncStatus::Syncing;
-        let engine = sync_imap::ImapSyncEngine::new(self.imap_config.clone(), self.vault.dir.clone());
+        let engine =
+            sync_imap::ImapSyncEngine::new(self.imap_config.clone(), self.vault.dir.clone());
         match engine.run_sync() {
             Ok(msg) => {
                 self.imap_status = sync_imap::SyncStatus::Success(msg.clone());
@@ -1881,7 +1899,10 @@ impl NativeApp {
             Err(err) => {
                 let err_msg = err.clone();
                 self.imap_status = sync_imap::SyncStatus::Error(err);
-                self.toast(format!("{}: {err_msg}", t(self.locale, Key::ImapErrorToast)));
+                self.toast(format!(
+                    "{}: {err_msg}",
+                    t(self.locale, Key::ImapErrorToast)
+                ));
             }
         }
     }
@@ -1912,7 +1933,11 @@ impl NativeApp {
         match outcome {
             cothinker::CoThinkOutcome::OpponentBlock(b) => {
                 let capsule = &mut self.vault.capsules[index];
-                if let Some(pos) = capsule.blocks.iter().position(|blk| blk["type"] == "ai_opponent_block") {
+                if let Some(pos) = capsule
+                    .blocks
+                    .iter()
+                    .position(|blk| blk["type"] == "ai_opponent_block")
+                {
                     capsule.blocks[pos] = b;
                 } else {
                     capsule.blocks.insert(0, b);
@@ -1928,14 +1953,21 @@ impl NativeApp {
                 self.last_edit = Instant::now();
                 self.toast(t(self.locale, Key::CoThinkWorked));
             }
-            cothinker::CoThinkOutcome::ReplyCapsule { subject, blocks, .. } => {
+            cothinker::CoThinkOutcome::ReplyCapsule {
+                subject, blocks, ..
+            } => {
                 let parent_id = Some(capsule.message_id.clone());
                 self.create_reply_capsule(parent_id, &subject, blocks);
             }
         }
     }
 
-    fn create_reply_capsule(&mut self, parent_id: Option<String>, subject: &str, blocks: Vec<Value>) {
+    fn create_reply_capsule(
+        &mut self,
+        parent_id: Option<String>,
+        subject: &str,
+        blocks: Vec<Value>,
+    ) {
         if !self.save_selected() {
             return;
         }
@@ -1959,5 +1991,4 @@ impl NativeApp {
             }
         }
     }
-
 }

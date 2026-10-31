@@ -104,7 +104,9 @@ pub fn inline_spans(text: &str) -> Vec<InlineSpan> {
                                 end,
                                 delim_start_len: 1,
                                 delim_end_len: end - bracket_end, // covers `](url)`
-                                kind: InlineKind::ExternalLink { label_len: label.len() },
+                                kind: InlineKind::ExternalLink {
+                                    label_len: label.len(),
+                                },
                             });
                             i = end;
                             continue;
@@ -165,11 +167,19 @@ pub fn inline_spans(text: &str) -> Vec<InlineSpan> {
         // 6. Italic: _..._ or *...*
         if bytes[i] == b'_' || bytes[i] == b'*' {
             let marker_char = bytes[i] as char;
-            if i + 1 < len && bytes[i + 1] != b' ' && bytes[i + 1] != b'\t' && bytes[i + 1] != bytes[i] {
+            if i + 1 < len
+                && bytes[i + 1] != b' '
+                && bytes[i + 1] != b'\t'
+                && bytes[i + 1] != bytes[i]
+            {
                 if let Some(close) = text[i + 1..].find(marker_char) {
                     let end = i + 1 + close + 1;
                     let inner = &text[i + 1..i + 1 + close];
-                    if !inner.is_empty() && !inner.ends_with(' ') && !inner.contains('\n') && !inner.contains(marker_char) {
+                    if !inner.is_empty()
+                        && !inner.ends_with(' ')
+                        && !inner.contains('\n')
+                        && !inner.contains(marker_char)
+                    {
                         spans.push(InlineSpan {
                             start: i,
                             end,
@@ -230,7 +240,10 @@ pub fn spans(text: &str) -> Vec<LinkSpan> {
 pub fn targets(text: &str) -> Vec<String> {
     let mut seen = Vec::new();
     for span in spans(text) {
-        if !seen.iter().any(|existing: &String| existing.eq_ignore_ascii_case(&span.target)) {
+        if !seen
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(&span.target))
+        {
             seen.push(span.target);
         }
     }
@@ -300,9 +313,10 @@ pub fn resolve(target: &str, capsules: &[Capsule]) -> Option<usize> {
     if wanted.is_empty() {
         return None;
     }
-    if let Some(index) = capsules.iter().position(|capsule| {
-        normalise(&capsule.message_id) == wanted
-    }) {
+    if let Some(index) = capsules
+        .iter()
+        .position(|capsule| normalise(&capsule.message_id) == wanted)
+    {
         return Some(index);
     }
     capsules
@@ -677,7 +691,12 @@ pub fn layout_clean_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJ
 /// Clean reading/viewing layout with 0% raw markdown delimiters.
 /// Delimiters (`**`, `_`, `*`, ``` ` ```, `[[`, `]]`, `[label](url)`) are stripped entirely,
 /// leaving only the formatted content for emails, callouts, and read-only views.
-pub fn layout_clean(ui: &egui::Ui, text: &str, size: f32, wrap: f32) -> std::sync::Arc<egui::Galley> {
+pub fn layout_clean(
+    ui: &egui::Ui,
+    text: &str,
+    size: f32,
+    wrap: f32,
+) -> std::sync::Arc<egui::Galley> {
     ui.painter().layout_job(layout_clean_job(text, size, wrap))
 }
 
@@ -763,7 +782,10 @@ mod tests {
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].target, "Alpha");
         assert_eq!(found[1].target, "Beta");
-        assert_eq!(&"see [[Alpha]] and [[ Beta ]]."[found[1].start..found[1].end], "[[ Beta ]]");
+        assert_eq!(
+            &"see [[Alpha]] and [[ Beta ]]."[found[1].start..found[1].end],
+            "[[ Beta ]]"
+        );
     }
 
     #[test]
@@ -920,7 +942,10 @@ mod tests {
         assert_eq!(&text[spans[3].start..spans[3].end], "[[wiki]]");
 
         assert!(matches!(spans[4].kind, InlineKind::ExternalLink { .. }));
-        assert_eq!(&text[spans[4].start..spans[4].end], "[site](https://test.com)");
+        assert_eq!(
+            &text[spans[4].start..spans[4].end],
+            "[site](https://test.com)"
+        );
     }
 
     #[test]
@@ -950,10 +975,14 @@ mod tests {
 
     #[test]
     fn test_layout_clean_no_raw_tags() {
-        let text = "Hello **bold** and _italic_ and `code` and [[WikiLink]] and [link](https://test.com)!";
+        let text =
+            "Hello **bold** and _italic_ and `code` and [[WikiLink]] and [link](https://test.com)!";
         let job = layout_clean_job(text, 14.0, 500.0);
         let rendered = &job.text;
-        assert_eq!(rendered, "Hello bold and italic and code and WikiLink and link!");
+        assert_eq!(
+            rendered,
+            "Hello bold and italic and code and WikiLink and link!"
+        );
         assert!(!rendered.contains("**"));
         assert!(!rendered.contains('`'));
         assert!(!rendered.contains("[["));

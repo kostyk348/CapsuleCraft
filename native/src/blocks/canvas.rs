@@ -82,8 +82,8 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                 egui::StrokeKind::Inside,
             );
 
-            let selected_id: Option<String> = ui
-                .data(|data| data.get_temp(egui::Id::new(("canvas-selected", block_id.clone()))));
+            let selected_id: Option<String> =
+                ui.data(|data| data.get_temp(egui::Id::new(("canvas-selected", block_id.clone()))));
             let mut next_selected = selected_id.clone();
 
             for element in elements.iter_mut() {
@@ -131,7 +131,10 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                 let (fill, stroke) = match kind.as_str() {
                     "rectangle" => (theme::WASH, theme::LINE_STRONG),
                     "text" => (Color32::TRANSPARENT, theme::fade(theme::LINE, 0.0)),
-                    _ => (Color32::from_rgb(45, 129, 255), theme::fade(theme::ACCENT_INK, 0.4)),
+                    _ => (
+                        Color32::from_rgb(45, 129, 255),
+                        theme::fade(theme::ACCENT_INK, 0.4),
+                    ),
                 };
                 if kind != "text" {
                     painter.rect(

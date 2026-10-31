@@ -3,8 +3,8 @@
 use egui::{vec2, Align, Label, Layout, Rect, RichText, ScrollArea, Sense, Stroke, UiBuilder};
 
 use crate::i18n::{t, Key, Locale};
-use crate::theme;
 use crate::primary_button;
+use crate::theme;
 
 pub fn draw_faq_modal(show: bool, locale: Locale, ctx: &egui::Context) -> bool {
     if !show {

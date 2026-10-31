@@ -7,7 +7,9 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use egui::{vec2, Align, Button, FontId, Frame, Layout, Margin, RichText, ScrollArea, Stroke, TextEdit, Ui};
+use egui::{
+    vec2, Align, Button, FontId, Frame, Layout, Margin, RichText, ScrollArea, Stroke, TextEdit, Ui,
+};
 use serde_json::{json, Value};
 
 use crate::i18n::{t, Key, Locale};
@@ -175,12 +177,11 @@ pub fn draw_grid_block(
                                 let raw = row[column].clone();
                                 let is_formula_cell =
                                     row_index > 0 && raw.trim_start().starts_with('=');
-                                let editing = editing_cell()
-                                    .is_some_and(|edit| {
-                                        edit.block_id == block_id
-                                            && edit.row == row_index
-                                            && edit.col == column
-                                    });
+                                let editing = editing_cell().is_some_and(|edit| {
+                                    edit.block_id == block_id
+                                        && edit.row == row_index
+                                        && edit.col == column
+                                });
 
                                 if is_formula_cell && !editing {
                                     // Computed display; click to edit the raw formula.
