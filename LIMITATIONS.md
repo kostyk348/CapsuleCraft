@@ -3,7 +3,7 @@
 Honest list of what CapsuleCraft does **not** do yet. Updated as features land — if a
 limitation below is fixed, it gets removed instead of being quietly forgotten.
 
-_Last updated: 2026-10-31 (v1.9.0)_
+_Last updated: 2026-11-01 (v1.11.0)_
 
 ## Page hierarchy
 
@@ -22,9 +22,6 @@ _Last updated: 2026-10-31 (v1.9.0)_
 
 ## Planning & tasks
 
-- The Gantt editor edits **one** prerequisite per task. The data model stores
-  `blockedBy: string[]` and the chart draws every edge, but the select replaces
-  the whole array — extra blockers cannot be added from the UI yet.
 - Gantt has no drag-and-drop of bars, no zoom and no rescheduling by dragging;
   dates are edited in the table below the chart.
 - Dates are local calendar days (`YYYY-MM-DD`), not instants: there is no time
@@ -47,7 +44,8 @@ _Last updated: 2026-10-31 (v1.9.0)_
 - DataGrid accepts CSV only and reads it from the `.eml` attachment. JSON tables
   and pasting data are not implemented; an empty grid asks for a real CSV file.
 - Whiteboards store a flat element list (`rectangle / circle / sticky / arrow /
-  text`). There is no grouping, undo, multi-select or connection routing.
+  text`). The native board has undo and marquee multi-select since v1.11.0;
+  the web board does not yet. No grouping or connection routing anywhere.
 - Code REPL executes JavaScript in the browser; other language selectors are
   syntax labels, not real execution environments.
 - Grid formula cells evaluate one expression per cell (`=SUM(A1:A5)`,
@@ -65,8 +63,8 @@ _Last updated: 2026-10-31 (v1.9.0)_
   encryption-at-rest for the vault folder itself.
 - Native audio playback decodes WAV/MP3/OGG/FLAC through rodio's built-in
   decoders; browser-recorded webm/opus notes are reported as not decodable
-  instead of playing silence. There is no seeking, volume or waveform scrub
-  yet — just Play/Pause/Stop.
+  instead of playing silence. Seeking and volume arrived in v1.11.0; there is
+  no waveform scrub yet.
 - The native JS engine (boa) executes pure computation only: a console shim
   captures `log/warn/error`, but there are no timers, no `fetch`, no filesystem
   access and no shared state between runs.

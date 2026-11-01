@@ -183,6 +183,7 @@ export const PlanningView: React.FC<Props> = ({
   const [quickText, setQuickText] = useState('');
   const [quickDue, setQuickDue] = useState(today);
   const [quickPriority, setQuickPriority] = useState<TodoPriority>('normal');
+  const [depEditorKey, setDepEditorKey] = useState<string | null>(null);
 
   const allTasks = useMemo(() => collectTasks(nodes), [nodes]);
   const tasks = useMemo(
@@ -1127,13 +1128,24 @@ export const PlanningView: React.FC<Props> = ({
                     const key = taskKey(task);
                     const start = taskStart(task.item) || '';
                     const due = task.item.due || '';
-                    const blocker = (task.item.blockedBy || [])[0] || '';
-                    const candidates = allTasks.filter((candidate) => {
-                      const candidateKey = taskKey(candidate);
-                      return (
-                        candidateKey !== key && !wouldCreateCycle(allTasks, key, candidateKey)
-                      );
-                    });
+                    const blockers = task.item.blockedBy || [];
+                    // Every other task is a candidate; cycle-creating ones are
+                    // shown but disabled (unchecking an existing edge is
+                    // always allowed — it can only break a cycle).
+                    const candidates = allTasks.filter(
+                      (candidate) => taskKey(candidate) !== key,
+                    );
+                    const firstBlockerText = (() => {
+                      const first = blockers[0];
+                      if (!first) return t('gantt.none');
+                      const found = allTasks.find((c) => taskKey(c) === first);
+                      return found?.item.text || first;
+                    })();
+                    const depOpen = depEditorKey === key;
+                    const depLabel =
+                      blockers.length > 1
+                        ? `${firstBlockerText} +${blockers.length - 1}`
+                        : firstBlockerText;
                     return (
                       <div
                         key={key}
@@ -1170,23 +1182,75 @@ export const PlanningView: React.FC<Props> = ({
                           className="text-[10px] font-mono bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-300 [color-scheme:dark]"
                           title={t('gantt.due')}
                         />
-                        <select
-                          value={blocker}
-                          onChange={(event) =>
-                            onUpdateTask(task.capsuleId, task.blockId, task.item.id, {
-                              blockedBy: event.target.value ? [event.target.value] : [],
-                            })
-                          }
-                          className="text-[10px] font-mono bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-400 truncate"
-                          title={t('gantt.dependsOn')}
-                        >
-                          <option value="">{t('gantt.none')}</option>
-                          {candidates.map((candidate) => (
-                            <option key={taskKey(candidate)} value={taskKey(candidate)}>
-                              {candidate.item.text || t('todo.actionPlaceholder')}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setDepEditorKey(depOpen ? null : key)}
+                            className="w-full text-left text-[10px] font-mono bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-400 truncate hover:border-slate-700"
+                            title={t('gantt.dependsOn')}
+                          >
+                            {depLabel}
+                          </button>
+                          {depOpen && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setDepEditorKey(null)}
+                              />
+                              <div className="absolute z-20 mt-1 w-64 max-h-52 overflow-y-auto rounded-md border border-slate-700 bg-slate-900 shadow-xl p-1">
+                                <div className="px-2 py-1 text-[9px] font-mono uppercase tracking-wider text-slate-500">
+                                  {t('gantt.dependsOn')}
+                                </div>
+                                {candidates.length === 0 ? (
+                                  <p className="px-2 py-1.5 text-[10px] font-mono text-slate-600">
+                                    {t('gantt.noCandidates')}
+                                  </p>
+                                ) : (
+                                  candidates.map((candidate) => {
+                                    const candidateKey = taskKey(candidate);
+                                    const checked = blockers.includes(candidateKey);
+                                    const cycleLocked =
+                                      !checked && wouldCreateCycle(allTasks, key, candidateKey);
+                                    return (
+                                      <label
+                                        key={candidateKey}
+                                        className={`flex items-center gap-2 rounded px-2 py-1 text-[10px] font-mono ${
+                                          cycleLocked
+                                            ? 'opacity-40 cursor-not-allowed'
+                                            : 'cursor-pointer hover:bg-slate-800'
+                                        }`}
+                                        title={
+                                          cycleLocked ? t('gantt.blocked') : undefined
+                                        }
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          disabled={cycleLocked}
+                                          onChange={() => {
+                                            const next = checked
+                                              ? blockers.filter((k) => k !== candidateKey)
+                                              : [...blockers, candidateKey];
+                                            onUpdateTask(
+                                              task.capsuleId,
+                                              task.blockId,
+                                              task.item.id,
+                                              { blockedBy: next },
+                                            );
+                                          }}
+                                          className="accent-blue-500"
+                                        />
+                                        <span className="truncate text-slate-300">
+                                          {candidate.item.text || t('todo.actionPlaceholder')}
+                                        </span>
+                                      </label>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     );
                   })}

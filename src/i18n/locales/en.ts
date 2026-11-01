@@ -123,6 +123,7 @@ export const en: Dictionary = {
   'gantt.undated': 'No dates: these tasks stay off the timeline until they have a due date',
   'gantt.today': 'Today',
   'gantt.editor': 'Dates and dependencies',
+  'gantt.noCandidates': 'No tasks to depend on',
 
   'bucket.overdue': 'Overdue',
   'bucket.today': 'Today',

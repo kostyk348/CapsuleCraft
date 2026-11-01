@@ -3,10 +3,11 @@
 use base64::Engine;
 use chrono::Local;
 use egui::{
-    vec2, Align, Color32, FontFamily, FontId, Frame, Layout, Margin, Rect, RichText, Sense, Stroke,
-    TextEdit, Ui,
+    pos2, vec2, Align, Color32, FontFamily, FontId, Frame, Layout, Margin, Rect, RichText, Sense,
+    Stroke, TextEdit, Ui,
 };
 use serde_json::{json, Value};
+use std::time::Duration;
 
 use super::BlockOp;
 use crate::audio_recorder::{self, RecState};
@@ -252,7 +253,6 @@ pub fn draw_audio_block(
                 let is_mine = matches!(&playback,
                     audio_player::Playback::Playing { cid } | audio_player::Playback::Paused { cid }
                         if cid == &audio_cid);
-                let _ = is_mine;
 
                 ui.horizontal(|ui| {
                     if playable {
@@ -286,8 +286,82 @@ pub fn draw_audio_block(
                         if text_button(ui, Some(Icon::Close), t(locale, Key::AudioStop), false).clicked() {
                             audio_player::stop();
                         }
+                        // Mini volume slider: track, fill, knob — on palette.
+                        let volume = audio_player::volume();
+                        let (vol_rect, vol_resp) =
+                            ui.allocate_exact_size(vec2(64.0, 12.0), Sense::click_and_drag());
+                        ui.painter().rect_filled(
+                            vol_rect.shrink2(vec2(0.0, 4.0)),
+                            2.0,
+                            theme::WASH,
+                        );
+                        ui.painter().rect_filled(
+                            Rect::from_min_size(
+                                vol_rect.min + vec2(0.0, 4.0),
+                                vec2(vol_rect.width() * volume, 4.0),
+                            ),
+                            2.0,
+                            theme::ACCENT_INK,
+                        );
+                        ui.painter().circle_filled(
+                            pos2(vol_rect.min.x + vol_rect.width() * volume, vol_rect.center().y),
+                            4.0,
+                            theme::INK,
+                        );
+                        if let Some(pos) = vol_resp
+                            .interact_pointer_pos()
+                            .filter(|_| vol_resp.dragged() || vol_resp.clicked())
+                        {
+                            let frac = ((pos.x - vol_rect.min.x) / vol_rect.width()).clamp(0.0, 1.0);
+                            audio_player::set_volume(frac);
+                        }
+                        vol_resp.on_hover_text(t(locale, Key::AudioVolume));
                     }
                 });
+
+                // Progress bar with scrubbing — only for the loaded track.
+                if is_mine {
+                    let (pos_secs, total_secs) = audio_player::progress();
+                    if total_secs > 0.0 {
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            let _ = hud(ui, &audio_recorder::format_clock(pos_secs), theme::FAINT);
+                            let bar_width = (ui.available_width() - 88.0).max(60.0);
+                            let (bar, resp) = ui
+                                .allocate_exact_size(vec2(bar_width, 12.0), Sense::click_and_drag());
+                            let frac = (pos_secs / total_secs).clamp(0.0, 1.0);
+                            ui.painter().rect_filled(
+                                bar.shrink2(vec2(0.0, 4.0)),
+                                2.0,
+                                theme::WASH,
+                            );
+                            ui.painter().rect_filled(
+                                Rect::from_min_size(
+                                    bar.min + vec2(0.0, 4.0),
+                                    vec2(bar.width() * frac as f32, 4.0),
+                                ),
+                                2.0,
+                                theme::ACCENT_INK,
+                            );
+                            ui.painter().circle_filled(
+                                pos2(bar.min.x + bar.width() * frac as f32, bar.center().y),
+                                4.0,
+                                theme::INK,
+                            );
+                            if let Some(pos) = resp
+                                .interact_pointer_pos()
+                                .filter(|_| resp.dragged() || resp.clicked())
+                            {
+                                let target =
+                                    (((pos.x - bar.min.x) / bar.width()).clamp(0.0, 1.0)
+                                        * total_secs as f32) as f64;
+                                audio_player::seek(&audio_cid, Duration::from_secs_f64(target));
+                            }
+                            let _ =
+                                hud(ui, &audio_recorder::format_clock(total_secs), theme::FAINT);
+                        });
+                    }
+                }
 
                 let status = match &playback {
                     audio_player::Playback::Playing { cid } if cid == &audio_cid => {

@@ -328,6 +328,25 @@ describe('task dependencies', () => {
     expect(wouldCreateCycle(tasks, key('a'), key('a'))).toBe(true);
   });
 
+  it('honors every entry of a multi-blocker array, not just the first', () => {
+    // The Gantt editor can attach several prerequisites at once since the
+    // multi-blocker select landed; blocking must consider them all.
+    const a = task('a', 'A');
+    const b = task('b', 'B');
+    const c = task('c', 'C');
+    a.item.blockedBy = [key('b'), key('c')];
+    let tasks = [a, b, c];
+    expect(isBlocked(a, tasks)).toBe(true);
+    b.item.done = true;
+    b.item.status = 'done';
+    tasks = [a, b, c];
+    expect(isBlocked(a, tasks)).toBe(true); // c still open
+    c.item.done = true;
+    c.item.status = 'done';
+    tasks = [a, b, c];
+    expect(isBlocked(a, tasks)).toBe(false);
+  });
+
   it('marks a task blocked until every prerequisite is done', () => {
     const a = task('a', 'A');
     const b = task('b', 'B');
