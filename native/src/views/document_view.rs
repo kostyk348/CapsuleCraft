@@ -31,6 +31,19 @@ use crate::truncate_chars;
 use crate::views::View;
 use crate::widgets::draw_breadcrumbs;
 
+/// An action a user performed on one attachment row.
+#[derive(Debug)]
+pub enum AttachmentAction {
+    /// Open the built-in image/PDF viewer.
+    View {
+        name: String,
+        mime: String,
+        bytes: Vec<u8>,
+    },
+    /// Send an image through the OCR engine.
+    Ocr { name: String, bytes: Vec<u8> },
+}
+
 #[derive(Default)]
 pub struct EditorAction {
     pub changed: bool,
@@ -46,6 +59,12 @@ pub struct EditorAction {
     /// Previous subject of the page being renamed, so links can follow it.
     pub rename_from: Option<String>,
     pub toggle_wide: bool,
+    /// Attachment rows acted on this frame.
+    pub attachments: Vec<AttachmentAction>,
+    /// "Озвучить страницу" was pressed.
+    pub speak: bool,
+    /// Transcribe the audio attachment with this cid.
+    pub transcribe: Option<String>,
 }
 
 impl EditorAction {
@@ -61,6 +80,9 @@ impl EditorAction {
         self.create_page = other.create_page.or_else(|| self.create_page.take());
         self.rename_from = other.rename_from.or_else(|| self.rename_from.take());
         self.toggle_wide |= other.toggle_wide;
+        self.attachments.extend(other.attachments);
+        self.speak |= other.speak;
+        self.transcribe = other.transcribe.or_else(|| self.transcribe.take());
     }
 }
 
@@ -273,6 +295,9 @@ pub fn draw_document(
                                 });
                                 action.changed = true;
                             }
+                            BlockOp::RequestTranscribe(cid) => {
+                                action.transcribe = Some(cid);
+                            }
                             BlockOp::SplitParagraph {
                                 before,
                                 target_kind,
@@ -313,13 +338,28 @@ pub fn draw_document(
                         }
                         ui.add_space(4.0);
                         let _ = hud(ui, t(locale, Key::SlashHint), theme::FAINT);
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if icon_button(
+                                ui,
+                                Icon::Speaker,
+                                t(locale, Key::SpeakPage),
+                                true,
+                                false,
+                            )
+                            .clicked()
+                            {
+                                action.speak = true;
+                            }
+                        });
                     });
                     ui.add_space(18.0);
                     links_panel(ui, link_context, locale, &mut action);
                     ui.add_space(18.0);
-                    if attachments_editor(ui, capsule, locale) {
+                    let (changed, attachment_actions) = attachments_editor(ui, capsule, locale);
+                    if changed {
                         action.changed = true;
                     }
+                    action.attachments.extend(attachment_actions);
                     ui.add_space(90.0);
                 }
             });
@@ -731,8 +771,14 @@ pub fn draw_empty_state(ui: &mut Ui, action: &mut EditorAction, locale: Locale) 
 // Blocks extracted to crate::blocks
 /// Attachment list for one page. Files are stored base64-encoded in the MIME
 /// part, exactly like the web app does, so the .eml stays self-contained.
-pub fn attachments_editor(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool {
+/// Image and PDF rows carry view/OCR affordances.
+pub fn attachments_editor(
+    ui: &mut Ui,
+    capsule: &mut Capsule,
+    locale: Locale,
+) -> (bool, Vec<AttachmentAction>) {
     let mut changed = false;
+    let mut actions: Vec<AttachmentAction> = Vec::new();
     ui.horizontal(|ui| {
         let _ = hud(ui, t(locale, Key::AttachmentsTitle), theme::FAINT);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -768,11 +814,15 @@ pub fn attachments_editor(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) ->
 
     if capsule.attachments.is_empty() {
         let _ = hud(ui, t(locale, Key::EmptyAttachments), theme::FAINT);
-        return changed;
+        return (changed, actions);
     }
 
     let mut remove: Option<usize> = None;
     for (index, attachment) in capsule.attachments.iter().enumerate() {
+        let viewable =
+            attachment.mime_type.starts_with("image/") || attachment.mime_type == "application/pdf";
+        let ocrable =
+            attachment.mime_type.starts_with("image/") && attachment.mime_type != "image/svg+xml";
         ui.horizontal(|ui| {
             icons::paint(
                 ui.painter(),
@@ -800,6 +850,35 @@ pub fn attachments_editor(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) ->
                 {
                     remove = Some(index);
                 }
+                if ocrable
+                    && icon_button(
+                        ui,
+                        Icon::Sparkle,
+                        t(locale, Key::OcrAttachment),
+                        true,
+                        false,
+                    )
+                    .clicked()
+                {
+                    if let Some(bytes) = attachment_bytes(attachment) {
+                        actions.push(AttachmentAction::Ocr {
+                            name: attachment.name.clone(),
+                            bytes,
+                        });
+                    }
+                }
+                if viewable
+                    && icon_button(ui, Icon::Eye, t(locale, Key::ViewAttachment), true, false)
+                        .clicked()
+                {
+                    if let Some(bytes) = attachment_bytes(attachment) {
+                        actions.push(AttachmentAction::View {
+                            name: attachment.name.clone(),
+                            mime: attachment.mime_type.clone(),
+                            bytes,
+                        });
+                    }
+                }
             });
         });
     }
@@ -807,7 +886,17 @@ pub fn attachments_editor(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) ->
         capsule.attachments.remove(index);
         changed = true;
     }
-    changed
+    (changed, actions)
+}
+
+/// Decode an attachment's base64 payload for the viewer / OCR.
+fn attachment_bytes(attachment: &Attachment) -> Option<Vec<u8>> {
+    use base64::Engine as _;
+    attachment
+        .raw_b64
+        .as_deref()
+        .and_then(|raw| base64::engine::general_purpose::STANDARD.decode(raw).ok())
+        .filter(|bytes| !bytes.is_empty())
 }
 
 pub(crate) fn sanitize_cid(name: &str) -> String {

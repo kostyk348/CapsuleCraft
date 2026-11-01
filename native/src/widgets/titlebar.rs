@@ -105,6 +105,17 @@ pub fn draw_titlebar(
     }
     if icon_button(
         right_ui,
+        Icon::Chip,
+        t(locale, Key::IntegrationsOpen),
+        true,
+        false,
+    )
+    .clicked()
+    {
+        action.open_integrations = true;
+    }
+    if icon_button(
+        right_ui,
         Icon::Code,
         t(locale, Key::ConnectMcp),
         true,

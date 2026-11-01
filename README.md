@@ -36,6 +36,7 @@ editor, search, planning and structure on top — and the files stay yours.
 - 🗂 **Zero database** — a folder of `.eml` files is the entire knowledge base.
 - 🛰 **Offline by design** — parsing, search, AI and planning all run locally; the app makes no network calls of its own.
 - 🤖 **Offline Co-Thinker** — deterministic local critique and data analysis. No API keys, no cloud.
+- 🧩 **Downloadable local AI** — OCR (Xiaomi-OCR-0 on a Rust engine), speech-to-text (whisper) and Russian text-to-speech install from the in-app Integrations catalog and run fully offline.
 - 🖥 **Tiny native shell** — Rust + egui, no browser engine. Ships as an AppImage with **zero bundled libraries**.
 
 CapsuleCraft starts **empty** — no demo notes, no filler. A built-in **FAQ**
@@ -261,6 +262,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v1.12.0** | Integrations: downloadable local OCR (Xiaomi-OCR-0 on the pure-Rust mistral.rs engine), whisper STT in-process, Russian TTS (piper via sherpa-onnx), native PDF + image viewers | 2026-11-01 |
 | **v1.11.0** | Polish: multi-blocker tasks in the web Gantt editor; undo + marquee multi-select on the native whiteboard; seek + volume in native audio playback | 2026-11-01 |
 | **v1.10.0** | Microphone recording from the native audio block (cpal → WAV, live meter); fixed audio file attachments never reaching the capsule; AppImage CI fix | 2026-11-01 |
 | **v1.9.0** | Roadmap trio in the native shell: audio playback (rodio), OpenPGP `.eml.asc` encryption (rPGP), code execution + grid formulas (boa); full English UI with a purism test | 2026-10-31 |

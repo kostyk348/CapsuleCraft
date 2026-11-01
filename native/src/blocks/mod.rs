@@ -56,6 +56,9 @@ pub enum BlockOp {
         b64: String,
         size: usize,
     },
+    /// The audio block asks the shell to transcribe this attachment with the
+    /// local whisper engine (or to show the Integrations hint when missing).
+    RequestTranscribe(String),
 }
 
 pub fn transform_block(block: &mut Value, target: BlockKind, locale: Locale) {

@@ -12,12 +12,14 @@
 //! typography. The product remains CapsuleCraft: local folder, one `.eml` per
 //! page, no telemetry.
 
+mod ai;
 mod audio_player;
 mod audio_recorder;
 mod blocks;
 mod brand;
 mod chrome;
 mod cli;
+mod components;
 mod cothinker;
 mod crypto;
 mod export;
@@ -41,6 +43,7 @@ mod theme;
 mod ui_state;
 mod util;
 mod vault;
+mod viewer;
 mod views;
 mod watch;
 mod widgets;
@@ -242,6 +245,24 @@ struct NativeApp {
     ui_state: UiState,
     /// Zen focus mode (immersive document writing).
     zen_mode: bool,
+    /// Downloadable integrations: catalog state + install markers.
+    components: components::Manager,
+    /// Integrations modal visibility.
+    show_integrations: bool,
+    /// Open attachment viewer (image/PDF overlay).
+    viewer: Option<viewer::ViewerState>,
+    /// Running local OCR engine actor (process lives in a worker thread).
+    ocr: Option<ai::ocr::OcrActor>,
+    /// True while one recognition is in flight.
+    ocr_busy: bool,
+    /// Page that OCR results should be appended to.
+    ocr_target: Option<String>,
+    /// Speech-to-text jobs keyed by attachment cid.
+    stt: ai::stt::SttJobs,
+    /// TTS result receiver for the single in-flight speak job.
+    tts_rx: Option<std::sync::mpsc::Receiver<Result<Vec<u8>, String>>>,
+    /// OCR result receiver for the single in-flight recognition.
+    ocr_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
 }
 
 struct SnapshotJob {
@@ -316,6 +337,15 @@ impl NativeApp {
             last_write: Instant::now(),
             ui_state: UiState::load(),
             zen_mode: false,
+            components: components::Manager::load(),
+            show_integrations: false,
+            viewer: None,
+            ocr: None,
+            ocr_busy: false,
+            ocr_target: None,
+            stt: ai::stt::SttJobs::default(),
+            tts_rx: None,
+            ocr_rx: None,
         }
         .with_links();
         app.show_faq_modal = matches!(launch.view, Some(View::Faq));
@@ -326,6 +356,226 @@ impl NativeApp {
     fn with_links(mut self) -> Self {
         self.refresh_links();
         self
+    }
+
+    // -----------------------------------------------------------------------
+    // Integrations: viewer, OCR, STT, TTS
+    // -----------------------------------------------------------------------
+
+    fn open_viewer(&mut self, name: &str, mime: &str, bytes: Vec<u8>) {
+        if mime == "application/pdf" {
+            match self
+                .components
+                .lib_path(components::ComponentId::PdfEngine, "pdfium")
+            {
+                Some(path) => {
+                    self.viewer = Some(viewer::ViewerState::new_pdf(name, bytes, &path));
+                }
+                None => self.toast(t(self.locale, Key::PdfEngineMissing)),
+            }
+        } else {
+            self.viewer = Some(viewer::ViewerState::new_image(name, &bytes));
+        }
+    }
+
+    fn start_ocr(&mut self, image: Vec<u8>, ctx: &egui::Context) {
+        if self.ocr_busy {
+            self.toast(t(self.locale, Key::OcrRunning));
+            return;
+        }
+        let Some((engine_bin, model_dir)) = ai::ocr::resolve_paths(&self.components) else {
+            self.toast(t(self.locale, Key::NeedComponentsToast));
+            return;
+        };
+        let Some(target) = self
+            .selected
+            .and_then(|index| self.vault.capsules.get(index))
+            .map(|capsule| capsule.message_id.clone())
+        else {
+            return;
+        };
+        let mime = ai::ocr::sniff_image_mime(&image).to_string();
+        let actor = self.ocr.get_or_insert_with(|| {
+            ai::ocr::OcrActor::start(engine_bin, model_dir, ai::ocr::DEFAULT_PORT)
+        });
+        let Some(rx) = actor.recognize(image, mime, t(self.locale, Key::OcrPrompt).to_string())
+        else {
+            return;
+        };
+        self.ocr_busy = true;
+        self.ocr_target = Some(target);
+        self.ocr_rx = Some(rx);
+        self.toast(t(self.locale, Key::OcrRunning));
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
+    }
+
+    fn transcribe_audio(&mut self, cid: &str) {
+        if self.stt.is_running(cid) {
+            return;
+        }
+        let Some(model_dir) = ai::stt::best_model_dir(&self.components) else {
+            self.toast(t(self.locale, Key::NeedComponentsToast));
+            return;
+        };
+        let Some(bytes) = self.audio_attachment_bytes(cid) else {
+            return;
+        };
+        if self.stt.start(model_dir, cid, bytes).is_ok() {
+            self.toast(t(self.locale, Key::Transcribing));
+        }
+    }
+
+    fn audio_attachment_bytes(&self, cid: &str) -> Option<Vec<u8>> {
+        use base64::Engine as _;
+        self.selected
+            .and_then(|index| self.vault.capsules.get(index))
+            .and_then(|capsule| {
+                capsule
+                    .attachments
+                    .iter()
+                    .find(|attachment| attachment.cid == cid)
+            })
+            .and_then(|attachment| attachment.raw_b64.as_deref())
+            .and_then(|raw| base64::engine::general_purpose::STANDARD.decode(raw).ok())
+            .filter(|bytes| !bytes.is_empty())
+    }
+
+    fn speak_selected_page(&mut self) {
+        if self.tts_rx.is_some() {
+            return;
+        }
+        let voice = [
+            components::ComponentId::TtsVoiceIrina,
+            components::ComponentId::TtsVoiceDmitri,
+        ]
+        .into_iter()
+        .find(|id| self.components.ready(*id));
+        let Some(voice) = voice else {
+            self.toast(t(self.locale, Key::NeedComponentsToast));
+            return;
+        };
+        let Some(lib) = self
+            .components
+            .lib_path(components::ComponentId::TtsRuntime, "sherpa-onnx-c-api")
+        else {
+            self.toast(t(self.locale, Key::NeedComponentsToast));
+            return;
+        };
+        let Some(index) = self.selected else { return };
+        let text = links::page_text(&self.vault.capsules[index]);
+        if text.trim().is_empty() {
+            self.toast(t(self.locale, Key::TtsEmptyToast));
+            return;
+        }
+        let voice_dir = self.components.dir(voice);
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.tts_rx = Some(rx);
+        std::thread::spawn(move || {
+            let result = ai::tts::synthesize(&lib, &voice_dir, &text, 1.0);
+            let _ = tx.send(result);
+        });
+    }
+
+    /// Drain finished AI jobs and apply their results to the vault/UI.
+    fn poll_ai_jobs(&mut self) {
+        // STT: write transcripts back into the matching audio block.
+        let mut finished: Vec<(String, ai::stt::SttPhase)> = Vec::new();
+        for index in 0..self.vault.capsules.len() {
+            let Some(capsule) = self.vault.capsules.get(index) else {
+                continue;
+            };
+            for attachment in &capsule.attachments {
+                if let Some(phase) = self.stt.take_finished(&attachment.cid) {
+                    finished.push((attachment.cid.clone(), phase));
+                }
+            }
+        }
+        for (cid, phase) in finished {
+            match phase {
+                ai::stt::SttPhase::Done(text) => {
+                    let mut applied = false;
+                    for capsule in &mut self.vault.capsules {
+                        for block in &mut capsule.blocks {
+                            let block_cid = block
+                                .get("data")
+                                .and_then(|data| data.get("audioCid"))
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("")
+                                .trim_start_matches("cid:");
+                            if block_cid == cid {
+                                block["data"]["transcript"] = serde_json::json!(text);
+                                applied = true;
+                            }
+                        }
+                    }
+                    if applied {
+                        self.record_change();
+                        self.toast(t(self.locale, Key::OcrDoneToast));
+                    }
+                }
+                ai::stt::SttPhase::Failed(message) => {
+                    self.toast(format!(
+                        "{}: {message}",
+                        t(self.locale, Key::OcrFailedToast)
+                    ));
+                }
+                ai::stt::SttPhase::Running => {}
+            }
+        }
+
+        // OCR: append the recognized text as a paragraph block.
+        if let Some(rx) = &self.ocr_rx {
+            if let Ok(result) = rx.try_recv() {
+                self.ocr_busy = false;
+                self.ocr_rx = None;
+                match result {
+                    Ok(text) => {
+                        if let Some(target) = &self.ocr_target {
+                            if let Some(capsule) = self
+                                .vault
+                                .capsules
+                                .iter_mut()
+                                .find(|capsule| &capsule.message_id == target)
+                            {
+                                capsule.blocks.push(serde_json::json!({
+                                    "id": mime::new_block_id("paragraph"),
+                                    "type": "paragraph",
+                                    "data": { "text": text }
+                                }));
+                                self.record_change();
+                                self.toast(t(self.locale, Key::OcrDoneToast));
+                            }
+                        }
+                    }
+                    Err(message) => {
+                        self.toast(format!(
+                            "{}: {message}",
+                            t(self.locale, Key::OcrFailedToast)
+                        ));
+                    }
+                }
+                self.ocr_target = None;
+            }
+        }
+
+        // TTS: play the generated WAV through the existing player.
+        if let Some(rx) = &self.tts_rx {
+            if let Ok(result) = rx.try_recv() {
+                self.tts_rx = None;
+                match result {
+                    Ok(wav) => match audio_player::play("tts-preview", &wav) {
+                        Ok(()) => self.toast(t(self.locale, Key::TtsDoneToast)),
+                        Err(_) => self.toast(t(self.locale, Key::TtsFailedToast)),
+                    },
+                    Err(message) => {
+                        self.toast(format!(
+                            "{}: {message}",
+                            t(self.locale, Key::TtsFailedToast)
+                        ));
+                    }
+                }
+            }
+        }
     }
 
     /// Reload when a watched `.eml` changed and there is nothing unsaved.
@@ -1195,6 +1445,7 @@ pub(crate) struct ShellAction {
     pub(crate) toggle_locale: bool,
     pub(crate) palette: bool,
     pub(crate) connect_mcp: bool,
+    pub(crate) open_integrations: bool,
     pub(crate) faq: bool,
     pub(crate) open_imap: bool,
     pub(crate) sync_imap: bool,
@@ -1287,6 +1538,7 @@ impl eframe::App for NativeApp {
             || self.show_imap_modal
             || self.show_cothink_modal
             || self.show_faq_modal
+            || self.show_integrations
             || self.encrypt.open;
         if self.zen_mode && !modals_open && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.toggle_zen_mode();
@@ -1612,6 +1864,23 @@ impl eframe::App for NativeApp {
         if editor.faq {
             self.show_faq_modal = true;
         }
+        for attachment_action in editor.attachments {
+            match attachment_action {
+                views::document_view::AttachmentAction::View { name, mime, bytes } => {
+                    self.open_viewer(&name, &mime, bytes);
+                }
+                views::document_view::AttachmentAction::Ocr { name: _, bytes } => {
+                    self.start_ocr(bytes, &ctx);
+                }
+            }
+        }
+        if editor.speak {
+            self.speak_selected_page();
+        }
+        if let Some(cid) = editor.transcribe {
+            self.transcribe_audio(&cid);
+        }
+        self.poll_ai_jobs();
         if shell.save || view_action.request_save {
             self.save_selected();
         }
@@ -1636,6 +1905,9 @@ impl eframe::App for NativeApp {
         }
         if shell.connect_mcp {
             self.show_mcp_modal = true;
+        }
+        if shell.open_integrations {
+            self.show_integrations = true;
         }
         if shell.faq {
             self.show_faq_modal = true;
@@ -1690,6 +1962,16 @@ impl eframe::App for NativeApp {
                 self.toast(t(self.locale, Key::ConfigCopied));
             }
             modals::McpModalAction::None => {}
+        }
+
+        match modals::integrations::draw_integrations_modal(
+            self.show_integrations,
+            &self.components,
+            self.locale,
+            &ctx,
+        ) {
+            modals::integrations::IntegrationsAction::Close => self.show_integrations = false,
+            modals::integrations::IntegrationsAction::None => {}
         }
 
         match modals::draw_imap_modal(
@@ -1757,6 +2039,8 @@ impl eframe::App for NativeApp {
             }
             modals::EncryptAction::Cancel | modals::EncryptAction::None => {}
         }
+
+        viewer::draw(&mut self.viewer, self.locale, &ctx);
 
         modals::draw_toast(&mut self.toast, &ctx);
 

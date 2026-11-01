@@ -341,6 +341,64 @@ jobs:
           name: capsulecraft-native-macos
           path: CapsuleCraft_native_*_arm64.app.zip
 
+  # OCR engine for the Integrations catalog: mistral.rs (pure Rust, MIT)
+  # pinned at v0.9.5, built CPU-only and shipped as a downloadable component.
+  # The `--help` step validates the serve subcommand shape the app relies on.
+  ocr-engine:
+    name: OCR engine (mistral.rs) — ${{ matrix.name }}
+    needs: create-release
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-22.04
+            artifact: mistralrs-engine-linux-x64.tar.gz
+            bin: mistralrs
+          - name: macos-arm64
+            os: macos-latest
+            artifact: mistralrs-engine-macos-arm64.tar.gz
+            bin: mistralrs
+          - name: windows-x64
+            os: windows-latest
+            artifact: mistralrs-engine-windows-x64.tar.gz
+            bin: mistralrs.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build mistral.rs engine (CPU)
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+        run: cargo install --git https://github.com/EricLBuehler/mistral.rs --tag v0.9.5 mistralrs-cli --locked --no-default-features
+
+      - name: Validate serve subcommand
+        run: |
+          mistralrs --help
+          mistralrs serve --help
+          mistralrs serve multimodal --help
+
+      - name: Package engine
+        shell: bash
+        run: |
+          set -e
+          BIN_DIR="$(dirname "$(command -v mistralrs)")"
+          tar czf "${{ matrix.artifact }}" -C "$BIN_DIR" "${{ matrix.bin }}"
+          ls -la "${{ matrix.artifact }}"
+
+      - name: Upload engine to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ needs.create-release.outputs.tag }}" "${{ matrix.artifact }}" --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mistralrs-engine-${{ matrix.name }}
+          path: ${{ matrix.artifact }}
+
   # Legacy Tauri / Web bundles for parity
   build:
     name: ${{ matrix.name }}
@@ -426,7 +484,7 @@ jobs:
   # uploads it to the release, and publishes the draft.
   finalize-release:
     name: Finalize Release (Checksums & Publish)
-    needs: [create-release, native-windows, native-appimage, native-macos, build]
+    needs: [create-release, native-windows, native-appimage, native-macos, ocr-engine, build]
     if: always() && needs.create-release.result == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -439,6 +497,7 @@ jobs:
           NATIVE_WINDOWS: ${{ needs.native-windows.result }}
           NATIVE_APPIMAGE: ${{ needs.native-appimage.result }}
           NATIVE_MACOS: ${{ needs.native-macos.result }}
+          OCR_ENGINE: ${{ needs.ocr-engine.result }}
           TAURI_BUILD: ${{ needs.build.result }}
         run: |
           set -e
@@ -466,6 +525,7 @@ jobs:
           for job in "native-windows=$NATIVE_WINDOWS" \
                      "native-appimage=$NATIVE_APPIMAGE" \
                      "native-macos=$NATIVE_MACOS" \
+                     "ocr-engine=$OCR_ENGINE" \
                      "tauri=$TAURI_BUILD"; do
             name="${job%%=*}"
             result="${job#*=}"

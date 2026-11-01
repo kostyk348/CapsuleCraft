@@ -5,6 +5,7 @@ pub mod cothink;
 pub mod encrypt;
 pub mod faq;
 pub mod imap_sync;
+pub mod integrations;
 pub mod mcp_connect;
 pub mod toasts;
 
