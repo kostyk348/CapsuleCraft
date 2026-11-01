@@ -390,6 +390,32 @@ pub fn draw_audio_block(
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string();
+            // Local STT: only for real decodable takes (webm imports cannot be
+            // decoded by the in-process whisper WAV path).
+            let has_decodable_audio = file
+                .as_ref()
+                .and_then(|attachment| attachment.raw_b64.as_deref())
+                .map(|raw| {
+                    base64::engine::general_purpose::STANDARD
+                        .decode(raw)
+                        .ok()
+                        .is_some_and(|bytes| !bytes.is_empty())
+                })
+                .unwrap_or(false);
+            if !audio_cid.is_empty() && has_decodable_audio {
+                ui.horizontal(|ui| {
+                    if text_button(
+                        ui,
+                        Some(Icon::Audio),
+                        t(locale, Key::TranscribeAudio),
+                        false,
+                    )
+                    .clicked()
+                    {
+                        *op = Some(BlockOp::RequestTranscribe(audio_cid.clone()));
+                    }
+                });
+            }
             let rows = transcript.lines().count().max(2);
             let response = ui.add(
                 TextEdit::multiline(&mut transcript)

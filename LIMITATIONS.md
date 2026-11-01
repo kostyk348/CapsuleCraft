@@ -3,7 +3,7 @@
 Honest list of what CapsuleCraft does **not** do yet. Updated as features land — if a
 limitation below is fixed, it gets removed instead of being quietly forgotten.
 
-_Last updated: 2026-11-01 (v1.11.0)_
+_Last updated: 2026-11-01 (v1.12.0)_
 
 ## Page hierarchy
 
@@ -54,6 +54,33 @@ _Last updated: 2026-11-01 (v1.11.0)_
   in the previous frame, and mutually recursive cells stop after 8 levels.
 - New capsules have no default tags or demo body; the subject falls back to a
   localized "New capsule" until you rename it.
+
+## Integrations (local AI, v1.12.0)
+
+- **Downloads do not resume.** A 1.75 GB OCR model that fails at 90 % starts
+  over. Component sizes are known up front, so the catalog shows what you are
+  committing to before the download starts.
+- **OCR speed is CPU-honest.** Xiaomi-OCR-0 (0.8B) runs on the mistral.rs CPU
+  engine: a few seconds for a receipt on a modern laptop, noticeably slower on
+  old hardware. There is no GPU path in v1.12 (mistral.rs supports CUDA/Metal,
+  but the component is built CPU-only to stay dependency-free).
+- **The OCR engine is pinned to mistral.rs 0.9.5** and ships per release as
+  `mistralrs-engine-*.tar.gz`. It does not auto-update; a new engine lands
+  with the next release that bumps the component.
+- **whisper models are fp32 safetensors** (tiny 151 MB / base 290 MB / small
+  967 MB) running on CPU in-process. Transcription of a long recording blocks
+  that one job (not the UI); there is no streaming or word-level timing yet,
+  and the transcript lands as plain text.
+- **TTS voices are piper-medium quality** (Ирина / Дмитрий): clear, slightly
+  robotic. Speed is fixed at 1.0 in the UI; speaker id and rate are constants
+  in code. sherpa-onnx (the TTS runtime) and pdfium (the PDF renderer) are the
+  only non-Rust pieces — both are runtime libraries loaded on demand, not
+  inference engines; the OCR/STT inference itself is pure Rust.
+- **The OCR engine process stays alive** after the first recognition (it holds
+  ~2 GB of RAM with the model loaded) and exits with the app. There is no
+  "stop engine" button yet.
+- **Viewer scope**: the PDF viewer has page navigation and zoom but no text
+  selection, search or printing; the image viewer has no rotation or crop.
 
 ## Architecture / product
 

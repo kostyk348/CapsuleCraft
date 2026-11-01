@@ -3,6 +3,63 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.12.0] — 2026-11-01 — Integrations: local OCR/STT/TTS you download in the app, PDF and image viewing
+
+The native shell gains a components architecture: a catalog of downloadable,
+offline engines behind a new ⚙ **Integrations** modal. Nothing is bundled —
+the vault stays zero-dependency and a component only appears on disk after an
+explicit download, outside the vault folder. Native tests grow from 151 to
+**178**.
+
+### Added
+- **Components core (`native/src/components.rs`)** — a static catalog of nine
+  components (OCR engine, OCR model, three whisper STT models, TTS runtime,
+  two Russian voices, PDF renderer) with per-OS URLs, dependency gating
+  (a voice requires the runtime, the OCR model requires the engine), a
+  threaded download manager with streaming progress, tar.gz/tar.bz2 unpacking
+  hardened against path escapes and symlink handling, and `components.json`
+  install markers in the app-data directory.
+- **OCR: Xiaomi-OCR-0 on mistral.rs** — the new Xiaomi OCR model (Qwen3.5-0.8B
+  hybrid-attention VLM, Apache-2.0, 1.75 GB bf16) served by the pure-Rust
+  mistral.rs engine v0.9.5 (MIT; no llama.cpp, no Python). The engine runs as
+  a localhost actor process (`mistralrs serve multimodal -a qwen3_5`, startup
+  validated in CI via `serve multimodal --help`); the app posts images to its
+  OpenAI-compatible endpoint and appends the recognized text as a paragraph.
+  Entry point: ✨ button on any image attachment row.
+- **STT: whisper in-process on candle** — openai/whisper tiny/base/small run
+  inside the app (pure Rust, CPU) with the OpenAI timestamp-rules decoder
+  ported from candle-examples; audio is decoded by a built-in RIFF/WAVE parser
+  (8/16/24/32-bit PCM and float, any channel count) and linearly resampled to
+  16 kHz. Russian is forced via the `<|ru|>` token. Entry point: «Расшифровать
+  запись» in the audio block; the transcript lands back in the block.
+- **TTS: Russian voices via sherpa-onnx** — piper VITS voices (Ирина, Дмитрий)
+  through the sherpa-onnx v1.12.40 shared library loaded at runtime with
+  hand-verified FFI (struct layouts mirrored from c-api.h at that exact tag;
+  v2.0.1 was rejected because it dropped `data_dir` phonemization). The page
+  is spoken from the document editor (🔊 button); audio plays through the
+  existing rodio player. Verified end-to-end against the real library and
+  voice: ~3 s of Russian audio synthesized in 1.2 s on CPU (kept as an
+  env-gated smoke test).
+- **PDF viewer** — pdfium (chromium/8125, matching pdfium-render 0.9's
+  bindgen) loaded from the components directory; page navigation, zoom,
+  continuous re-render on resize, white page surface in the dark UI.
+- **Image viewer** — PNG/JPEG/GIF/WebP decode via the `image` crate, zoom
+  20–500 %, pan via scroll areas.
+- **Integrations modal (⚙ in the title bar)** — grouped catalog cards with
+  status pills (Ready / Installed / Missing components / Failed), live
+  download progress bars, per-component size and version, open-folder and
+  delete actions, and download-driven repaint pacing.
+- **CI: engine artifacts** — a release-workflow job builds the mistral.rs CLI
+  for linux-x64, macos-arm64 and windows-x64, validates the serve subcommand
+  shape, and attaches `mistralrs-engine-<platform>.tar.gz` to the release; the
+  finalize guard treats a failed engine build as an incomplete release.
+
+### Notes
+- pdfium and sherpa-onnx are the only non-Rust pieces in the whole feature,
+  and they are renderer/codec runtimes loaded at runtime, not inference
+  engines — the OCR model itself runs on a Rust engine by design.
+- Downloads have no resume; the largest component is the 1.75 GB OCR model.
+
 ## [1.11.0] — 2026-11-01 — Polish release: blockers, undo, scrubbing
 
 Three long-standing limitations resolved across both surfaces. Native tests

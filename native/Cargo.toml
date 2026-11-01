@@ -1,6 +1,6 @@
 [package]
 name = "capsuleos-native"
-version = "1.11.0"
+version = "1.12.0"
 edition = "2021"
 description = "CapsuleCraft native egui prototype (same .eml vault, no webview)"
 license = "MIT"
@@ -28,6 +28,24 @@ boa_engine = "0.20"
 pgp = "0.15"
 rand = "0.8"
 
+# Downloadable integrations (v1.12.0): components catalog, viewers, local AI.
+# Every crate here is pure Rust except pdfium-render, which loads the pdfium
+# shared library at runtime — the library itself is a downloadable component.
+ureq = { version = "2.10", default-features = false, features = ["tls", "json"] }
+tar = "0.4"
+flate2 = "1"
+bzip2-rs = "0.1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+pdfium-render = { version = "0.9", features = ["image_025"] }
+libloading = "0.8"
+candle-core = "0.11"
+candle-nn = "0.11"
+candle-transformers = "0.11"
+tokenizers = "0.21"
+# whisper sampling uses the rand 0.9 API (candle's tree); the app's crypto
+# stays on 0.8 — both coexist.
+rand09 = { package = "rand", version = "0.9" }
+
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 
@@ -39,3 +57,8 @@ lto = "thin"
 # preserve backtraces without the multi-GB DWARF of full debug info.
 [profile.dev]
 debug = "line-tables-only"
+
+# Dependency crates build with no debug info at all: the candle/tokenizers
+# stack otherwise inflates debug artifacts past small disk quotas.
+[profile.dev.package."*"]
+debug = false

@@ -65,6 +65,8 @@ pub const INVERT_FG: Color32 = hex(0x0b0b0c);
 
 pub const BAD: Color32 = hex(0xf87171);
 pub const BADGE_BETA: Color32 = hex(0xffc14d);
+/// Success state (installed components, finished syncs).
+pub const OK: Color32 = hex(0x4ade80);
 
 /// 3 px: buttons, inputs, menus.
 pub const RADIUS: CornerRadius = CornerRadius::same(3);

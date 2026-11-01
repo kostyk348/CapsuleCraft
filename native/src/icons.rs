@@ -38,6 +38,10 @@ pub enum Icon {
     Close,
     Sidebar,
     Record,
+    Eye,
+    Sparkle,
+    Speaker,
+    Chip,
 }
 
 fn at(rect: Rect, x: f32, y: f32) -> Pos2 {
@@ -63,6 +67,74 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::Record => {
             // Filled dot — the universal "recording" affordance.
             dot(0.5, 0.5, 0.42);
+        }
+        Icon::Eye => {
+            line(&[
+                (0.12, 0.5),
+                (0.25, 0.32),
+                (0.42, 0.22),
+                (0.58, 0.22),
+                (0.75, 0.32),
+                (0.88, 0.5),
+            ]);
+            line(&[
+                (0.12, 0.5),
+                (0.25, 0.68),
+                (0.42, 0.78),
+                (0.58, 0.78),
+                (0.75, 0.68),
+                (0.88, 0.5),
+            ]);
+            p.circle_stroke(at(rect, 0.5, 0.5), rect.width() * 0.16, stroke);
+        }
+        Icon::Sparkle => {
+            line(&[
+                (0.5, 0.14),
+                (0.58, 0.42),
+                (0.86, 0.5),
+                (0.58, 0.58),
+                (0.5, 0.86),
+                (0.42, 0.58),
+                (0.14, 0.5),
+                (0.42, 0.42),
+                (0.5, 0.14),
+            ]);
+            dot(0.82, 0.2, 0.05);
+        }
+        Icon::Speaker => {
+            line(&[
+                (0.16, 0.4),
+                (0.32, 0.4),
+                (0.52, 0.22),
+                (0.52, 0.78),
+                (0.32, 0.6),
+                (0.16, 0.6),
+                (0.16, 0.4),
+            ]);
+            line(&[(0.64, 0.36), (0.64, 0.64)]);
+            line(&[(0.78, 0.26), (0.78, 0.74)]);
+        }
+        Icon::Chip => {
+            p.rect_stroke(
+                Rect::from_min_max(at(rect, 0.26, 0.26), at(rect, 0.74, 0.74)),
+                1.5,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+            p.rect_stroke(
+                Rect::from_min_max(at(rect, 0.4, 0.4), at(rect, 0.6, 0.6)),
+                1.0,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+            line(&[(0.35, 0.26), (0.35, 0.12)]);
+            line(&[(0.65, 0.26), (0.65, 0.12)]);
+            line(&[(0.35, 0.74), (0.35, 0.88)]);
+            line(&[(0.65, 0.74), (0.65, 0.88)]);
+            line(&[(0.26, 0.35), (0.12, 0.35)]);
+            line(&[(0.26, 0.65), (0.12, 0.65)]);
+            line(&[(0.74, 0.35), (0.88, 0.35)]);
+            line(&[(0.74, 0.65), (0.88, 0.65)]);
         }
         Icon::Doc => {
             p.rect_stroke(
