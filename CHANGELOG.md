@@ -3,6 +3,33 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.11.0] — 2026-11-01 — Polish release: blockers, undo, scrubbing
+
+Three long-standing limitations resolved across both surfaces. Native tests
+grow from 143 to **151**; web tests from 175 to **176**.
+
+### Added
+- **Gantt: multiple blockers per task (web)** — the dates-and-dependencies
+  editor replaces the single-prerequisite `<select>` with a checkbox panel
+  over the whole `blockedBy: string[]` array; cycle-creating candidates are
+  shown but disabled, unchecking an existing edge stays allowed. The native
+  context menu already toggled additively (`src/components/PlanningView.tsx`).
+- **Whiteboard: undo and multi-select (native)** — an undo stack (up to 40
+  steps: add, move, delete, reset) behind a new `Icon::Undo`; marquee
+  selection on empty canvas space; dragging any selected element moves the
+  whole group; Delete clears every selected element
+  (`native/src/blocks/canvas.rs`).
+- **Audio: seek and volume (native)** — a scrubbable progress bar with
+  `m:ss / total` labels and a mini volume slider next to the transport
+  buttons. The player keeps the decoder un-buffered so rodio's
+  `Sink::try_seek` works, mirrors the playhead into shared state on its poll,
+  and applies the session volume to this and future tracks
+  (`native/src/audio_player.rs`).
+
+### Fixed
+- The whiteboard hint claimed "drag to pan, wheel to zoom" — the canvas never
+  panned or zoomed; the hint now describes what actually happens.
+
 ## [1.10.0] — 2026-11-01 — Microphone recording in the native shell
 
 The record half of the audio item: the egui shell now captures the microphone

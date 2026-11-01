@@ -28,6 +28,7 @@ pub enum Icon {
     Table,
     Audio,
     Board,
+    Undo,
     Filter,
     Copy,
     Download,
@@ -152,6 +153,21 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             let tip = at(rect, 0.78, 0.52);
             line(&[(0.64, 0.4), (0.78, 0.52), (0.66, 0.66)]);
             let _ = tip;
+        }
+        Icon::Undo => {
+            // Mirrored Reload: arc sweeping the other way, arrowhead on the left.
+            let mut pts = Vec::new();
+            let start = std::f32::consts::PI * 1.19;
+            let end = std::f32::consts::PI * 2.79;
+            for i in 0..=16 {
+                let a = start + (end - start) * (i as f32 / 16.0);
+                pts.push(pos2(
+                    rect.center().x + rect.width() * 0.34 * a.cos(),
+                    rect.center().y + rect.height() * 0.34 * a.sin(),
+                ));
+            }
+            p.add(Shape::line(pts, stroke));
+            line(&[(0.36, 0.4), (0.22, 0.52), (0.34, 0.66)]);
         }
         Icon::Lock => {
             p.rect_stroke(

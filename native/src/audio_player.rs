@@ -36,10 +36,20 @@ enum Cmd {
     Pause(String),
     Resume(String),
     Stop,
+    /// Jump the current source to an absolute offset.
+    Seek(String, Duration),
+    /// Session volume, 0.0..=1.0, applied to this and future tracks.
+    Volume(f32),
 }
 
 struct Shared {
     state: Playback,
+    /// Position of the current source, mirrored from the sink on every poll
+    /// so the UI can draw a progress bar without touching the audio thread.
+    position: Duration,
+    /// Total length of the current source (from the decoder), if known.
+    total: Duration,
+    volume: f32,
 }
 
 fn shared() -> &'static Arc<Mutex<Shared>> {
@@ -47,6 +57,9 @@ fn shared() -> &'static Arc<Mutex<Shared>> {
     SHARED.get_or_init(|| {
         Arc::new(Mutex::new(Shared {
             state: Playback::Stopped,
+            position: Duration::ZERO,
+            total: Duration::ZERO,
+            volume: 1.0,
         }))
     })
 }
@@ -100,6 +113,11 @@ fn audio_thread(rx: Receiver<Cmd>, shared: Arc<Mutex<Shared>>) {
 
     let mut device = setup();
     let mut current_cid = String::new();
+    let mut current_volume = shared
+        .lock()
+        .map(|shared| shared.volume)
+        .unwrap_or(1.0)
+        .clamp(0.0, 1.0);
 
     loop {
         // Poll commands with a timeout so natural end-of-track is detected.
@@ -117,13 +135,19 @@ fn audio_thread(rx: Receiver<Cmd>, shared: Arc<Mutex<Shared>>) {
                 current_cid.clear();
                 match &device {
                     Ok((_stream, sink)) => match Decoder::new(Cursor::new(bytes)) {
-                        Ok(source) => {
+                        Ok(mut source) => {
+                            // Note: the decoder is appended un-buffered —
+                            // `Buffered` cannot seek, and seek is a feature.
+                            let total = source.total_duration().unwrap_or_default();
                             sink.clear();
-                            sink.append(source.buffered());
+                            sink.append(source);
+                            sink.set_volume(current_volume);
                             sink.play();
                             current_cid = cid.clone();
                             if let Ok(mut shared) = shared.lock() {
                                 shared.state = Playback::Playing { cid };
+                                shared.position = Duration::ZERO;
+                                shared.total = total;
                             }
                         }
                         Err(_) => {
@@ -145,8 +169,10 @@ fn audio_thread(rx: Receiver<Cmd>, shared: Arc<Mutex<Shared>>) {
                 if let Ok((_stream, sink)) = &device {
                     if current_cid == cid {
                         sink.pause();
+                        let position = sink.get_pos();
                         if let Ok(mut shared) = shared.lock() {
                             shared.state = Playback::Paused { cid };
+                            shared.position = position;
                         }
                     }
                 }
@@ -161,6 +187,27 @@ fn audio_thread(rx: Receiver<Cmd>, shared: Arc<Mutex<Shared>>) {
                     }
                 }
             }
+            Some(Cmd::Seek(cid, pos)) => {
+                if let Ok((_stream, sink)) = &device {
+                    if current_cid == cid {
+                        // A failed seek just leaves the playhead where it was.
+                        let _ = sink.try_seek(pos);
+                        let position = sink.get_pos();
+                        if let Ok(mut shared) = shared.lock() {
+                            shared.position = position;
+                        }
+                    }
+                }
+            }
+            Some(Cmd::Volume(value)) => {
+                current_volume = value.clamp(0.0, 1.0);
+                if let Ok((_stream, sink)) = &device {
+                    sink.set_volume(current_volume);
+                }
+                if let Ok(mut shared) = shared.lock() {
+                    shared.volume = current_volume;
+                }
+            }
             Some(Cmd::Stop) => {
                 if let Ok((_stream, sink)) = &device {
                     sink.stop();
@@ -169,22 +216,33 @@ fn audio_thread(rx: Receiver<Cmd>, shared: Arc<Mutex<Shared>>) {
                 current_cid.clear();
                 if let Ok(mut shared) = shared.lock() {
                     shared.state = Playback::Stopped;
+                    shared.position = Duration::ZERO;
+                    shared.total = Duration::ZERO;
                 }
             }
             None => {
-                // Timeout: detect natural end of the current source.
+                // Timeout: mirror the playhead and detect natural end.
                 if !current_cid.is_empty() {
                     if let Ok((_stream, sink)) = &device {
                         if sink.is_paused() {
+                            let position = sink.get_pos();
                             if let Ok(mut shared) = shared.lock() {
                                 shared.state = Playback::Paused {
                                     cid: current_cid.clone(),
                                 };
+                                shared.position = position;
                             }
                         } else if sink.empty() {
                             current_cid.clear();
                             if let Ok(mut shared) = shared.lock() {
                                 shared.state = Playback::Stopped;
+                                shared.position = Duration::ZERO;
+                                shared.total = Duration::ZERO;
+                            }
+                        } else {
+                            let position = sink.get_pos();
+                            if let Ok(mut shared) = shared.lock() {
+                                shared.position = position;
                             }
                         }
                     }
@@ -249,6 +307,40 @@ pub fn resume(cid: &str) {
     if let Some(tx) = sender_slot().lock().ok().and_then(|slot| slot.clone()) {
         let _ = tx.send(Cmd::Resume(cid.to_string()));
     }
+}
+
+/// Jump the source tagged with `cid` to an absolute offset. Clamped into the
+/// track; a no-op when nothing (or something else) is playing.
+pub fn seek(cid: &str, pos: Duration) {
+    if let Some(tx) = sender_slot().lock().ok().and_then(|slot| slot.clone()) {
+        let _ = tx.send(Cmd::Seek(cid.to_string(), pos));
+    }
+}
+
+/// Session playback volume, 0.0..=1.0. Applies to the current source (if any)
+/// and to every track started afterwards; survives device re-setup.
+pub fn set_volume(value: f32) {
+    let value = value.clamp(0.0, 1.0);
+    if let Ok(mut shared) = shared().lock() {
+        shared.volume = value;
+    }
+    if let Some(tx) = sender_slot().lock().ok().and_then(|slot| slot.clone()) {
+        let _ = tx.send(Cmd::Volume(value));
+    }
+}
+
+/// The session volume last set via [`set_volume`] (starts at 1.0).
+pub fn volume() -> f32 {
+    shared().lock().map(|shared| shared.volume).unwrap_or(1.0)
+}
+
+/// `(position, total)` of the current source in seconds; `(0.0, 0.0)` when
+/// nothing is loaded. Mirrored from the audio thread on its poll interval.
+pub fn progress() -> (f64, f64) {
+    shared()
+        .lock()
+        .map(|shared| (shared.position.as_secs_f64(), shared.total.as_secs_f64()))
+        .unwrap_or((0.0, 0.0))
 }
 
 /// Drop whatever is playing and forget the current cid.
@@ -374,5 +466,42 @@ mod tests {
     fn state_is_stopped_without_playback() {
         stop();
         assert_eq!(state(), Playback::Stopped);
+    }
+
+    #[test]
+    fn volume_roundtrips_and_clamps() {
+        set_volume(0.25);
+        assert_eq!(volume(), 0.25);
+        set_volume(7.0); // out of range clamps into 0..=1
+        assert_eq!(volume(), 1.0);
+        set_volume(-1.0);
+        assert_eq!(volume(), 0.0);
+        set_volume(1.0);
+        assert_eq!(volume(), 1.0);
+    }
+
+    #[test]
+    fn progress_is_zero_when_stopped() {
+        stop();
+        assert_eq!(progress(), (0.0, 0.0));
+    }
+
+    #[test]
+    fn seek_without_playback_is_a_no_op() {
+        // Must not panic nor spawn a thread just for a stray seek.
+        seek("cid-x", Duration::from_secs(3));
+        stop();
+        assert_eq!(state(), Playback::Stopped);
+    }
+
+    #[test]
+    fn tiny_wav_reports_total_duration() {
+        // The decoder path feeding the progress bar must know the length.
+        let source = Decoder::new(Cursor::new(tiny_wav())).expect("decodes");
+        let total = source.total_duration();
+        assert!(total.is_some(), "WAV decoder reports total_duration");
+        let total = total.unwrap();
+        let rate = 8000.0;
+        assert!((total.as_secs_f64() - 64.0 / rate).abs() < 0.01);
     }
 }

@@ -124,6 +124,7 @@ export const ru = {
   'gantt.undated': 'Без дат: задачи не попадут на шкалу, пока не задан срок',
   'gantt.today': 'Сегодня',
   'gantt.editor': 'Сроки и зависимости',
+  'gantt.noCandidates': 'Нет задач для зависимости',
 
   'bucket.overdue': 'Просрочено',
   'bucket.today': 'Сегодня',
