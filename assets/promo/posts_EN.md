@@ -83,11 +83,11 @@ All of it works with zero network calls after download. No API keys, no telemetr
 - **Offline Co-Thinker** — deterministic local critique of your drafts (vague words, balance, data anomalies)
 - **MCP server** — expose the vault to Claude/Cursor/any MCP client for agent-side search & read
 - **Import** — drop `.eml` from Gmail/Outlook/Thunderbird (byte-for-byte), IMAP sync, an Obsidian vault importer
-- **Native shell** — Rust + egui, no browser engine: ~11 MB Linux AppImage with zero bundled libraries, Windows msi/nsis/zip, macOS arm64. RU/EN UI, 178 native unit tests.
+- **Native shell** — Rust + egui, no browser engine: ~11 MB Linux AppImage with zero bundled libraries, a portable Windows zip, and a universal macOS .app (Apple Silicon + Intel in one download). RU/EN UI, 181 native unit tests.
 
 **Honest limitations** (tracked in LIMITATIONS.md, not hidden): component downloads don't resume (a 1.75 GB OCR model that fails at 90 % starts over); OCR is CPU-honest — a few seconds per scan, no GPU path in v1.12; the mistral.rs engine is pinned to 0.9.5 and updates with releases; transcribing a long recording occupies one job (the UI stays responsive); TTS is piper-medium quality with fixed speed; ICS export is VTODO-only; no Gantt bar drag-and-drop. It starts empty on purpose — built-in FAQ (F1) instead of fake demo notes.
 
-**Get it:** https://github.com/kostyk348/CapsuleCraft/releases (AppImage / deb / rpm / Windows / macOS, SHA256SUMS included, plus `mistralrs-engine-*.tar.gz` for all three OSes) · Source: https://github.com/kostyk348/CapsuleCraft · MIT.
+**Get it:** https://github.com/kostyk348/CapsuleCraft/releases — native builds only: Linux AppImage, Windows portable zip, macOS universal .app; SHA256SUMS included, plus `mistralrs-engine-*.tar.gz` for all three OSes · Source: https://github.com/kostyk348/CapsuleCraft · MIT.
 
 **Demo GIF:** https://github.com/kostyk348/CapsuleCraft/raw/main/assets/promo/demo.gif
 

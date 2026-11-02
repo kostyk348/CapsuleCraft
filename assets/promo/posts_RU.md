@@ -108,7 +108,7 @@ CapsuleCraft доводит идею «данные переживают при�
 
 ### Нативный шелл
 
-Нативная сборка на Rust + egui, без браузерного движка: никакого WebKitGTK/WebView2/Electron. AppImage ~11 МБ с нулём вшитых библиотек (только glibc и X11/Wayland), сборки под Windows (msi/nsis/портативный zip) и macOS (arm64). Старт мгновенный, интерфейс на русском и английском, встроенный FAQ (F1) вместо фальшивых демо-заметок. 178 нативных unit-тестов, CI на каждый PR.
+Нативная сборка на Rust + egui, без браузерного движка: никакого WebKitGTK/WebView2/Electron. AppImage ~11 МБ с нулём вшитых библиотек (только glibc и X11/Wayland), портативный zip под Windows и universal-сборка macOS (Apple Silicon + Intel в одном .app). Старт мгновенный, интерфейс на русском и английском, встроенный FAQ (F1) вместо фальшивых демо-заметок. 181 нативный unit-тест, CI на каждый PR.
 
 ### Честная таблица сравнения
 
@@ -139,8 +139,8 @@ chmod +x CapsuleCraft_1.12.1_amd64.AppImage
 
 Затем ⚙ в заголовке → выберите компоненты → они появятся в приложении после скачивания.
 
-Релизы: https://github.com/kostyk348/CapsuleCraft/releases (AppImage, deb/rpm, Windows msi/nsis/zip, macOS .app/.dmg; у каждого релиза есть SHA256SUMS.txt и архивы движка mistralrs-engine под три ОС)
+Релизы: https://github.com/kostyk348/CapsuleCraft/releases — только нативные сборки: Linux AppImage, Windows portable zip, macOS universal .app (Apple Silicon + Intel); у каждого релиза есть SHA256SUMS.txt и архивы движка mistralrs-engine под три ОС. Никаких веб-установщиков — шелл на egui и есть приложение.
 Исходники и README на русском: https://github.com/kostyk348/CapsuleCraft
-MIT. 178 unit-тестов нативного ядра, CI на каждый PR.
+MIT. 181 unit-тест нативного ядра, CI на каждый PR.
 
 Приветствуются пулл-реквесты: https://github.com/kostyk348/CapsuleCraft/blob/main/CONTRIBUTING.md
