@@ -430,9 +430,9 @@ mod tests {
     #[test]
     fn click_outside_the_dialog_closes_it() {
         for pos in [
-            egui::pos2(40.0, 400.0),  // far left of the dialog
-            egui::pos2(600.0, 40.0),  // above the dialog
-            egui::pos2(1150.0, 760.0) // bottom-right corner
+            egui::pos2(40.0, 400.0),   // far left of the dialog
+            egui::pos2(600.0, 40.0),   // above the dialog
+            egui::pos2(1150.0, 760.0), // bottom-right corner
         ] {
             let action = action_after_click(Some(pos));
             assert!(

@@ -35,6 +35,7 @@ mod mcp;
 mod mime;
 mod modals;
 mod planning;
+mod preview;
 pub mod rich_text;
 mod search;
 mod snapshot;
@@ -251,6 +252,8 @@ struct NativeApp {
     show_integrations: bool,
     /// Open attachment viewer (image/PDF overlay).
     viewer: Option<viewer::ViewerState>,
+    /// Inline page previews (images + PDF first pages), cached per session.
+    previews: preview::PreviewCache,
     /// Running local OCR engine actor (process lives in a worker thread).
     ocr: Option<ai::ocr::OcrActor>,
     /// True while one recognition is in flight.
@@ -340,6 +343,7 @@ impl NativeApp {
             components: components::Manager::load(),
             show_integrations: false,
             viewer: None,
+            previews: preview::PreviewCache::default(),
             ocr: None,
             ocr_busy: false,
             ocr_target: None,
@@ -371,7 +375,11 @@ impl NativeApp {
                 Some(path) => {
                     self.viewer = Some(viewer::ViewerState::new_pdf(name, bytes, &path));
                 }
-                None => self.toast(t(self.locale, Key::PdfEngineMissing)),
+                // Not just a toast: open the catalog where the fix lives.
+                None => {
+                    self.toast(t(self.locale, Key::PdfEngineMissing));
+                    self.show_integrations = true;
+                }
             }
         } else {
             self.viewer = Some(viewer::ViewerState::new_image(name, &bytes));
@@ -384,7 +392,9 @@ impl NativeApp {
             return;
         }
         let Some((engine_bin, model_dir)) = ai::ocr::resolve_paths(&self.components) else {
+            // Point the user straight at the download, not just at a notice.
             self.toast(t(self.locale, Key::NeedComponentsToast));
+            self.show_integrations = true;
             return;
         };
         let Some(target) = self
@@ -415,6 +425,7 @@ impl NativeApp {
         }
         let Some(model_dir) = ai::stt::best_model_dir(&self.components) else {
             self.toast(t(self.locale, Key::NeedComponentsToast));
+            self.show_integrations = true;
             return;
         };
         let Some(bytes) = self.audio_attachment_bytes(cid) else {
@@ -452,6 +463,7 @@ impl NativeApp {
         .find(|id| self.components.ready(*id));
         let Some(voice) = voice else {
             self.toast(t(self.locale, Key::NeedComponentsToast));
+            self.show_integrations = true;
             return;
         };
         let Some(lib) = self
@@ -459,6 +471,7 @@ impl NativeApp {
             .lib_path(components::ComponentId::TtsRuntime, "sherpa-onnx-c-api")
         else {
             self.toast(t(self.locale, Key::NeedComponentsToast));
+            self.show_integrations = true;
             return;
         };
         let Some(index) = self.selected else { return };
@@ -1750,6 +1763,10 @@ impl NativeApp {
                                     &link_context,
                                     self.document_scroll,
                                     self.ui_state.wide_canvas,
+                                    &mut self.previews,
+                                    self.components
+                                        .lib_path(components::ComponentId::PdfEngine, "pdfium")
+                                        .as_deref(),
                                 ));
                             }
                             _ => views::draw_empty_state(ui, &mut editor, self.locale),
@@ -1893,6 +1910,11 @@ impl NativeApp {
             self.transcribe_audio(&cid);
         }
         self.poll_ai_jobs();
+        // Attachment viewer overlay: may ask to OCR the open image.
+        let viewer_outcome = viewer::draw(&mut self.viewer, self.locale, &ctx);
+        if let Some((_, bytes)) = viewer_outcome.ocr {
+            self.start_ocr(bytes, &ctx);
+        }
         if shell.save || view_action.request_save {
             self.save_selected();
         }
@@ -2052,8 +2074,6 @@ impl NativeApp {
             modals::EncryptAction::Cancel | modals::EncryptAction::None => {}
         }
 
-        viewer::draw(&mut self.viewer, self.locale, &ctx);
-
         modals::draw_toast(&mut self.toast, &ctx);
 
         if self.dirty && self.last_edit.elapsed() > Duration::from_millis(750) {
@@ -2146,6 +2166,7 @@ impl NativeApp {
             PaletteCommand::DeletePage => self.confirm_delete = true,
             PaletteCommand::ConnectMcp => self.show_mcp_modal = true,
             PaletteCommand::Integrations => self.show_integrations = true,
+            PaletteCommand::SpeakPage => self.speak_selected_page(),
             PaletteCommand::Faq => self.show_faq_modal = true,
             PaletteCommand::CoThink => self.show_cothink_modal = true,
             PaletteCommand::CoThinkMode(mode) => {
@@ -2350,6 +2371,133 @@ mod app_tests {
         app.show_cothink_modal = false;
         app.show_faq_modal = false;
         app.show_integrations = false;
+    }
+
+    fn tiny_test_png() -> Vec<u8> {
+        let mut png = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut png, 3, 2);
+            encoder.set_color(png::ColorType::Rgb);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().unwrap();
+            writer
+                .write_image_data(&[255, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255, 9, 9, 9, 1, 2, 3])
+                .unwrap();
+        }
+        png
+    }
+
+    /// v1.12.3: OCR with nothing installed must not dead-end in a toast — it
+    /// opens the Integrations modal where the fix (a download) lives.
+    #[test]
+    fn missing_ocr_opens_integrations() {
+        let (mut app, dir) = test_app();
+        let ctx = egui::Context::default();
+        if app
+            .components
+            .ready(crate::components::ComponentId::OcrEngine)
+            && app
+                .components
+                .ready(crate::components::ComponentId::OcrModel)
+        {
+            // Real components installed on this machine — the branch is
+            // unreachable here; skip rather than lie.
+            let _ = std::fs::remove_dir_all(dir);
+            return;
+        }
+        app.start_ocr(vec![0xFF; 64], &ctx);
+        assert!(
+            app.show_integrations,
+            "OCR without components must open Integrations"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// v1.12.3: the same contract for TTS ("Озвучить страницу").
+    #[test]
+    fn missing_tts_opens_integrations() {
+        let (mut app, dir) = test_app();
+        if app
+            .components
+            .ready(crate::components::ComponentId::TtsVoiceIrina)
+            && app
+                .components
+                .ready(crate::components::ComponentId::TtsRuntime)
+        {
+            let _ = std::fs::remove_dir_all(dir);
+            return;
+        }
+        app.speak_selected_page();
+        assert!(
+            app.show_integrations,
+            "TTS without components must open Integrations"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// v1.12.3: opening a PDF without the pdfium component opens Integrations.
+    #[test]
+    fn missing_pdf_engine_opens_integrations() {
+        let (mut app, dir) = test_app();
+        if app
+            .components
+            .ready(crate::components::ComponentId::PdfEngine)
+        {
+            let _ = std::fs::remove_dir_all(dir);
+            return;
+        }
+        app.open_viewer("doc.pdf", "application/pdf", b"%PDF-".to_vec());
+        assert!(app.viewer.is_none(), "no engine - no overlay");
+        assert!(app.show_integrations);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// v1.12.3: an imported .eml page shows its image attachments inline —
+    /// the draw pass must populate the preview cache for the PNG.
+    #[test]
+    fn imported_page_previews_attachments() {
+        use base64::Engine as _;
+        let ctx = egui::Context::default();
+        let mut capsule = Capsule::blank("preview-test".into(), "x.eml".into(), "Scan".into());
+        capsule.native = false;
+        let png = tiny_test_png();
+        capsule.attachments.push(crate::mime::Attachment {
+            name: "scan.png".into(),
+            cid: "scan@capsuleos".into(),
+            mime_type: "image/png".into(),
+            content: String::new(),
+            size_bytes: png.len(),
+            raw_b64: Some(base64::engine::general_purpose::STANDARD.encode(&png)),
+        });
+        let mut previews = crate::preview::PreviewCache::default();
+        let key = crate::preview::preview_key(&capsule.message_id, &capsule.attachments[0]);
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1200.0, 900.0),
+            )),
+            ..Default::default()
+        };
+        let mut frame = ctx.run_ui(raw, |ui| {
+            let action = draw_document(
+                ui,
+                &mut capsule,
+                &[],
+                Locale::En,
+                &LinkContext::default(),
+                None,
+                false,
+                &mut previews,
+                None,
+            );
+            assert!(action.attachments.is_empty());
+        });
+        // Headless: the preview texture upload has nowhere to go.
+        frame.textures_delta.clear();
+        assert!(
+            previews.get(&key).is_some(),
+            "PNG attachment must get an inline preview"
+        );
     }
 
     /// Regression for "clicking Integrations does nothing at all": sweeping

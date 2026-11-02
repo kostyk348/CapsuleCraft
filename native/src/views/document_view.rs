@@ -1,13 +1,13 @@
 use base64::Engine;
 use egui::{
-    pos2, vec2, Align, Align2, Color32, FontFamily, FontId, Frame, Label, Layout, Margin, Rect,
-    Response, RichText, ScrollArea, Sense, StrokeKind, TextEdit, Ui, UiBuilder,
+    vec2, Align, CursorIcon, FontFamily, FontId, Frame, Label, Layout, Margin, Rect, Response,
+    RichText, ScrollArea, Sense, TextEdit, Ui,
 };
 use serde_json::json;
+use std::path::Path;
 
 use crate::blocks::{add_block_menu, draw_block_row, BlockKind, BlockOp};
 use crate::caps;
-use crate::crumb_button;
 use crate::dot_sep;
 use crate::format_date;
 use crate::hud;
@@ -21,6 +21,7 @@ use crate::menu_header;
 use crate::menu_row;
 use crate::mime::{block_type, Attachment, Capsule};
 use crate::popover_frame;
+use crate::preview::{self, Preview, PreviewCache};
 use crate::primary_button;
 use crate::secondary_button;
 use crate::status_pill;
@@ -104,6 +105,8 @@ pub fn draw_document(
     link_context: &LinkContext,
     scroll: Option<f32>,
     wide_canvas: bool,
+    previews: &mut PreviewCache,
+    pdfium: Option<&Path>,
 ) -> EditorAction {
     let mut action = EditorAction::default();
     let mut area = ScrollArea::vertical().id_salt("document");
@@ -202,6 +205,17 @@ pub fn draw_document(
                         .clicked()
                     {
                         action.view = Some(View::Mail);
+                    }
+                    ui.add_space(18.0);
+                    if !capsule.attachments.is_empty() {
+                        super::section(ui, t(locale, Key::AttachmentsTitle));
+                        // Imported emails show their documents too: images and
+                        // PDF first pages right on the page, then a read-only
+                        // row list with view / OCR / save.
+                        inline_previews(ui, capsule, previews, pdfium, locale, &mut action);
+                        ui.add_space(10.0);
+                        let actions = attachments_readonly(ui, capsule, locale);
+                        action.attachments.extend(actions);
                     }
                     ui.add_space(70.0);
                 } else {
@@ -355,6 +369,11 @@ pub fn draw_document(
                     ui.add_space(18.0);
                     links_panel(ui, link_context, locale, &mut action);
                     ui.add_space(18.0);
+                    // Inline previews above the management rows: the page
+                    // shows its attached documents, not just their names.
+                    if inline_previews(ui, capsule, previews, pdfium, locale, &mut action) {
+                        ui.add_space(14.0);
+                    }
                     let (changed, attachment_actions) = attachments_editor(ui, capsule, locale);
                     if changed {
                         action.changed = true;
@@ -934,4 +953,242 @@ pub(crate) fn guess_mime(name: &str) -> String {
         _ => "application/octet-stream",
     }
     .to_string()
+}
+
+/// Inline previews of image/PDF attachments, drawn directly on the page.
+///
+/// Returns `true` when at least one card was drawn (so callers can add
+/// spacing). Images render as pictures; PDFs as their first page with a
+/// "PDF · N страниц" caption. A click opens the full-screen viewer.
+fn inline_previews(
+    ui: &mut Ui,
+    capsule: &Capsule,
+    previews: &mut PreviewCache,
+    pdfium: Option<&Path>,
+    locale: Locale,
+    action: &mut EditorAction,
+) -> bool {
+    let indices: Vec<usize> = capsule
+        .attachments
+        .iter()
+        .enumerate()
+        .filter(|(_, attachment)| preview::previewable(attachment))
+        .map(|(index, _)| index)
+        .collect();
+    if indices.is_empty() {
+        return false;
+    }
+    let ctx = ui.ctx().clone();
+    let mut drawn = false;
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing = vec2(0.0, 10.0);
+        for index in indices {
+            let Some(attachment) = capsule.attachments.get(index) else {
+                continue;
+            };
+            let key = preview::preview_key(&capsule.message_id, attachment);
+            if previews.get(&key).is_none() {
+                let entry = match attachment.mime_type.as_str() {
+                    "application/pdf" => match (pdfium, attachment_bytes(attachment)) {
+                        (Some(lib), Some(bytes)) => {
+                            preview::render_pdf_preview(&ctx, &key, &bytes, lib)
+                                .unwrap_or_else(Preview::Failed)
+                        }
+                        (None, _) => Preview::NeedsEngine,
+                        (_, None) => Preview::Failed("empty attachment".to_string()),
+                    },
+                    mime if mime.starts_with("image/") => match attachment_bytes(attachment) {
+                        Some(bytes) => preview::decode_image(&ctx, &key, &bytes)
+                            .map(Preview::Image)
+                            .unwrap_or_else(Preview::Failed),
+                        None => Preview::Failed("empty attachment".to_string()),
+                    },
+                    _ => continue,
+                };
+                previews.insert(key.clone(), entry);
+            }
+            let Some(card) = previews.get(&key) else {
+                continue;
+            };
+            let response = draw_preview_card(ui, card, attachment, locale);
+            if response.clicked() {
+                if let Some(bytes) = attachment_bytes(attachment) {
+                    action.attachments.push(AttachmentAction::View {
+                        name: attachment.name.clone(),
+                        mime: attachment.mime_type.clone(),
+                        bytes,
+                    });
+                }
+            }
+            drawn = true;
+        }
+    });
+    drawn
+}
+
+/// One preview card: the rendered document in a sunken frame, clickable.
+fn draw_preview_card(
+    ui: &mut Ui,
+    card: &Preview,
+    attachment: &Attachment,
+    locale: Locale,
+) -> Response {
+    let max_w = ui.available_width().min(560.0);
+    let (handle, caption, pages): (&egui::TextureHandle, Option<String>, Option<usize>) = match card
+    {
+        Preview::Image(handle) => (handle, None, None),
+        Preview::Pdf(handle, pages) => (
+            handle,
+            Some(format!("PDF · {} {}", pages, t(locale, Key::PdfPagesCount))),
+            Some(*pages),
+        ),
+        Preview::NeedsEngine => {
+            let response = ui.horizontal(|ui| {
+                icons::paint(
+                    ui.painter(),
+                    Rect::from_min_size(ui.cursor().min + vec2(0.0, 1.0), vec2(12.0, 12.0)),
+                    Icon::Doc,
+                    theme::MUTED,
+                );
+                ui.add_space(18.0);
+                ui.label(
+                    RichText::new(truncate_chars(&attachment.name, 48))
+                        .size(12.0)
+                        .color(theme::MUTED),
+                );
+                ui.add_space(6.0);
+                let _ = hud(ui, t(locale, Key::PdfEngineMissing), theme::FAINT);
+            });
+            return response.response;
+        }
+        Preview::Failed(message) => {
+            let response = ui.horizontal(|ui| {
+                icons::paint(
+                    ui.painter(),
+                    Rect::from_min_size(ui.cursor().min + vec2(0.0, 1.0), vec2(12.0, 12.0)),
+                    Icon::Doc,
+                    theme::MUTED,
+                );
+                ui.add_space(18.0);
+                ui.label(
+                    RichText::new(truncate_chars(&attachment.name, 48))
+                        .size(12.0)
+                        .color(theme::MUTED),
+                );
+                ui.add_space(6.0);
+                let _ = hud(ui, message, theme::BAD);
+            });
+            return response.response;
+        }
+    };
+    let natural = handle.size_vec2();
+    let card_w = if pages.is_some() {
+        // A PDF preview is a document card, not a full-bleed picture.
+        (max_w * 0.62).min(340.0)
+    } else {
+        max_w
+    };
+    let scale = if natural.x > 0.0 {
+        (card_w / natural.x).min(1.0).max(0.05)
+    } else {
+        1.0
+    };
+    let size = natural * scale;
+    let framed = preview::preview_frame(ui, |ui| {
+        let (rect, inner) = ui.allocate_exact_size(size, Sense::click());
+        egui::Image::new((handle.id(), size)).paint_at(ui, rect);
+        preview::hover_outline(ui, rect, inner.hovered());
+        if let Some(caption) = &caption {
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(caption)
+                    .family(theme::mono())
+                    .size(9.0)
+                    .color(theme::FAINT),
+            );
+        }
+        inner.on_hover_cursor(CursorIcon::PointingHand)
+    });
+    framed.inner
+}
+
+/// Read-only attachment rows for imported emails: view / OCR / save, without
+/// the add-and-remove affordances of a native page (imported mail never
+/// rewrites its source .eml).
+fn attachments_readonly(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> Vec<AttachmentAction> {
+    let mut actions: Vec<AttachmentAction> = Vec::new();
+    for attachment in &capsule.attachments {
+        let viewable =
+            attachment.mime_type.starts_with("image/") || attachment.mime_type == "application/pdf";
+        let ocrable =
+            attachment.mime_type.starts_with("image/") && attachment.mime_type != "image/svg+xml";
+        ui.horizontal(|ui| {
+            icons::paint(
+                ui.painter(),
+                Rect::from_min_size(ui.cursor().min + vec2(0.0, 3.0), vec2(12.0, 12.0)),
+                Icon::Doc,
+                theme::FAINT,
+            );
+            ui.add_space(18.0);
+            ui.label(
+                RichText::new(truncate_chars(&attachment.name, 48))
+                    .size(12.0)
+                    .color(theme::MUTED),
+            );
+            ui.add_space(6.0);
+            let _ = hud(
+                ui,
+                &format!(
+                    "{} · {}",
+                    attachment.mime_type,
+                    human_bytes(attachment.size_bytes)
+                ),
+                theme::FAINT,
+            );
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if icon_button(ui, Icon::Download, t(locale, Key::SaveAs), true, false).clicked() {
+                    if let Some(bytes) = attachment_bytes(attachment) {
+                        if let Some(path) = rfd::FileDialog::new()
+                            .set_title(t(locale, Key::SaveAs))
+                            .set_file_name(&attachment.name)
+                            .save_file()
+                        {
+                            let _ = std::fs::write(path, bytes);
+                        }
+                    }
+                }
+                if ocrable
+                    && icon_button(
+                        ui,
+                        Icon::Sparkle,
+                        t(locale, Key::OcrAttachment),
+                        true,
+                        false,
+                    )
+                    .clicked()
+                {
+                    if let Some(bytes) = attachment_bytes(attachment) {
+                        actions.push(AttachmentAction::Ocr {
+                            name: attachment.name.clone(),
+                            bytes,
+                        });
+                    }
+                }
+                if viewable
+                    && icon_button(ui, Icon::Eye, t(locale, Key::ViewAttachment), true, false)
+                        .clicked()
+                {
+                    if let Some(bytes) = attachment_bytes(attachment) {
+                        actions.push(AttachmentAction::View {
+                            name: attachment.name.clone(),
+                            mime: attachment.mime_type.clone(),
+                            bytes,
+                        });
+                    }
+                }
+            });
+        });
+        ui.add_space(4.0);
+    }
+    actions
 }

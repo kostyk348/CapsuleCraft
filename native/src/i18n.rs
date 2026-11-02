@@ -581,6 +581,7 @@ strings! {
     ViewerClose => ("Закрыть", "Close"),
     ViewerPage => ("стр.", "page"),
     ViewerZoom => ("Масштаб", "Zoom"),
+    FitWidth => ("По ширине", "Fit width"),
     PdfLoading => ("Рендеринг PDF…", "Rendering PDF…"),
     PdfEngineMissing => ("Для PDF нужен движок — установите его в Интеграциях", "PDF needs its engine — install it in Integrations"),
     PdfPagesCount => ("страниц", "pages"),

@@ -3,6 +3,33 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.12.3] — 2026-11-02 — Documents live on the page; AI entry points everywhere
+
+### Fixed
+- **The PDF viewer is a real viewer now** (`native/src/viewer.rs`): pages
+  scroll in both axes instead of clipping at the window edge (a page taller
+  than the screen was simply cut off), flipping a page or zooming starts at
+  the top of the new page, and the overlay no longer closes on any click —
+  a stray click used to throw away the open document. Pages flip with ← →,
+  zoom works with +/− or the toolbar, «По ширине» refits the page, and the
+  zoom-out button finally has a minus icon instead of a download arrow.
+- **Attached PDFs and images are visible on the page itself**
+  (`native/src/preview.rs`, `views/document_view.rs`): an image attachment
+  renders as a picture under the text and a PDF as its first page with a
+  "PDF · N страниц" caption — one click opens the full-screen viewer.
+  Imported `.eml` pages get the same treatment plus a read-only attachment
+  list with view / OCR / save; previously an imported email hid its
+  attachments behind the "Preview" button entirely.
+- **TTS/OCR no longer dead-end in a toast**: «Озвучить страницу» with the
+  sherpa-onnx runtime or a voice missing (and OCR / STT / PDF-viewing with
+  their engines missing) now opens the Integrations modal directly, where
+  the required component can be installed in two clicks. The e2e suite
+  covers OCR, TTS and PDF paths.
+- **OCR is reachable from more places**: the image viewer toolbar gained an
+  OCR button (no need to close the viewer and find the attachment row), and
+  the command palette gained «Озвучить страницу» (⌘K → TTS), so both local
+  AI features are discoverable without knowing where the rows hide.
+
 ## [1.12.2] — 2026-11-02 — The Integrations button actually opens; installers for every platform
 
 ### Fixed

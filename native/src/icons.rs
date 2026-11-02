@@ -9,6 +9,7 @@ pub enum Icon {
     Folder,
     Search,
     Plus,
+    Minus,
     ChevronRight,
     ChevronDown,
     ChevronLeft,
@@ -167,6 +168,7 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             line(&[(0.5, 0.18), (0.5, 0.82)]);
             line(&[(0.18, 0.5), (0.82, 0.5)]);
         }
+        Icon::Minus => line(&[(0.22, 0.5), (0.78, 0.5)]),
         Icon::ChevronRight => line(&[(0.4, 0.25), (0.62, 0.5), (0.4, 0.75)]),
         Icon::ChevronDown => line(&[(0.25, 0.4), (0.5, 0.62), (0.75, 0.4)]),
         Icon::Check => line(&[(0.18, 0.52), (0.4, 0.73), (0.82, 0.27)]),
