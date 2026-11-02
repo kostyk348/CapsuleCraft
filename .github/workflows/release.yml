@@ -105,6 +105,17 @@ jobs:
           Compress-Archive -Path "$OutDir/*" -DestinationPath "${OutDir}.zip" -Force
           Get-Item "${OutDir}.zip"
 
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          if (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe") {
+            Write-Host "NSIS installed."
+          } else {
+            Get-ChildItem "C:\Program Files (x86)\NSIS" -ErrorAction SilentlyContinue
+            exit 1
+          }
+
       - name: Build NSIS installer (setup.exe)
         shell: pwsh
         run: |
@@ -112,7 +123,8 @@ jobs:
           Copy-Item native/target/release/capsuleos-native.exe native/packaging/CapsuleCraft.exe
           Copy-Item README.md, LICENSE native/packaging/
           Copy-Item native/assets/icon.ico native/packaging/icon.ico
-          makensis /DVERSION=$Version native/packaging/windows-installer.nsi
+          & "C:\Program Files (x86)\NSIS\makensis.exe" /DVERSION=$Version native/packaging/windows-installer.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-Item "native/packaging/CapsuleCraft_${Version}_x64-setup.exe"
 
       - name: Upload Windows installer + portable zip to the release
