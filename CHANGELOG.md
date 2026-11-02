@@ -3,6 +3,33 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.12.1] — 2026-11-02 — Native-only releases; Integrations fixes
+
+### Fixed
+- **Integrations modal swallowed clicks** (`native/src/modals/integrations.rs`):
+  the dialog panel was only painted while a full-screen click-sensing backdrop
+  sat underneath — any poke that missed a button (status pills, progress bars,
+  empty card space) fell through to the backdrop and closed the whole modal.
+  The panel now claims its own click area; dismissal works as before, on
+  clicks outside the dialog or Escape.
+- **TTS runtime downloaded an incompatible sherpa-onnx**: the catalog fetched
+  v2.0.1 while the hand-verified FFI in `ai/tts.rs` mirrors `c-api.h` at
+  v1.12.40 (v2.0.1 dropped the `data_dir` phonemization argument). The
+  component now downloads v1.12.40, and a regression test welds the URL to
+  the FFI tag.
+- **OCR engine URLs were welded to a release tag**: `mistralrs-engine-*.tar.gz`
+  is now fetched through the `releases/latest` redirect, so component
+  downloads survive tag bumps without a code change.
+
+### Changed
+- **Releases ship native builds only.** The Tauri/web job (MSI, NSIS, deb,
+  rpm, dmg) is gone from the release pipeline — the native egui shell is the
+  product. Artifacts per release: Windows x64 portable zip, Linux amd64
+  zero-dependency AppImage, macOS universal `.app`, plus the mistral.rs OCR
+  engines and a unified `SHA256SUMS.txt`.
+- macOS builds are now **universal binaries** (lipo of aarch64 + x86_64):
+  one `.app` for Apple Silicon and Intel Macs.
+
 ## [1.12.0] — 2026-11-01 — Integrations: local OCR/STT/TTS you download in the app, PDF and image viewing
 
 The native shell gains a components architecture: a catalog of downloadable,

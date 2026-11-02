@@ -186,7 +186,8 @@ impl ComponentId {
     }
 
     /// Files to download for `platform`. Every URL was probed at release time;
-    /// our own engine artifacts live on the CapsuleCraft v1.12.0 release.
+    /// our own engine artifacts use the `releases/latest` redirect so the URL
+    /// survives tag bumps without a code change.
     pub fn files(self, platform: Platform) -> Vec<FileSpec> {
         let hf = |repo: &str, name: &str| {
             format!("https://huggingface.co/{}/resolve/main/{}", repo, name)
@@ -194,7 +195,7 @@ impl ComponentId {
         match self {
             ComponentId::OcrEngine => vec![FileSpec {
                 url: format!(
-                    "https://github.com/kostyk348/CapsuleCraft/releases/download/v1.12.0/mistralrs-engine-{}.tar.gz",
+                    "https://github.com/kostyk348/CapsuleCraft/releases/latest/download/mistralrs-engine-{}.tar.gz",
                     platform.slug()
                 ),
                 name: "engine.tar.gz".to_string(),
@@ -210,11 +211,14 @@ impl ComponentId {
             ComponentId::SttWhisperBase => whisper_files("base"),
             ComponentId::SttWhisperSmall => whisper_files("small"),
             ComponentId::TtsRuntime => vec![FileSpec {
+                // MUST stay pinned to v1.12.40: the FFI struct layouts in
+                // ai/tts.rs mirror c-api.h at exactly this tag (v2.0.1 dropped
+                // the `data_dir` phonemization argument and shifts layouts).
                 url: match platform {
-                    Platform::LinuxX64 => "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-linux-x64-shared-lib.tar.bz2",
-                    Platform::MacArm64 => "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-osx-arm64-shared-lib.tar.bz2",
-                    Platform::MacX64 => "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-osx-x64-shared-lib.tar.bz2",
-                    Platform::WinX64 => "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-v2.0.1-win-x64-shared-MD-Release-lib.tar.bz2",
+                    Platform::LinuxX64 => "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.40/sherpa-onnx-v1.12.40-linux-x64-shared-lib.tar.bz2",
+                    Platform::MacArm64 => "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.40/sherpa-onnx-v1.12.40-osx-arm64-shared-lib.tar.bz2",
+                    Platform::MacX64 => "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.40/sherpa-onnx-v1.12.40-osx-x64-shared-lib.tar.bz2",
+                    Platform::WinX64 => "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.40/sherpa-onnx-v1.12.40-win-x64-shared-MD-Release-lib.tar.bz2",
                 }
                 .to_string(),
                 name: "runtime.tar.bz2".to_string(),
@@ -755,12 +759,43 @@ mod tests {
 
     #[test]
     fn engine_urls_point_at_our_release() {
-        let files = ComponentId::OcrEngine.files(Platform::MacArm64);
-        assert_eq!(files.len(), 1);
-        assert_eq!(
-            files[0].url,
-            "https://github.com/kostyk348/CapsuleCraft/releases/download/v1.12.0/mistralrs-engine-macos-arm64.tar.gz"
-        );
+        for platform in [
+            Platform::LinuxX64,
+            Platform::MacArm64,
+            Platform::MacX64,
+            Platform::WinX64,
+        ] {
+            let files = ComponentId::OcrEngine.files(platform);
+            assert_eq!(files.len(), 1);
+            // The `latest` redirect keeps the URL valid across tag bumps.
+            assert!(
+                files[0].url.starts_with(
+                    "https://github.com/kostyk348/CapsuleCraft/releases/latest/download/mistralrs-engine-"
+                ),
+                "{}",
+                files[0].url
+            );
+        }
+    }
+
+    #[test]
+    fn tts_runtime_url_matches_ffi_pin() {
+        // ai/tts.rs mirrors c-api.h at v1.12.40 — the runtime URL must never
+        // drift from that tag, or the hand-verified struct layouts break.
+        for platform in [
+            Platform::LinuxX64,
+            Platform::MacArm64,
+            Platform::MacX64,
+            Platform::WinX64,
+        ] {
+            let files = ComponentId::TtsRuntime.files(platform);
+            assert_eq!(files.len(), 1);
+            assert!(
+                files[0].url.contains("/v1.12.40/sherpa-onnx-v1.12.40-"),
+                "{}",
+                files[0].url
+            );
+        }
     }
 
     #[test]

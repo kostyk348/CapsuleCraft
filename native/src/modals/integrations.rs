@@ -61,9 +61,6 @@ pub fn draw_integrations_modal(
         .show(ctx, |ui| {
             let full = ctx.content_rect();
             let (rect, resp) = ui.allocate_exact_size(full.size(), Sense::click());
-            if resp.clicked() {
-                action = IntegrationsAction::Close;
-            }
             ui.painter()
                 .rect_filled(rect, 0.0, Color32::from_black_alpha(150));
 
@@ -75,6 +72,20 @@ pub fn draw_integrations_modal(
                 Stroke::new(1.0, theme::LINE_STRONG),
                 egui::StrokeKind::Inside,
             );
+            // The painted dialog is not enough: without a click-sensing widget
+            // on top of it, every poke that missed a button (labels, status
+            // pills, progress bars, empty card space) fell through to the
+            // full-screen backdrop below and closed the whole modal. Claim the
+            // panel area so clicks land here first; dismiss only on clicks
+            // that hit the dimmed backdrop outside the dialog.
+            let _panel_hit = ui.interact(
+                panel,
+                egui::Id::new("integrations-modal-panel"),
+                Sense::click(),
+            );
+            if resp.clicked() {
+                action = IntegrationsAction::Close;
+            }
 
             let mut body = ui.new_child(
                 UiBuilder::new()
@@ -342,4 +353,92 @@ fn open_folder(manager: &Manager, id: ComponentId) -> Result<(), std::io::Error>
         std::process::Command::new("xdg-open").arg(dir).spawn()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::Manager;
+
+    /// Draws the open modal headlessly and feeds a synthetic click at `click`
+    /// (press + release on consecutive frames). Returns the action produced by
+    /// the frame that carries the release — the frame where `clicked()` fires.
+    fn action_after_click(click: Option<egui::Pos2>) -> IntegrationsAction {
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::new(1200.0, 800.0));
+        let manager = Manager::load_for_tests();
+
+        let mut raw = egui::RawInput {
+            screen_rect: Some(screen),
+            ..Default::default()
+        };
+        let mut action = IntegrationsAction::None;
+        let sink = &mut action;
+        let mut run = |ctx: &egui::Context| {
+            *sink = draw_integrations_modal(true, &manager, Locale::En, ctx);
+        };
+        let mut pass = |input: egui::RawInput| {
+            let mut out = ctx.run_pass(input, &mut run);
+            // Headless: drop the texture updates instead of painting them.
+            out.textures_delta.clear();
+        };
+        // Frame 1: layout the modal with no pointer around.
+        pass(raw.clone());
+        if let Some(pos) = click {
+            raw.events.push(egui::Event::PointerMoved(pos));
+            pass(raw.clone());
+            raw.events.push(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            });
+            pass(raw.clone());
+            raw.events.push(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            });
+            pass(raw);
+        }
+        action
+    }
+
+    /// Regression: the panel was only painted, so a click anywhere that missed
+    /// a button fell through to the full-screen backdrop and closed the whole
+    /// modal — "интеграции не тыкаются". The dialog body must swallow clicks.
+    #[test]
+    fn click_inside_the_dialog_does_not_close_it() {
+        // Screen 1200x800 → the 680x560 dialog spans (260..940, 120..680).
+        // Dead space in the card area and next to the title both land on the
+        // dialog, not on any button.
+        for pos in [
+            egui::pos2(600.0, 400.0), // inside a component card, off any button
+            egui::pos2(450.0, 148.0), // title row, left of the close button
+            egui::pos2(930.0, 670.0), // dialog corner padding
+        ] {
+            let action = action_after_click(Some(pos));
+            assert!(
+                matches!(action, IntegrationsAction::None),
+                "click at {pos:?} closed the modal"
+            );
+        }
+    }
+
+    /// Click-to-dismiss still works outside the dialog.
+    #[test]
+    fn click_outside_the_dialog_closes_it() {
+        for pos in [
+            egui::pos2(40.0, 400.0),  // far left of the dialog
+            egui::pos2(600.0, 40.0),  // above the dialog
+            egui::pos2(1150.0, 760.0) // bottom-right corner
+        ] {
+            let action = action_after_click(Some(pos));
+            assert!(
+                matches!(action, IntegrationsAction::Close),
+                "click at {pos:?} did not close the modal"
+            );
+        }
+    }
 }

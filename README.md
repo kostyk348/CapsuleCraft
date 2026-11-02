@@ -182,27 +182,27 @@ deliberately narrower: local-first storage you can trust for decades.
 The **native AppImage** (recommended, Linux):
 
 ```bash
-chmod +x CapsuleCraft_1.9.0_amd64.AppImage
-./CapsuleCraft_1.9.0_amd64.AppImage            # default vault...
-./CapsuleCraft_1.9.0_amd64.AppImage /path/to/vault   # ...or your folder
+chmod +x CapsuleCraft_1.12.1_amd64.AppImage
+./CapsuleCraft_1.12.1_amd64.AppImage            # default vault...
+./CapsuleCraft_1.12.1_amd64.AppImage /path/to/vault   # ...or your folder
 ```
 
 It needs only glibc, an X11 or Wayland desktop and (for audio playback) ALSA —
 no WebKitGTK, no WebView2, nothing else. Every GitHub release also carries
 `SHA256SUMS.txt`.
 
-The **native Windows app** (x64) ships as `CapsuleCraft_native_1.9.0_x64.zip`:
+The **native Windows app** (x64) ships as `CapsuleCraft_native_1.12.1_x64.zip`:
 unzip it and run `CapsuleCraft.exe`. Standalone native egui shell, zero dependencies,
 no WebView2 or installer required.
 
-The **native macOS app** (arm64) ships as `CapsuleCraft_native_1.9.0_arm64.app.zip`:
-unzip it, drag `CapsuleCraft.app` into Applications. It is ad-hoc signed; if
-Gatekeeper blocks the first launch, run `xattr -d com.apple.quarantine CapsuleCraft.app`.
+The **native macOS app** (universal: Apple Silicon + Intel) ships as
+`CapsuleCraft_native_1.12.1_macos_universal.app.zip`: unzip it, drag
+`CapsuleCraft.app` into Applications. It is ad-hoc signed; if Gatekeeper blocks
+the first launch, run `xattr -d com.apple.quarantine CapsuleCraft.app`.
 
-Legacy web/Tauri builds (Windows MSI / NSIS, Linux deb, macOS dmg) are still
-published for parity (on Linux those need `libwebkit2gtk-4.1-0`). The Linux
-**AppImage**, Windows **portable zip**, and macOS **.app** are the recommended
-native builds — no browser engine, no webview libraries.
+Releases carry **native builds only** — no web/Tauri installers. The Linux
+**AppImage**, Windows **portable zip**, and macOS **.app** are the app, period:
+no browser engine, no webview libraries.
 
 > First launch shows an empty vault and the built-in **FAQ**. Press `F1`,
 > use the `ⓘ FAQ` button or ⌘K → FAQ. No demo notes are ever created.
@@ -262,6 +262,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v1.12.1** | Native-only releases (Windows zip, Linux AppImage, macOS universal .app); fixed the Integrations modal swallowing clicks; TTS runtime pinned to the sherpa-onnx tag the FFI mirrors (v1.12.40); component URLs decoupled from release tags | 2026-11-02 |
 | **v1.12.0** | Integrations: downloadable local OCR (Xiaomi-OCR-0 on the pure-Rust mistral.rs engine), whisper STT in-process, Russian TTS (piper via sherpa-onnx), native PDF + image viewers | 2026-11-01 |
 | **v1.11.0** | Polish: multi-blocker tasks in the web Gantt editor; undo + marquee multi-select on the native whiteboard; seek + volume in native audio playback | 2026-11-01 |
 | **v1.10.0** | Microphone recording from the native audio block (cpal → WAV, live meter); fixed audio file attachments never reaching the capsule; AppImage CI fix | 2026-11-01 |
