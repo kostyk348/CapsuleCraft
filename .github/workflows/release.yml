@@ -399,6 +399,17 @@ jobs:
             > "$APP/Contents/Info.plist"
           codesign --force --deep --sign - "$APP"
 
+      # v1.12.4 (rerun): hdiutil died with "No space left on device" —
+      # two release targets + the restored rust-cache fill the runner disk.
+      # The .app is assembled and signed by now, so the whole build tree
+      # (dozens of GB) is dead weight: throw it away before making the dmg.
+      - name: Free disk space
+        run: |
+          set -e
+          df -H /
+          rm -rf native/target ~/.cargo/registry/src ~/.cargo/registry/cache
+          df -H /
+
       - name: Package .dmg (drag-to-Applications)
         run: |
           set -e
