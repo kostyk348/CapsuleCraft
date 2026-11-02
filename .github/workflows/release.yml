@@ -389,9 +389,14 @@ jobs:
           ls -la "${{ matrix.artifact }}"
 
       - name: Upload engine to the release
+        # This job has no checkout, so gh cannot resolve the repository from
+        # the local git remotes. GH_REPO is shell-independent (the default
+        # shell on Windows is pwsh, where "$GITHUB_REPOSITORY" expands to an
+        # empty string and the --repo flag silently broke the upload).
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ needs.create-release.outputs.tag }}" "${{ matrix.artifact }}" --clobber --repo "$GITHUB_REPOSITORY"
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${{ needs.create-release.outputs.tag }}" "${{ matrix.artifact }}" --clobber
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4
