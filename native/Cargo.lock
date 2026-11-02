@@ -977,7 +977,7 @@ dependencies = [
 
 [[package]]
 name = "capsuleos-native"
-version = "1.12.2"
+version = "1.12.3"
 dependencies = [
  "base64 0.22.1",
  "boa_engine",

@@ -44,6 +44,7 @@ pub enum Command {
     DeletePage,
     ConnectMcp,
     Integrations,
+    SpeakPage,
     CoThink,
     CoThinkMode(crate::cothinker::CoThinkMode),
     OpenImapSync,
@@ -248,6 +249,20 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                         "pdf",
                     ],
                     &["интеграции", "компоненты", "распознавание", "озвучка"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::SpeakPage,
+            PaletteCommand {
+                id: "speak_page",
+                title: t(locale, Key::SpeakPage).into(),
+                hint: t(locale, Key::CompGroupTts).into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["tts", "voice", "speak", "read", "audio"],
+                    &["озвучить", "озвучка", "голос", "прочитать", "речь"],
                 ),
                 shortcut: None,
             },

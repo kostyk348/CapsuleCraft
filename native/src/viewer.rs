@@ -3,11 +3,16 @@
 //! Images decode once via the `image` crate; PDF pages render on demand
 //! through pdfium (the shared library arrives as a downloadable component —
 //! `Pdfium::bind_to_library` loads it from the components directory).
+//!
+//! Interaction contract (v1.12.3): the overlay closes only through the ✕
+//! button or `Escape` — clicks inside the page never close it — the content
+//! scrolls in both axes, pages flip with the arrows / ← → keys, zoom works
+//! with the toolbar or +/− keys, and an image can be sent straight to OCR.
 
 use std::path::Path;
 use std::sync::Arc;
 
-use egui::{vec2, Align, Color32, Frame, Label, Layout, Margin, Rect, RichText, Sense};
+use egui::{vec2, Align, Color32, Frame, Label, Layout, Margin, Rect, RichText, ScrollArea, Sense};
 
 use crate::i18n::{t, Key, Locale};
 use crate::icons::{self, Icon};
@@ -17,6 +22,9 @@ use crate::{hud, secondary_button};
 /// An open viewer overlay; `None` in the shell means closed.
 pub struct ViewerState {
     pub name: String,
+    /// The exact attachment bytes for images — kept so the viewer can offer
+    /// "send to OCR" without going back through the page.
+    raw_image: Option<Vec<u8>>,
     image: Option<Arc<egui::ColorImage>>,
     pdf: Option<PdfDoc>,
     pub page: usize,
@@ -30,6 +38,13 @@ pub struct ViewerState {
 
 struct PdfDoc {
     document: pdfium_render::prelude::PdfDocument<'static>,
+}
+
+/// What the overlay asked the shell to do this frame.
+#[derive(Default)]
+pub struct ViewerOutcome {
+    /// Send the open image to the OCR engine: `(file name, bytes)`.
+    pub ocr: Option<(String, Vec<u8>)>,
 }
 
 impl ViewerState {
@@ -50,6 +65,7 @@ impl ViewerState {
         };
         Self {
             name: name.to_string(),
+            raw_image: Some(bytes.to_vec()),
             image,
             pdf: None,
             page: 0,
@@ -64,6 +80,7 @@ impl ViewerState {
         match PdfDoc::open(pdfium_lib, bytes) {
             Ok(pdf) => Self {
                 name: name.to_string(),
+                raw_image: None,
                 image: None,
                 pdf: Some(pdf),
                 page: 0,
@@ -74,6 +91,7 @@ impl ViewerState {
             },
             Err(error) => Self {
                 name: name.to_string(),
+                raw_image: None,
                 image: None,
                 pdf: None,
                 page: 0,
@@ -121,7 +139,7 @@ impl PdfDoc {
         let target_width = (width.max(320.0) as i32).min(4000);
         let config = PdfRenderConfig::new()
             .set_target_width(target_width)
-            .set_maximum_height(6000);
+            .set_maximum_height(8000);
         let dynamic = page
             .render_with_config(&config)
             .map_err(|e| format!("render: {e}"))?
@@ -136,17 +154,62 @@ impl PdfDoc {
     }
 }
 
-/// Draw the overlay and handle closing. `Escape` and backdrop clicks close.
-pub fn draw(viewer: &mut Option<ViewerState>, locale: Locale, ctx: &egui::Context) {
+/// Open a PDF from raw bytes and render one page — used by the inline page
+/// previews. Returns the rendered page and the total page count.
+pub(crate) fn render_pdf_page(
+    bytes: &[u8],
+    lib_path: &Path,
+    index: usize,
+    width: f32,
+) -> Result<(egui::ColorImage, usize), String> {
+    let doc = PdfDoc::open(lib_path, bytes.to_vec())?;
+    let pages = doc.page_count();
+    let image = doc.render_page(index, width)?;
+    Ok((image, pages))
+}
+
+/// Draw the overlay and handle closing. `Escape` and the ✕ button close;
+/// clicks on the backdrop or the page no longer do.
+pub fn draw(
+    viewer: &mut Option<ViewerState>,
+    locale: Locale,
+    ctx: &egui::Context,
+) -> ViewerOutcome {
+    let mut outcome = ViewerOutcome::default();
     // Take the state out so the Area closure can own it exclusively; it is
     // put back unless the overlay closed this frame.
     let mut state = match viewer.take() {
         Some(state) => state,
-        None => return,
+        None => return outcome,
     };
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-        return;
+        return outcome;
     }
+
+    // Keyboard: ← → flip pages, +/− zoom. Only while the overlay is open.
+    let (arrow_next, arrow_prev, zoom_in_key, zoom_out_key) = ctx.input(|i| {
+        (
+            i.key_pressed(egui::Key::ArrowRight),
+            i.key_pressed(egui::Key::ArrowLeft),
+            i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals),
+            i.key_pressed(egui::Key::Minus),
+        )
+    });
+    if state.is_pdf() {
+        if arrow_next && state.page + 1 < state.page_count() {
+            state.page += 1;
+        }
+        if arrow_prev && state.page > 0 {
+            state.page -= 1;
+        }
+    }
+    if zoom_in_key {
+        state.zoom = (state.zoom * 1.25).min(5.0);
+    }
+    if zoom_out_key {
+        state.zoom = (state.zoom / 1.25).max(0.2);
+    }
+
     let full = ctx.content_rect();
     let mut close = false;
 
@@ -154,10 +217,10 @@ pub fn draw(viewer: &mut Option<ViewerState>, locale: Locale, ctx: &egui::Contex
         .order(egui::Order::Foreground)
         .fixed_pos(full.min)
         .show(ctx, |ui| {
-            let (rect, resp) = ui.allocate_exact_size(full.size(), Sense::click());
-            if resp.clicked() {
-                close = true;
-            }
+            // Dimmed backdrop. Deliberately NOT click-to-close: a click is how
+            // the user drags/scrolls the document, losing it to a mis-click
+            // was the old viewer's worst habit.
+            let (rect, _) = ui.allocate_exact_size(full.size(), Sense::hover());
             ui.painter()
                 .rect_filled(rect, 0.0, Color32::from_black_alpha(190));
 
@@ -178,7 +241,7 @@ pub fn draw(viewer: &mut Option<ViewerState>, locale: Locale, ctx: &egui::Contex
                     bar_ui.cursor().min + vec2(8.0, bar.height() / 2.0),
                     vec2(15.0, 15.0),
                 ),
-                Icon::Doc,
+                if state.is_pdf() { Icon::Doc } else { Icon::Eye },
                 theme::ACCENT_INK,
             );
             bar_ui.add_space(26.0);
@@ -189,20 +252,63 @@ pub fn draw(viewer: &mut Option<ViewerState>, locale: Locale, ctx: &egui::Contex
                     .color(theme::INK),
             );
             bar_ui.add_space(10.0);
-            let _ = hud(
-                &mut bar_ui,
-                &format!(
+            let pages_label = if state.is_pdf() {
+                format!(
                     "{} {} / {}",
                     t(locale, Key::ViewerPage),
                     state.page + 1,
                     state.page_count()
-                ),
-                theme::FAINT,
-            );
+                )
+            } else {
+                match &state.image {
+                    Some(image) => format!("{}×{}", image.width(), image.height()),
+                    None => String::new(),
+                }
+            };
+            let _ = hud(&mut bar_ui, &pages_label, theme::FAINT);
 
             bar_ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if secondary_button(ui, Some(Icon::Close), "", 30.0).clicked() {
+                if secondary_button(ui, Some(Icon::Close), t(locale, Key::ViewerClose), 30.0)
+                    .clicked()
+                {
                     close = true;
+                }
+                // OCR affordance: only for images (the engine takes raster).
+                if state.raw_image.is_some()
+                    && secondary_button(
+                        ui,
+                        Some(Icon::Sparkle),
+                        t(locale, Key::OcrAttachment),
+                        30.0,
+                    )
+                    .on_hover_text(t(locale, Key::OcrAttachment))
+                    .clicked()
+                {
+                    if let Some(bytes) = state.raw_image.clone() {
+                        outcome.ocr = Some((state.name.clone(), bytes));
+                    }
+                }
+                let fit = secondary_button(ui, None, t(locale, Key::FitWidth), 26.0)
+                    .on_hover_text(t(locale, Key::FitWidth));
+                if fit.clicked() {
+                    state.zoom = 1.0;
+                }
+                if secondary_button(ui, Some(Icon::Plus), t(locale, Key::ViewerZoom), 30.0)
+                    .on_hover_text(t(locale, Key::ViewerZoom))
+                    .clicked()
+                {
+                    state.zoom = (state.zoom * 1.25).min(5.0);
+                }
+                let _ = hud(
+                    ui,
+                    &format!("{}%", (state.zoom * 100.0) as i32),
+                    theme::FAINT,
+                );
+                if secondary_button(ui, Some(Icon::Minus), t(locale, Key::ViewerZoom), 30.0)
+                    .on_hover_text(t(locale, Key::ViewerZoom))
+                    .clicked()
+                {
+                    state.zoom = (state.zoom / 1.25).max(0.2);
                 }
                 if state.is_pdf() && state.page_count() > 1 {
                     if secondary_button(ui, Some(Icon::ChevronRight), "", 30.0).clicked()
@@ -215,17 +321,6 @@ pub fn draw(viewer: &mut Option<ViewerState>, locale: Locale, ctx: &egui::Contex
                     {
                         state.page -= 1;
                     }
-                }
-                if secondary_button(ui, Some(Icon::Plus), "", 30.0).clicked() {
-                    state.zoom = (state.zoom * 1.25).min(5.0);
-                }
-                let _ = hud(
-                    ui,
-                    &format!("{}%", (state.zoom * 100.0) as i32),
-                    theme::FAINT,
-                );
-                if secondary_button(ui, Some(Icon::Download), "", 30.0).clicked() {
-                    state.zoom = (state.zoom / 1.25).max(0.2);
                 }
             });
 
@@ -256,23 +351,21 @@ pub fn draw(viewer: &mut Option<ViewerState>, locale: Locale, ctx: &egui::Contex
                 return;
             }
 
-            if state.pdf.is_some() {
-                // Render width tracks the available area, bucketed to avoid
-                // re-rendering on every pixel of resize.
+            if let Some(pdf) = state.pdf.as_ref() {
+                // Render width tracks the available area × zoom, floored to
+                // 64 px buckets so a resize does not re-render per pixel (and
+                // never renders wider than the viewport at zoom 1.0).
                 let target_width = content.width() * state.zoom;
-                let bucket = (target_width / 64.0).round() * 64.0;
+                let bucket = ((target_width / 64.0).floor() * 64.0).max(320.0);
                 let key = ((state.page as u64) << 32) | (bucket.max(1.0) as u64 & 0xFFFF_FFFF);
                 let needs = state
                     .texture
                     .as_ref()
                     .map(|(cached, _)| *cached != key)
                     .unwrap_or(true);
-                let Some(pdf) = state.pdf.as_ref() else {
-                    return;
-                };
                 if needs || bucket != state.last_width {
                     state.last_width = bucket;
-                    match pdf.render_page(state.page, bucket) {
+                    match pdf.render_page(state.page, bucket as f32) {
                         Ok(image) => {
                             let handle = ctx.load_texture(
                                 format!("pdf-{}-{}", state.page, bucket),
@@ -288,13 +381,23 @@ pub fn draw(viewer: &mut Option<ViewerState>, locale: Locale, ctx: &egui::Contex
                     }
                 }
                 if let Some((_, handle)) = &state.texture {
-                    content_ui.add_space(14.0);
-                    Frame::new()
-                        .fill(Color32::WHITE)
-                        .corner_radius(4.0)
-                        .inner_margin(Margin::same(0))
+                    // The scroll area is the whole point: a page taller than
+                    // the window must scroll, not clip. The salt includes the
+                    // page + bucket so flipping a page or zooming starts at
+                    // the top instead of keeping a stale offset.
+                    ScrollArea::both()
+                        .id_salt(format!("pdf-view-{}-{}", state.page, bucket as u64))
+                        .auto_shrink([false, false])
                         .show(&mut content_ui, |ui| {
-                            ui.add(egui::Image::new((handle.id(), handle.size_vec2())));
+                            ui.add_space(14.0);
+                            Frame::new()
+                                .fill(Color32::WHITE)
+                                .corner_radius(4.0)
+                                .inner_margin(Margin::same(0))
+                                .show(ui, |ui| {
+                                    ui.add(egui::Image::new((handle.id(), handle.size_vec2())));
+                                });
+                            ui.add_space(24.0);
                         });
                 }
             }
@@ -303,6 +406,7 @@ pub fn draw(viewer: &mut Option<ViewerState>, locale: Locale, ctx: &egui::Contex
     if !close {
         *viewer = Some(state);
     }
+    outcome
 }
 
 fn draw_zoomable(
@@ -317,7 +421,20 @@ fn draw_zoomable(
         (*image).clone(),
         egui::TextureOptions::LINEAR,
     );
-    let size = handle.size_vec2() * zoom;
+    let natural = handle.size_vec2();
+    // At zoom 1.0 a huge image must FIT the viewport, not overflow it:
+    // `fit` shrinks oversized images to the window, zoom then scales from
+    // that base (so 200 % of an already-fitted photo is genuinely bigger).
+    let viewport = ui.available_rect_before_wrap().size();
+    let fit = if natural.x > 0.0 && natural.y > 0.0 {
+        (viewport.x / natural.x)
+            .min(viewport.y / natural.y)
+            .min(1.0)
+            .max(0.05)
+    } else {
+        1.0
+    };
+    let size = natural * (fit * zoom);
     egui::ScrollArea::both()
         .id_salt(format!("{id}-scroll"))
         .auto_shrink([false, false])
