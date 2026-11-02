@@ -1470,6 +1470,10 @@ impl ShellAction {
         self.toggle_locale |= other.toggle_locale;
         self.palette |= other.palette;
         self.connect_mcp |= other.connect_mcp;
+        // The v1.12.0 branch added the field and the button but never wired it
+        // through absorb — the ⚙ chip set `action.open_integrations`, the value
+        // was dropped here, and the modal never opened ("nothing happens").
+        self.open_integrations |= other.open_integrations;
         self.faq |= other.faq;
         self.open_imap |= other.open_imap;
         self.sync_imap |= other.sync_imap;
@@ -1486,6 +1490,14 @@ impl ShellAction {
 
 impl eframe::App for NativeApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.frame_ui(ui);
+    }
+}
+
+impl NativeApp {
+    /// The whole UI frame, split out of `eframe::App::ui` so headless tests
+    /// can drive the real app with synthetic input (no window required).
+    fn frame_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.sync_snapshot();
         self.drive_snapshot(&ctx);
@@ -2133,6 +2145,7 @@ impl NativeApp {
             }
             PaletteCommand::DeletePage => self.confirm_delete = true,
             PaletteCommand::ConnectMcp => self.show_mcp_modal = true,
+            PaletteCommand::Integrations => self.show_integrations = true,
             PaletteCommand::Faq => self.show_faq_modal = true,
             PaletteCommand::CoThink => self.show_cothink_modal = true,
             PaletteCommand::CoThinkMode(mode) => {
@@ -2274,5 +2287,108 @@ impl NativeApp {
                 self.status_error = true;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod app_tests {
+    use super::*;
+
+    fn test_app() -> (NativeApp, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "cc_ui_test_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        (
+            NativeApp::new(cli::Launch {
+                vault: Some(dir.clone()),
+                ..Default::default()
+            }),
+            dir,
+        )
+    }
+
+    /// One full app frame driven headlessly, exactly like eframe does it
+    /// (`Context::run_ui` → `App::ui`).
+    fn run_frame(ctx: &egui::Context, app: &mut NativeApp, raw: egui::RawInput) {
+        let mut out = ctx.run_ui(raw, |ui| app.frame_ui(ui));
+        // Headless: drop texture updates instead of painting them.
+        out.textures_delta.clear();
+    }
+
+    /// Move, press and release the primary button at `pos`.
+    fn click(ctx: &egui::Context, app: &mut NativeApp, raw: &mut egui::RawInput, pos: egui::Pos2) {
+        raw.events.push(egui::Event::PointerMoved(pos));
+        run_frame(ctx, app, raw.clone());
+        raw.events.push(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        });
+        run_frame(ctx, app, raw.clone());
+        raw.events.push(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        });
+        run_frame(ctx, app, raw.clone());
+        raw.events.clear();
+    }
+
+    fn close_overlays(app: &mut NativeApp) {
+        app.palette.open = false;
+        app.confirm_delete = false;
+        app.show_mcp_modal = false;
+        app.show_imap_modal = false;
+        app.show_cothink_modal = false;
+        app.show_faq_modal = false;
+        app.show_integrations = false;
+    }
+
+    /// Regression for "clicking Integrations does nothing at all": sweeping
+    /// the title bar with a synthetic mouse must find the ⚙ chip and open the
+    /// integrations modal. Runs the REAL `frame_ui` end to end.
+    #[test]
+    fn titlebar_chip_click_opens_integrations() {
+        let (mut app, dir) = test_app();
+        let ctx = egui::Context::default();
+        let width = 1280.0;
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 800.0));
+        let mut raw = egui::RawInput {
+            screen_rect: Some(screen),
+            ..Default::default()
+        };
+        for _ in 0..4 {
+            run_frame(&ctx, &mut app, raw.clone());
+        }
+        assert!(!app.show_integrations);
+
+        // Title bar right block (right-to-left): [caption buttons][6][Info][⌘]
+        // [⚙ Integrations][MCP]… — sweep past the captions until something opens
+        // the integrations modal.
+        let y = crate::chrome::TITLEBAR_HEIGHT / 2.0;
+        let mut found_at = None;
+        for offset in (140..=266).step_by(2) {
+            close_overlays(&mut app);
+            run_frame(&ctx, &mut app, raw.clone());
+            let pos = egui::pos2(width - offset as f32, y);
+            click(&ctx, &mut app, &mut raw, pos);
+            if app.show_integrations {
+                found_at = Some(pos);
+                break;
+            }
+        }
+        assert!(
+            found_at.is_some(),
+            "no click in the title bar opened the Integrations modal"
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
