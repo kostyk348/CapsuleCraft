@@ -3,6 +3,44 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.12.4] — 2026-11-02 — OCR you can actually see working
+
+### Fixed
+- **The engine no longer hangs on "инициализация движка" forever**
+  (`native/src/ai/ocr.rs`): mistral.rs was spawned with piped
+  stdout/stderr that nobody ever read — once the engine filled the 64 KB
+  pipe buffer with its startup log it blocked mid-load, and the app waited
+  out the full five-minute timeout with zero visible progress. The pipes
+  are now `null()`, and a process that dies before readiness fails
+  immediately with its exit status instead of burning the timeout.
+- **The OCR result is no longer swallowed on imported email pages**
+  (`native/src/main.rs`): a recognized text was appended as a paragraph
+  *block*, but `.eml` pages render read-only and never draw blocks — the
+  toast promised "added to the page" while the text went nowhere. Now a
+  read-only page copies the recognized text to the clipboard and says
+  exactly that; native pages still get it appended as a block.
+- **STT toasts said "OCR"** — transcription finished with «Текст распознан
+  и добавлен на страницу»; it now has its own «Расшифровка готова» copy.
+
+### Added
+- **A live OCR status card** (`native/src/main.rs`): bottom-right card with
+  a spinner, the file name, the phase («Запускаю движок, загружаю модель
+  (~2 ГБ)…» → «Движок готов, распознаю текст…») and a moving elapsed timer.
+  A cold start of the model takes minutes; a toast that vanished in two
+  seconds was simply not the truth. The card also explains that the first
+  run is the slowest.
+- **A persistent result card**: when recognition finishes, the recognized
+  text stays on screen (scrollable, selectable) with a «Скопировать»
+  button and an explicit line about where it went — «Текст добавлен в конец
+  страницы — блок подсвечен» or «Страница-письмо только для чтения: текст
+  скопирован в буфер обмена».
+- **The fresh paragraph announces itself**: on native pages the document
+  scrolls to the new block and strokes it with the accent color for a few
+  seconds, so "куда оно добавилось?" is answered visually, not by faith.
+- **The viewer's OCR button becomes a spinner** while the engine runs
+  (`native/src/viewer.rs`); clicking OCR again elsewhere answers «OCR уже
+  запущен — подожди завершения (scan.png)» instead of resetting silently.
+
 ## [1.12.3] — 2026-11-02 — Documents live on the page; AI entry points everywhere
 
 ### Fixed

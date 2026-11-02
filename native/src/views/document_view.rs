@@ -1,9 +1,9 @@
 use base64::Engine;
 use egui::{
-    vec2, Align, CursorIcon, FontFamily, FontId, Frame, Label, Layout, Margin, Rect, Response,
-    RichText, ScrollArea, Sense, TextEdit, Ui,
+    pos2, vec2, Align, CursorIcon, FontFamily, FontId, Frame, Label, Layout, Margin, Rect,
+    Response, RichText, ScrollArea, Sense, Stroke, TextEdit, Ui,
 };
-use serde_json::json;
+use serde_json::{json, Value};
 use std::path::Path;
 
 use crate::blocks::{add_block_menu, draw_block_row, BlockKind, BlockOp};
@@ -107,6 +107,9 @@ pub fn draw_document(
     wide_canvas: bool,
     previews: &mut PreviewCache,
     pdfium: Option<&Path>,
+    // Id of the block to scroll to and stroke — the paragraph OCR just
+    // appended, so "куда оно добавилось?" is answered visually.
+    highlight: Option<&str>,
 ) -> EditorAction {
     let mut action = EditorAction::default();
     let mut area = ScrollArea::vertical().id_salt("document");
@@ -230,6 +233,9 @@ pub fn draw_document(
                             continue;
                         }
 
+                        let block_id = block.get("id").and_then(Value::as_str).unwrap_or("");
+                        let highlighted = highlight == Some(block_id);
+                        let highlight_top = ui.cursor().top();
                         let (changed, op) = draw_block_row(
                             ui,
                             &mut block,
@@ -238,6 +244,22 @@ pub fn draw_document(
                             &mut capsule.attachments,
                             locale,
                         );
+                        if highlighted {
+                            // Scroll the fresh OCR paragraph into view and
+                            // stroke it — the block announces itself instead
+                            // of quietly appearing somewhere at the bottom.
+                            let rect = Rect::from_min_max(
+                                pos2(ui.min_rect().left(), highlight_top),
+                                pos2(ui.min_rect().right(), ui.min_rect().bottom()),
+                            );
+                            ui.scroll_to_rect(rect, Some(Align::Center));
+                            ui.painter().rect_stroke(
+                                rect.expand(5.0),
+                                6.0,
+                                Stroke::new(1.5, theme::ACCENT),
+                                egui::StrokeKind::Inside,
+                            );
+                        }
                         if changed {
                             capsule.blocks[index] = block;
                             action.changed = true;
