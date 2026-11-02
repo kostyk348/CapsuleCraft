@@ -1,6 +1,9 @@
 //! OCR via Xiaomi-OCR-0 served by mistral.rs — a pure-Rust engine downloaded
 //! as a component. The app spawns `mistralrs` (OpenAI-compatible server) on
 //! localhost and posts base64 images to `/v1/chat/completions`.
+//!
+//! Progress is streamed back as [`OcrEvent`]s so the UI can show "starting →
+//! ready → done" instead of a single toast and minutes of silence (v1.12.4).
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -46,38 +49,56 @@ impl Drop for OcrEngine {
 impl OcrEngine {
     /// Spawn the engine bound to the model directory and wait until it
     /// answers `/v1/models` (cold load of the 1.75 GB weights takes a while).
+    ///
+    /// The pipes are deliberately `null()`: nothing in the app ever reads
+    /// them, so a chatty engine would fill the 64 KB pipe buffer and block
+    /// mid-load — the exact "инициализация движка… и тишина" hang of
+    /// v1.12.3. mistralrs logs to the console; losing that log is fine, a
+    /// deadlocked engine is not.
     pub fn spawn(engine_bin: &Path, model_dir: &Path, port: u16) -> Result<Self, String> {
         let args = serve_args(port, model_dir);
         let mut command = Command::new(engine_bin);
         command
             .args(&args)
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         let child = command.spawn().map_err(|e| format!("spawn engine: {e}"))?;
-        let engine = Self { child, port };
+        let mut engine = Self { child, port };
         engine.wait_ready(Duration::from_secs(300))?;
         Ok(engine)
     }
 
     /// Poll `/v1/models` until the server is ready or the timeout expires.
-    pub fn wait_ready(&self, timeout: Duration) -> Result<(), String> {
+    /// A process that exits early must fail immediately — burning five
+    /// minutes of a silent progress bar is the bug, not the remedy.
+    pub fn wait_ready(&mut self, timeout: Duration) -> Result<(), String> {
         let url = format!("http://127.0.0.1:{}/v1/models", self.port);
         let deadline = Instant::now() + timeout;
         let mut last_error = String::from("no attempts");
         while Instant::now() < deadline {
-            if let Ok(response) = ureq::get(&url).timeout(Duration::from_secs(2)).call() {
-                match response.into_string() {
+            match self.child.try_wait() {
+                Ok(Some(status)) => {
+                    return Err(format!(
+                        "engine exited ({status}) before readiness: {last_error}"
+                    ));
+                }
+                Ok(None) => {}
+                // A failed try_wait is retried on the next poll; the ureq
+                // attempt below always refreshes `last_error` anyway.
+                Err(_) => {}
+            }
+            match ureq::get(&url).timeout(Duration::from_secs(2)).call() {
+                Ok(response) => match response.into_string() {
                     Ok(body) => {
                         if body.contains("\"data\"") {
                             return Ok(());
                         }
-                        last_error = body;
+                        last_error = body.chars().take(400).collect();
                     }
                     Err(error) => last_error = error.to_string(),
-                }
-            } else if let Err(error) = ureq::get(&url).timeout(Duration::from_secs(2)).call() {
-                last_error = error.to_string();
+                },
+                Err(error) => last_error = error.to_string(),
             }
             std::thread::sleep(Duration::from_millis(500));
         }
@@ -149,12 +170,25 @@ pub fn resolve_paths(components: &crate::components::Manager) -> Option<(PathBuf
     Some((engine_bin, model_dir))
 }
 
-/// One OCR request, answered through its own channel.
+/// Progress of one recognition, streamed back through the request channel.
+#[derive(Debug, Clone)]
+pub enum OcrEvent {
+    /// The engine process is starting; a cold model load can take minutes.
+    Starting,
+    /// The engine answered `/v1/models` — inference begins.
+    Ready,
+    /// The image was recognized.
+    Done(String),
+    /// The engine or the request failed.
+    Failed(String),
+}
+
+/// One OCR request, answered through its own event channel.
 pub struct OcrRequest {
     pub image: Vec<u8>,
     pub mime: String,
     pub prompt: String,
-    pub reply: std::sync::mpsc::Sender<Result<String, String>>,
+    pub reply: std::sync::mpsc::Sender<OcrEvent>,
 }
 
 /// Background actor owning the engine process. The cold model load blocks for
@@ -171,6 +205,7 @@ impl OcrActor {
         std::thread::spawn(move || {
             let mut engine: Option<OcrEngine> = None;
             for request in rx.iter() {
+                let _ = request.reply.send(OcrEvent::Starting);
                 let alive = engine
                     .as_mut()
                     .map(|engine| engine.is_alive())
@@ -180,27 +215,32 @@ impl OcrActor {
                     match OcrEngine::spawn(&engine_bin, &model_dir, port) {
                         Ok(spawned) => engine = Some(spawned),
                         Err(message) => {
-                            let _ = request.reply.send(Err(message));
+                            let _ = request.reply.send(OcrEvent::Failed(message));
                             continue;
                         }
                     }
                 }
+                let _ = request.reply.send(OcrEvent::Ready);
                 let result =
                     OcrEngine::recognize(port, &request.image, &request.mime, &request.prompt);
-                let _ = request.reply.send(result);
+                let _ = request.reply.send(match result {
+                    Ok(text) => OcrEvent::Done(text),
+                    Err(message) => OcrEvent::Failed(message),
+                });
             }
             // rx dropped → engine (and its child process) dropped here.
         });
         Self { tx }
     }
 
-    /// Queue a recognition; `false` when another one is already in flight.
+    /// Queue a recognition; `None` when the actor is gone. Progress arrives
+    /// as [`OcrEvent`]s on the returned channel.
     pub fn recognize(
         &self,
         image: Vec<u8>,
         mime: String,
         prompt: String,
-    ) -> Option<std::sync::mpsc::Receiver<Result<String, String>>> {
+    ) -> Option<std::sync::mpsc::Receiver<OcrEvent>> {
         let (reply, rx) = std::sync::mpsc::channel();
         self.tx
             .send(OcrRequest {

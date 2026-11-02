@@ -256,22 +256,69 @@ struct NativeApp {
     previews: preview::PreviewCache,
     /// Running local OCR engine actor (process lives in a worker thread).
     ocr: Option<ai::ocr::OcrActor>,
-    /// True while one recognition is in flight.
-    ocr_busy: bool,
-    /// Page that OCR results should be appended to.
-    ocr_target: Option<String>,
+    /// The single in-flight OCR job; progress is streamed as events and
+    /// surfaced in the bottom-right status card.
+    ocr_job: Option<OcrJob>,
+    /// Last recognized text — a persistent result card ("куда оно добавилось?")
+    /// that stays until dismissed, unlike the toast.
+    ocr_result: Option<OcrResult>,
+    /// (block id, since) of the paragraph OCR just appended: the page scrolls
+    /// to it and strokes it until it expires.
+    ocr_highlight: Option<(String, Instant)>,
     /// Speech-to-text jobs keyed by attachment cid.
     stt: ai::stt::SttJobs,
     /// TTS result receiver for the single in-flight speak job.
     tts_rx: Option<std::sync::mpsc::Receiver<Result<Vec<u8>, String>>>,
-    /// OCR result receiver for the single in-flight recognition.
-    ocr_rx: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
 }
 
 struct SnapshotJob {
     path: PathBuf,
     frames_left: u32,
     requested: bool,
+}
+
+/// One in-flight OCR recognition with everything the status card needs.
+struct OcrJob {
+    /// Page the recognized text must land on.
+    target: String,
+    /// Attachment file name, shown in the status card.
+    file: String,
+    started: Instant,
+    /// Flips to true when the engine answered `/v1/models`.
+    engine_ready: bool,
+    rx: std::sync::mpsc::Receiver<ai::ocr::OcrEvent>,
+}
+
+/// The result card shown after a recognition finishes; stays until dismissed.
+struct OcrResult {
+    file: String,
+    text: String,
+    /// Localized note about where the text went (page block / clipboard).
+    destination: String,
+    #[allow(dead_code)]
+    at: Instant,
+    copied: bool,
+}
+
+/// Localized stopwatch for the OCR status card: "42 с" / "2 мин 05 с".
+fn fmt_elapsed(elapsed: Duration, locale: Locale) -> String {
+    let total = elapsed.as_secs();
+    match locale {
+        Locale::Ru => {
+            if total < 60 {
+                format!("{total} с")
+            } else {
+                format!("{} мин {:02} с", total / 60, total % 60)
+            }
+        }
+        Locale::En => {
+            if total < 60 {
+                format!("{total} s")
+            } else {
+                format!("{} m {:02} s", total / 60, total % 60)
+            }
+        }
+    }
 }
 
 impl NativeApp {
@@ -345,11 +392,11 @@ impl NativeApp {
             viewer: None,
             previews: preview::PreviewCache::default(),
             ocr: None,
-            ocr_busy: false,
-            ocr_target: None,
+            ocr_job: None,
+            ocr_result: None,
+            ocr_highlight: None,
             stt: ai::stt::SttJobs::default(),
             tts_rx: None,
-            ocr_rx: None,
         }
         .with_links();
         app.show_faq_modal = matches!(launch.view, Some(View::Faq));
@@ -386,9 +433,15 @@ impl NativeApp {
         }
     }
 
-    fn start_ocr(&mut self, image: Vec<u8>, ctx: &egui::Context) {
-        if self.ocr_busy {
-            self.toast(t(self.locale, Key::OcrRunning));
+    fn start_ocr(&mut self, file: &str, image: Vec<u8>, ctx: &egui::Context) {
+        if let Some(job) = &self.ocr_job {
+            // One engine, one request: a second click must read as "already
+            // working", not as a broken button that silently resets.
+            self.toast(format!(
+                "{} ({})",
+                t(self.locale, Key::OcrAlreadyRunning),
+                job.file
+            ));
             return;
         }
         let Some((engine_bin, model_dir)) = ai::ocr::resolve_paths(&self.components) else {
@@ -412,9 +465,13 @@ impl NativeApp {
         else {
             return;
         };
-        self.ocr_busy = true;
-        self.ocr_target = Some(target);
-        self.ocr_rx = Some(rx);
+        self.ocr_job = Some(OcrJob {
+            target,
+            file: file.to_string(),
+            started: Instant::now(),
+            engine_ready: false,
+            rx,
+        });
         self.toast(t(self.locale, Key::OcrRunning));
         ctx.request_repaint_after(std::time::Duration::from_millis(250));
     }
@@ -489,8 +546,186 @@ impl NativeApp {
         });
     }
 
+    /// Land the recognized text where the user can see it: appended to a
+    /// native page (scrolled to + stroked) or copied from a read-only email
+    /// page — and always in the persistent result card. This is the answer to
+    /// "куда оно добавится?" asked in words the user reads, not in toasts
+    /// that vanish in two seconds.
+    fn apply_ocr_text(&mut self, job: OcrJob, text: String, ctx: &egui::Context) {
+        let Some(index) = self
+            .vault
+            .capsules
+            .iter()
+            .position(|capsule| capsule.message_id == job.target)
+        else {
+            return;
+        };
+        let capsule = &mut self.vault.capsules[index];
+        let (destination, block_id) = if capsule.native {
+            let block = json!({
+                "id": mime::new_block_id("paragraph"),
+                "type": "paragraph",
+                "data": { "text": text }
+            });
+            let id = block["id"].as_str().unwrap_or_default().to_string();
+            capsule.blocks.push(block);
+            self.record_change();
+            (t(self.locale, Key::OcrAddedToEnd).to_string(), Some(id))
+        } else {
+            // Imported .eml pages never take blocks — the file is rendered
+            // read-only — so the text goes to the clipboard, and the card
+            // says exactly that instead of a generic "added to the page".
+            ctx.copy_text(text.clone());
+            (t(self.locale, Key::OcrCopiedReadonly).to_string(), None)
+        };
+        self.toast(destination.clone());
+        self.ocr_result = Some(OcrResult {
+            file: job.file,
+            text,
+            destination,
+            at: Instant::now(),
+            copied: false,
+        });
+        if let Some(id) = block_id {
+            self.ocr_highlight = Some((id, Instant::now()));
+        }
+    }
+
+    /// Persistent AI overlays, bottom-right: the running OCR job card and the
+    /// recognition result card. Toasts vanish in seconds; a cold start of a
+    /// 2 GB model takes minutes — this card is the honest signal that the
+    /// engine is actually working (elapsed timer keeps moving).
+    fn draw_ai_overlays(&mut self, ctx: &egui::Context) {
+        let mut close_result = false;
+        egui::Area::new(egui::Id::new("ai-status"))
+            .order(egui::Order::Tooltip)
+            .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -16.0))
+            .show(ctx, |ui| {
+                if let Some(job) = &self.ocr_job {
+                    let phase = if job.engine_ready {
+                        t(self.locale, Key::OcrPhaseReady)
+                    } else {
+                        t(self.locale, Key::OcrPhaseStarting)
+                    };
+                    egui::Frame::new()
+                        .fill(theme::PANEL)
+                        .stroke(egui::Stroke::new(1.0, theme::ACCENT))
+                        .corner_radius(theme::RADIUS)
+                        .inner_margin(Margin::same(12))
+                        .show(ui, |ui| {
+                            ui.set_width(372.0);
+                            ui.horizontal(|ui| {
+                                ui.add(egui::Spinner::new().size(14.0));
+                                ui.add_space(4.0);
+                                ui.label(
+                                    egui::RichText::new("OCR")
+                                        .family(theme::mono_bold())
+                                        .size(10.5)
+                                        .color(theme::ACCENT),
+                                );
+                                ui.label(
+                                    egui::RichText::new(truncate_chars(&job.file, 26))
+                                        .family(theme::medium())
+                                        .size(12.0)
+                                        .color(theme::INK),
+                                );
+                            });
+                            ui.add_space(7.0);
+                            ui.label(egui::RichText::new(phase).size(11.5).color(theme::INK));
+                            if !job.engine_ready {
+                                ui.add_space(2.0);
+                                ui.label(
+                                    egui::RichText::new(t(self.locale, Key::OcrFirstRunHint))
+                                        .size(10.5)
+                                        .color(theme::FAINT),
+                                );
+                            }
+                            ui.add_space(5.0);
+                            ui.label(
+                                egui::RichText::new(fmt_elapsed(
+                                    job.started.elapsed(),
+                                    self.locale,
+                                ))
+                                .family(theme::mono())
+                                .size(10.5)
+                                .color(theme::FAINT),
+                            );
+                        });
+                    ui.add_space(8.0);
+                }
+                if let Some(result) = self.ocr_result.as_mut() {
+                    egui::Frame::new()
+                        .fill(theme::PANEL)
+                        .stroke(egui::Stroke::new(1.0, theme::LINE_STRONG))
+                        .corner_radius(theme::RADIUS)
+                        .inner_margin(Margin::same(12))
+                        .show(ui, |ui| {
+                            ui.set_width(372.0);
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    egui::RichText::new(t(self.locale, Key::OcrResultTitle))
+                                        .family(theme::medium())
+                                        .size(12.0)
+                                        .color(theme::INK),
+                                );
+                                ui.label(
+                                    egui::RichText::new(truncate_chars(&result.file, 20))
+                                        .size(11.0)
+                                        .color(theme::FAINT),
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if secondary_button(ui, Some(Icon::Close), "", 26.0)
+                                            .clicked()
+                                        {
+                                            close_result = true;
+                                        }
+                                    },
+                                );
+                            });
+                            ui.add_space(5.0);
+                            ui.label(
+                                egui::RichText::new(&result.destination)
+                                    .size(11.0)
+                                    .color(theme::ACCENT),
+                            );
+                            ui.add_space(7.0);
+                            let max_h = (ctx.content_rect().height() * 0.35).max(90.0);
+                            egui::ScrollArea::vertical()
+                                .max_height(max_h)
+                                .id_salt("ocr-result-text")
+                                .show(ui, |ui| {
+                                    ui.add(
+                                        egui::Label::new(
+                                            egui::RichText::new(&result.text)
+                                                .size(11.5)
+                                                .color(theme::INK),
+                                        )
+                                        .wrap()
+                                        .selectable(true),
+                                    );
+                                });
+                            ui.add_space(9.0);
+                            let copy_label = if result.copied {
+                                t(self.locale, Key::OcrCopied)
+                            } else {
+                                t(self.locale, Key::OcrCopy)
+                            };
+                            if secondary_button(ui, None, copy_label, 26.0).clicked() {
+                                ctx.copy_text(result.text.clone());
+                                result.copied = true;
+                            }
+                        });
+                }
+            });
+        if close_result {
+            self.ocr_result = None;
+        }
+    }
+
     /// Drain finished AI jobs and apply their results to the vault/UI.
-    fn poll_ai_jobs(&mut self) {
+    fn poll_ai_jobs(&mut self, ctx: &egui::Context) {
         // STT: write transcripts back into the matching audio block.
         let mut finished: Vec<(String, ai::stt::SttPhase)> = Vec::new();
         for index in 0..self.vault.capsules.len() {
@@ -523,51 +758,46 @@ impl NativeApp {
                     }
                     if applied {
                         self.record_change();
-                        self.toast(t(self.locale, Key::OcrDoneToast));
+                        self.toast(t(self.locale, Key::SttDoneToast));
                     }
                 }
                 ai::stt::SttPhase::Failed(message) => {
                     self.toast(format!(
                         "{}: {message}",
-                        t(self.locale, Key::OcrFailedToast)
+                        t(self.locale, Key::SttFailedToast)
                     ));
                 }
                 ai::stt::SttPhase::Running => {}
             }
         }
 
-        // OCR: append the recognized text as a paragraph block.
-        if let Some(rx) = &self.ocr_rx {
-            if let Ok(result) = rx.try_recv() {
-                self.ocr_busy = false;
-                self.ocr_rx = None;
-                match result {
-                    Ok(text) => {
-                        if let Some(target) = &self.ocr_target {
-                            if let Some(capsule) = self
-                                .vault
-                                .capsules
-                                .iter_mut()
-                                .find(|capsule| &capsule.message_id == target)
-                            {
-                                capsule.blocks.push(serde_json::json!({
-                                    "id": mime::new_block_id("paragraph"),
-                                    "type": "paragraph",
-                                    "data": { "text": text }
-                                }));
-                                self.record_change();
-                                self.toast(t(self.locale, Key::OcrDoneToast));
-                            }
-                        }
-                    }
-                    Err(message) => {
-                        self.toast(format!(
-                            "{}: {message}",
-                            t(self.locale, Key::OcrFailedToast)
-                        ));
+        // OCR: stream engine progress into the status card, then land the
+        // text where the user can actually see it (page block + highlight, or
+        // clipboard for read-only email pages).
+        let mut finished_ocr: Option<ai::ocr::OcrEvent> = None;
+        if let Some(job) = self.ocr_job.as_mut() {
+            while let Ok(event) = job.rx.try_recv() {
+                match event {
+                    ai::ocr::OcrEvent::Starting => job.engine_ready = false,
+                    ai::ocr::OcrEvent::Ready => job.engine_ready = true,
+                    ai::ocr::OcrEvent::Done(_) | ai::ocr::OcrEvent::Failed(_) => {
+                        finished_ocr = Some(event);
+                        break;
                     }
                 }
-                self.ocr_target = None;
+            }
+        }
+        if let Some(event) = finished_ocr {
+            let job = self.ocr_job.take().expect("ocr job present");
+            match event {
+                ai::ocr::OcrEvent::Done(text) => self.apply_ocr_text(job, text, ctx),
+                ai::ocr::OcrEvent::Failed(message) => {
+                    self.toast(format!(
+                        "{}: {message}",
+                        t(self.locale, Key::OcrFailedToast)
+                    ));
+                }
+                _ => {}
             }
         }
 
@@ -1767,6 +1997,7 @@ impl NativeApp {
                                     self.components
                                         .lib_path(components::ComponentId::PdfEngine, "pdfium")
                                         .as_deref(),
+                                    self.ocr_highlight.as_ref().map(|(id, _)| id.as_str()),
                                 ));
                             }
                             _ => views::draw_empty_state(ui, &mut editor, self.locale),
@@ -1898,8 +2129,8 @@ impl NativeApp {
                 views::document_view::AttachmentAction::View { name, mime, bytes } => {
                     self.open_viewer(&name, &mime, bytes);
                 }
-                views::document_view::AttachmentAction::Ocr { name: _, bytes } => {
-                    self.start_ocr(bytes, &ctx);
+                views::document_view::AttachmentAction::Ocr { name, bytes } => {
+                    self.start_ocr(&name, bytes, &ctx);
                 }
             }
         }
@@ -1909,11 +2140,12 @@ impl NativeApp {
         if let Some(cid) = editor.transcribe {
             self.transcribe_audio(&cid);
         }
-        self.poll_ai_jobs();
+        self.poll_ai_jobs(&ctx);
         // Attachment viewer overlay: may ask to OCR the open image.
-        let viewer_outcome = viewer::draw(&mut self.viewer, self.locale, &ctx);
-        if let Some((_, bytes)) = viewer_outcome.ocr {
-            self.start_ocr(bytes, &ctx);
+        let viewer_outcome =
+            viewer::draw(&mut self.viewer, self.locale, &ctx, self.ocr_job.is_some());
+        if let Some((name, bytes)) = viewer_outcome.ocr {
+            self.start_ocr(&name, bytes, &ctx);
         }
         if shell.save || view_action.request_save {
             self.save_selected();
@@ -2075,6 +2307,15 @@ impl NativeApp {
         }
 
         modals::draw_toast(&mut self.toast, &ctx);
+
+        // The OCR highlight expires on its own; the status/result cards live
+        // in the bottom-right corner until the job finishes / user dismisses.
+        if let Some((_, since)) = &self.ocr_highlight {
+            if since.elapsed() > Duration::from_secs(4) {
+                self.ocr_highlight = None;
+            }
+        }
+        self.draw_ai_overlays(&ctx);
 
         if self.dirty && self.last_edit.elapsed() > Duration::from_millis(750) {
             self.save_selected();
@@ -2405,7 +2646,7 @@ mod app_tests {
             let _ = std::fs::remove_dir_all(dir);
             return;
         }
-        app.start_ocr(vec![0xFF; 64], &ctx);
+        app.start_ocr("scan.png", vec![0xFF; 64], &ctx);
         assert!(
             app.show_integrations,
             "OCR without components must open Integrations"
@@ -2488,6 +2729,7 @@ mod app_tests {
                 None,
                 false,
                 &mut previews,
+                None,
                 None,
             );
             assert!(action.attachments.is_empty());

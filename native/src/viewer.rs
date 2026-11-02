@@ -169,11 +169,13 @@ pub(crate) fn render_pdf_page(
 }
 
 /// Draw the overlay and handle closing. `Escape` and the ✕ button close;
-/// clicks on the backdrop or the page no longer do.
+/// clicks on the backdrop or the page no longer do. `ocr_busy` swaps the OCR
+/// button for a live spinner — a second click must never read as a reset.
 pub fn draw(
     viewer: &mut Option<ViewerState>,
     locale: Locale,
     ctx: &egui::Context,
+    ocr_busy: bool,
 ) -> ViewerOutcome {
     let mut outcome = ViewerOutcome::default();
     // Take the state out so the Area closure can own it exclusively; it is
@@ -274,8 +276,13 @@ pub fn draw(
                     close = true;
                 }
                 // OCR affordance: only for images (the engine takes raster).
-                if state.raw_image.is_some()
-                    && secondary_button(
+                // While a job is running the slot becomes a spinner; the
+                // status card in the corner carries the detailed phase.
+                if state.raw_image.is_some() {
+                    if ocr_busy {
+                        ui.add(egui::Spinner::new().size(15.0))
+                            .on_hover_text(t(locale, Key::OcrAlreadyRunning));
+                    } else if secondary_button(
                         ui,
                         Some(Icon::Sparkle),
                         t(locale, Key::OcrAttachment),
@@ -283,9 +290,10 @@ pub fn draw(
                     )
                     .on_hover_text(t(locale, Key::OcrAttachment))
                     .clicked()
-                {
-                    if let Some(bytes) = state.raw_image.clone() {
-                        outcome.ocr = Some((state.name.clone(), bytes));
+                    {
+                        if let Some(bytes) = state.raw_image.clone() {
+                            outcome.ocr = Some((state.name.clone(), bytes));
+                        }
                     }
                 }
                 let fit = secondary_button(ui, None, t(locale, Key::FitWidth), 26.0)
