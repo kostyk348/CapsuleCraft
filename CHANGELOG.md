@@ -3,6 +3,25 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [1.12.2] — 2026-11-02 — The Integrations button actually opens; installers for every platform
+
+### Fixed
+- **The ⚙ Integrations button did nothing at all.** The v1.12.0 branch added
+  the `open_integrations` flag and the title-bar chip, but `ShellAction::absorb`
+  — the step that merges title-bar actions into the shell — never copied the
+  new field, so the click was silently dropped and the modal never opened.
+  Covered by a new headless end-to-end test that drives the REAL app frame
+  with synthetic mouse clicks and sweeps the title bar until the modal opens.
+- Integrations is now also reachable from the command palette (⌘K →
+  "Интеграции / Integrations"), so the catalog has a second entry point.
+
+### Changed
+- **Installers instead of bare archives.** Windows ships an NSIS
+  `…_x64-setup.exe` (start-menu/desktop shortcuts, uninstaller) alongside the
+  portable zip; macOS ships a drag-to-Applications `.dmg` (universal, Apple
+  Silicon + Intel); Linux ships a proper `.deb` next to the zero-dependency
+  AppImage.
+
 ## [1.12.1] — 2026-11-02 — Native-only releases; Integrations fixes
 
 ### Fixed

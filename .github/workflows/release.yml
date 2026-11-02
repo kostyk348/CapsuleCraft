@@ -71,10 +71,11 @@ jobs:
             fi
           fi
 
-  # Native Windows shell: standalone egui executable packaged as a zero-dependency
-  # portable zip. Runs natively without WebView2 runtime or installer required.
+  # Native Windows shell: the egui executable packaged BOTH as an NSIS
+  # installer (start-menu/desktop shortcuts, uninstaller) and as a zero-
+  # dependency portable zip. Neither needs WebView2 or any runtime.
   native-windows:
-    name: Native Windows app (x64)
+    name: "Native Windows app (x64): installer + portable"
     needs: create-release
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
@@ -104,21 +105,36 @@ jobs:
           Compress-Archive -Path "$OutDir/*" -DestinationPath "${OutDir}.zip" -Force
           Get-Item "${OutDir}.zip"
 
-      - name: Upload Windows native zip to the release
+      - name: Build NSIS installer (setup.exe)
+        shell: pwsh
+        run: |
+          $Version = "${{ needs.create-release.outputs.version }}"
+          Copy-Item native/target/release/capsuleos-native.exe native/packaging/CapsuleCraft.exe
+          Copy-Item README.md, LICENSE native/packaging/
+          Copy-Item native/assets/icon.ico native/packaging/icon.ico
+          makensis /DVERSION=$Version native/packaging/windows-installer.nsi
+          Get-Item "native/packaging/CapsuleCraft_${Version}_x64-setup.exe"
+
+      - name: Upload Windows installer + portable zip to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         shell: pwsh
         run: |
           $Tag = "${{ needs.create-release.outputs.tag }}"
           $Version = "${{ needs.create-release.outputs.version }}"
-          $ZipName = "CapsuleCraft_native_${Version}_x64.zip"
-          gh release upload $Tag $ZipName --clobber --repo $env:GITHUB_REPOSITORY
+          gh release upload $Tag `
+            "native/packaging/CapsuleCraft_${Version}_x64-setup.exe" `
+            "CapsuleCraft_native_${Version}_x64.zip" `
+            --clobber
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4
         with:
           name: capsulecraft-native-windows-x64
-          path: CapsuleCraft_native_*_x64.zip
+          path: |
+            native/packaging/CapsuleCraft_*_x64-setup.exe
+            CapsuleCraft_native_*_x64.zip
 
   # The recommended Linux artifact: the native egui shell as a standalone,
   # zero-dependency AppImage. Built on ubuntu-22.04 so the bundled binary
@@ -255,21 +271,58 @@ jobs:
           mv -f "$OUT" "$FILE"
           test -f "$FILE"
 
-      - name: Upload AppImage to the release
+      - name: Package .deb (system install, apt-friendly)
+        run: |
+          set -e
+          VERSION="${{ needs.create-release.outputs.version }}"
+          ROOT="native/packaging/debroot/capsulecraft_${VERSION}_amd64"
+          rm -rf native/packaging/debroot
+          mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" \
+                   "$ROOT/usr/share/applications" \
+                   "$ROOT/usr/share/icons/hicolor/256x256/apps"
+          install -m 0755 native/target/release/capsuleos-native \
+            "$ROOT/usr/bin/capsuleos-native"
+          cp native/packaging/AppDir/usr/share/applications/capsulecraft.desktop \
+            "$ROOT/usr/share/applications/"
+          cp native/packaging/AppDir/usr/share/icons/hicolor/256x256/apps/capsulecraft.png \
+            "$ROOT/usr/share/icons/hicolor/256x256/apps/"
+          printf '%s\n' \
+            'Package: capsulecraft' \
+            "Version: ${VERSION}" \
+            'Section: utils' \
+            'Priority: optional' \
+            'Architecture: amd64' \
+            'Maintainer: kostyk348 <kostyk348@users.noreply.github.com>' \
+            'Depends: libxkbcommon0, libxkbcommon-x11-0, libxcb1, libx11-6, libxcursor1, libxrandr2, libxi6, libwayland-client0, libfontconfig1, libasound2 | libasound2t64' \
+            'Description: Offline knowledge base stored as a folder of .eml files' \
+            ' Native egui shell: notes as RFC-822 emails, full-text search,' \
+            ' planning, graph view and downloadable local AI components.' \
+            ' No database, no webview, no cloud.' \
+            > "$ROOT/DEBIAN/control"
+          dpkg-deb --build --root-owner-group "$ROOT"
+          mv "native/packaging/debroot/capsulecraft_${VERSION}_amd64.deb" \
+            "CapsuleCraft_${VERSION}_amd64.deb"
+          test -f "CapsuleCraft_${VERSION}_amd64.deb"
+
+      - name: Upload AppImage and deb to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           TAG="${{ needs.create-release.outputs.tag }}"
           VERSION="${{ needs.create-release.outputs.version }}"
-          FILE="CapsuleCraft_${VERSION}_amd64.AppImage"
-          gh release upload "$TAG" "$FILE" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$TAG" \
+            "CapsuleCraft_${VERSION}_amd64.AppImage" \
+            "CapsuleCraft_${VERSION}_amd64.deb" \
+            --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: capsulecraft-native-appimage
-          path: CapsuleCraft_*_amd64.AppImage
+          name: capsulecraft-native-linux
+          path: |
+            CapsuleCraft_*_amd64.AppImage
+            CapsuleCraft_*_amd64.deb
 
   # Native macOS bundle: the same egui shell assembled into a .app with an
   # ad-hoc signature, so an unzipped local launch is not blocked outright.
@@ -333,10 +386,21 @@ jobs:
             '</plist>' \
             > "$APP/Contents/Info.plist"
           codesign --force --deep --sign - "$APP"
-          ditto -c -k --sequesterRsrc --keepParent "$APP" \
-            "CapsuleCraft_native_${VERSION}_macos_universal.app.zip"
 
-      - name: Upload macOS app to the release
+      - name: Package .dmg (drag-to-Applications)
+        run: |
+          set -e
+          VERSION="${{ needs.create-release.outputs.version }}"
+          STAGING="CapsuleCraft_${VERSION}-dmg"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          cp -R CapsuleCraft.app "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create -volname "CapsuleCraft ${VERSION}" \
+            -srcfolder "$STAGING" -ov -format UDZO \
+            "CapsuleCraft_${VERSION}_macos_universal.dmg"
+
+      - name: Upload macOS dmg to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -344,14 +408,14 @@ jobs:
           TAG="${{ needs.create-release.outputs.tag }}"
           VERSION="${{ needs.create-release.outputs.version }}"
           gh release upload "$TAG" \
-            "CapsuleCraft_native_${VERSION}_macos_universal.app.zip" \
+            "CapsuleCraft_${VERSION}_macos_universal.dmg" \
             --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4
         with:
           name: capsulecraft-native-macos
-          path: CapsuleCraft_native_*_macos_universal.app.zip
+          path: CapsuleCraft_*_macos_universal.dmg
 
   # OCR engine for the Integrations catalog: mistral.rs (pure Rust, MIT)
   # pinned at v0.9.5, built CPU-only and shipped as a downloadable component.

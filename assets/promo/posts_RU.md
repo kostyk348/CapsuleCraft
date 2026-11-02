@@ -1,4 +1,4 @@
-# Промо-тексты CapsuleCraft v1.12.1 — RU
+# Промо-тексты CapsuleCraft v1.12.2 — RU
 
 Проект: https://github.com/kostyk348/CapsuleCraft
 Релизы: https://github.com/kostyk348/CapsuleCraft/releases
@@ -8,11 +8,11 @@
 
 ## 1. Telegram (канал) — с demo.gif
 
-**Локальный ИИ, который вы скачиваете сами: CapsuleCraft v1.12.1**
+**Локальный ИИ, который вы скачиваете сами: CapsuleCraft v1.12.2**
 
 CapsuleCraft — база знаний без базы данных: одна страница = один настоящий `.eml`-файл (RFC 5322). Его открывает Thunderbird, находит `grep`, диффает `git`, синхронизирует Syncthing. Приложение можно удалить — данные переживут его.
 
-Что нового в v1.12.1 — каталог **⚙ Интеграции**: офлайн-движки, которые появляются в приложении только после явного скачивания. Ничего не вшито:
+Что нового в v1.12.2 — каталог **⚙ Интеграции**: офлайн-движки, которые появляются в приложении только после явного скачивания. Ничего не вшито:
 
 ■ **OCR** — Xiaomi-OCR-0 на чисто-растовском движке mistral.rs: нажимаете ✨ на вложении-картинке — распознанный текст ложится в заметку;
 ■ **STT** — whisper (tiny/base/small) прямо внутри приложения: «Расшифровать запись» под аудио-блоком;
@@ -32,11 +32,11 @@ CapsuleCraft — база знаний без базы данных: одна с
 
 ## 2. VK (пост) — с demo.gif
 
-**CapsuleCraft v1.12.1 — база знаний из .eml-файлов обзавелась локальным ИИ 📬✨**
+**CapsuleCraft v1.12.2 — база знаний из .eml-файлов обзавелась локальным ИИ 📬✨**
 
 Каждая заметка здесь — обычный .eml-файл на диске. Никакой закрытой базы: Thunderbird откроет, grep найдёт, git покажет историю, Syncthing синхронизирует. Данные — ваши, приложение — просто удобная надстройка.
 
-Новое в v1.12.1 — каталог «⚙ Интеграции»: офлайн-компоненты, которые вы скачиваете сами, ничего не вшито в сборку:
+Новое в v1.12.2 — каталог «⚙ Интеграции»: офлайн-компоненты, которые вы скачиваете сами, ничего не вшито в сборку:
 
 ◆ OCR — Xiaomi-OCR-0 на растовском движке mistral.rs, ✨ на картинке → текст в заметку
 ◆ Расшифровка голосовых записей — whisper прямо в приложении, русский поддерживается
@@ -108,7 +108,7 @@ CapsuleCraft доводит идею «данные переживают при�
 
 ### Нативный шелл
 
-Нативная сборка на Rust + egui, без браузерного движка: никакого WebKitGTK/WebView2/Electron. AppImage ~11 МБ с нулём вшитых библиотек (только glibc и X11/Wayland), портативный zip под Windows и universal-сборка macOS (Apple Silicon + Intel в одном .app). Старт мгновенный, интерфейс на русском и английском, встроенный FAQ (F1) вместо фальшивых демо-заметок. 181 нативный unit-тест, CI на каждый PR.
+Нативная сборка на Rust + egui, без браузерного движка: никакого WebKitGTK/WebView2/Electron. AppImage ~11 МБ с нулём вшитых библиотек (только glibc и X11/Wayland) плюс .deb для Debian/Ubuntu, NSIS-инсталлятор и портативный zip под Windows, universal .dmg под macOS (Apple Silicon + Intel в одном образе). Старт мгновенный, интерфейс на русском и английском, встроенный FAQ (F1) вместо фальшивых демо-заметок. 182 нативных unit-теста, CI на каждый PR.
 
 ### Честная таблица сравнения
 
@@ -132,15 +132,15 @@ CapsuleCraft доводит идею «данные переживают при�
 ### Попробовать
 
 ```bash
-chmod +x CapsuleCraft_1.12.1_amd64.AppImage
-./CapsuleCraft_1.12.1_amd64.AppImage            # хранилище по умолчанию
-./CapsuleCraft_1.12.1_amd64.AppImage ~/my-vault # или своя папка
+chmod +x CapsuleCraft_1.12.2_amd64.AppImage
+./CapsuleCraft_1.12.2_amd64.AppImage            # хранилище по умолчанию
+./CapsuleCraft_1.12.2_amd64.AppImage ~/my-vault # или своя папка
 ```
 
 Затем ⚙ в заголовке → выберите компоненты → они появятся в приложении после скачивания.
 
-Релизы: https://github.com/kostyk348/CapsuleCraft/releases — только нативные сборки: Linux AppImage, Windows portable zip, macOS universal .app (Apple Silicon + Intel); у каждого релиза есть SHA256SUMS.txt и архивы движка mistralrs-engine под три ОС. Никаких веб-установщиков — шелл на egui и есть приложение.
+Релизы: https://github.com/kostyk348/CapsuleCraft/releases — только нативные сборки и инсталляторы: Linux AppImage + .deb, Windows setup.exe (NSIS) + portable zip, macOS universal .dmg (Apple Silicon + Intel); у каждого релиза есть SHA256SUMS.txt и архивы движка mistralrs-engine под три ОС. Никаких веб-установщиков — шелл на egui и есть приложение.
 Исходники и README на русском: https://github.com/kostyk348/CapsuleCraft
-MIT. 181 unit-тест нативного ядра, CI на каждый PR.
+MIT. 182 unit-теста нативного ядра, CI на каждый PR.
 
 Приветствуются пулл-реквесты: https://github.com/kostyk348/CapsuleCraft/blob/main/CONTRIBUTING.md

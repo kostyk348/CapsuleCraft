@@ -1,4 +1,4 @@
-# CapsuleCraft v1.12.1 — EN promo copy
+# CapsuleCraft v1.12.2 — EN promo copy
 
 Project: https://github.com/kostyk348/CapsuleCraft
 Releases: https://github.com/kostyk348/CapsuleCraft/releases
@@ -13,7 +13,7 @@ Your knowledge base should outlive the app you wrote it in — and your AI shoul
 
 CapsuleCraft is a local-first notes & planning app where every page is a plain RFC 5322 `.eml` file on disk. No database. No cloud. No accounts.
 
-v1.12.1 out now ⬇ [image]
+v1.12.2 out now ⬇ [image]
 github.com/kostyk348/CapsuleCraft
 
 **2/**
@@ -60,7 +60,7 @@ I built a PKM where the database is a folder of .eml files — and v1.12 adds lo
 
 **Body:**
 
-Hey r/PKMS! For the past months I've been building **CapsuleCraft** — a local-first note editor & planner whose storage format can't lock you in: **one page = one plain RFC 5322 email file (.eml)** on disk. The new v1.12.1 adds the thing people kept asking about: **local AI that doesn't come from a subscription.**
+Hey r/PKMS! For the past months I've been building **CapsuleCraft** — a local-first note editor & planner whose storage format can't lock you in: **one page = one plain RFC 5322 email file (.eml)** on disk. The new v1.12.2 adds the thing people kept asking about: **local AI that doesn't come from a subscription.**
 
 **Why .eml?** Because "your data outlives the app" shouldn't be a marketing claim. A vault is just a folder: Thunderbird opens every note, `grep` searches it, `git` diffs it, `rsync`/Syncthing syncs it. There is no database underneath — no SQLite, nothing. No migrations, no exports: the file *is* the export.
 
@@ -83,11 +83,11 @@ All of it works with zero network calls after download. No API keys, no telemetr
 - **Offline Co-Thinker** — deterministic local critique of your drafts (vague words, balance, data anomalies)
 - **MCP server** — expose the vault to Claude/Cursor/any MCP client for agent-side search & read
 - **Import** — drop `.eml` from Gmail/Outlook/Thunderbird (byte-for-byte), IMAP sync, an Obsidian vault importer
-- **Native shell** — Rust + egui, no browser engine: ~11 MB Linux AppImage with zero bundled libraries, a portable Windows zip, and a universal macOS .app (Apple Silicon + Intel in one download). RU/EN UI, 181 native unit tests.
+- **Native shell** — Rust + egui, no browser engine: ~11 MB Linux AppImage (zero bundled libraries) plus a .deb, an NSIS setup.exe and portable zip for Windows, and a universal macOS .dmg (Apple Silicon + Intel in one image). RU/EN UI, 182 native unit tests.
 
 **Honest limitations** (tracked in LIMITATIONS.md, not hidden): component downloads don't resume (a 1.75 GB OCR model that fails at 90 % starts over); OCR is CPU-honest — a few seconds per scan, no GPU path in v1.12; the mistral.rs engine is pinned to 0.9.5 and updates with releases; transcribing a long recording occupies one job (the UI stays responsive); TTS is piper-medium quality with fixed speed; ICS export is VTODO-only; no Gantt bar drag-and-drop. It starts empty on purpose — built-in FAQ (F1) instead of fake demo notes.
 
-**Get it:** https://github.com/kostyk348/CapsuleCraft/releases — native builds only: Linux AppImage, Windows portable zip, macOS universal .app; SHA256SUMS included, plus `mistralrs-engine-*.tar.gz` for all three OSes · Source: https://github.com/kostyk348/CapsuleCraft · MIT.
+**Get it:** https://github.com/kostyk348/CapsuleCraft/releases — native installers only: Linux AppImage + .deb, Windows setup.exe (NSIS) + portable zip, macOS universal .dmg; SHA256SUMS included, plus `mistralrs-engine-*.tar.gz` for all three OSes · Source: https://github.com/kostyk348/CapsuleCraft · MIT.
 
 **Demo GIF:** https://github.com/kostyk348/CapsuleCraft/raw/main/assets/promo/demo.gif
 
