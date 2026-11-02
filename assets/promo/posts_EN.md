@@ -1,4 +1,4 @@
-# CapsuleCraft v1.12.0 — EN promo copy
+# CapsuleCraft v1.12.1 — EN promo copy
 
 Project: https://github.com/kostyk348/CapsuleCraft
 Releases: https://github.com/kostyk348/CapsuleCraft/releases
@@ -13,7 +13,7 @@ Your knowledge base should outlive the app you wrote it in — and your AI shoul
 
 CapsuleCraft is a local-first notes & planning app where every page is a plain RFC 5322 `.eml` file on disk. No database. No cloud. No accounts.
 
-v1.12.0 out now ⬇ [image]
+v1.12.1 out now ⬇ [image]
 github.com/kostyk348/CapsuleCraft
 
 **2/**
@@ -60,7 +60,7 @@ I built a PKM where the database is a folder of .eml files — and v1.12 adds lo
 
 **Body:**
 
-Hey r/PKMS! For the past months I've been building **CapsuleCraft** — a local-first note editor & planner whose storage format can't lock you in: **one page = one plain RFC 5322 email file (.eml)** on disk. The new v1.12.0 adds the thing people kept asking about: **local AI that doesn't come from a subscription.**
+Hey r/PKMS! For the past months I've been building **CapsuleCraft** — a local-first note editor & planner whose storage format can't lock you in: **one page = one plain RFC 5322 email file (.eml)** on disk. The new v1.12.1 adds the thing people kept asking about: **local AI that doesn't come from a subscription.**
 
 **Why .eml?** Because "your data outlives the app" shouldn't be a marketing claim. A vault is just a folder: Thunderbird opens every note, `grep` searches it, `git` diffs it, `rsync`/Syncthing syncs it. There is no database underneath — no SQLite, nothing. No migrations, no exports: the file *is* the export.
 
