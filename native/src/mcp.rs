@@ -295,6 +295,27 @@ pub fn tool_definitions() -> Value {
                     }
                 }
             }
+        },
+        {
+            "name": "project_ingest",
+            "description": "Scan a software project repository, extract architecture, modules, contracts, and TODOs into the project's .capsule vault.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the project root directory (defaults to current directory or active project)"
+                    }
+                }
+            }
+        },
+        {
+            "name": "project_overview",
+            "description": "Retrieve a high-level architectural overview and summary of the active project and its indexed modules.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {}
+            }
         }
     ])
 }
@@ -309,6 +330,14 @@ impl McpHandler {
     pub fn new(vault_override: Option<PathBuf>) -> Self {
         let dir = vault_override
             .clone()
+            .or_else(|| {
+                let local = std::env::current_dir().ok()?.join(".capsule");
+                if local.is_dir() {
+                    Some(local)
+                } else {
+                    None
+                }
+            })
             .unwrap_or_else(crate::vault::get_active_vault_dir);
         let vault = Vault::load(dir);
         Self {
@@ -536,6 +565,8 @@ impl McpHandler {
             "capsule_backlinks" => self.tool_capsule_backlinks(args),
             "capsule_related" => self.tool_capsule_related(args),
             "capsule_tasks" => self.tool_capsule_tasks(args),
+            "project_ingest" => self.tool_project_ingest(args),
+            "project_overview" => self.tool_project_overview(args),
             unknown => Err(format!("Unknown tool: {unknown}")),
         }
     }
@@ -1271,6 +1302,82 @@ impl McpHandler {
             "tasks": tasks_json
         }))
     }
+
+    fn tool_project_ingest(&mut self, args: &Value) -> Result<Value, String> {
+        let path_arg = args.get("path").and_then(Value::as_str);
+        let project_root = if let Some(p) = path_arg {
+            PathBuf::from(p)
+        } else if crate::vault::is_project_vault(&self.vault.dir) {
+            self.vault.dir.parent().unwrap_or(&self.vault.dir).to_path_buf()
+        } else {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        };
+
+        let target_vault = if crate::vault::is_project_vault(&self.vault.dir) {
+            self.vault.dir.clone()
+        } else {
+            project_root.join(".capsule")
+        };
+
+        let summary = crate::project_parser::ingest_project(&project_root, &target_vault)?;
+
+        if self.vault.dir != target_vault {
+            self.vault = Vault::load(target_vault.clone());
+        } else {
+            self.vault.reload();
+        }
+
+        Ok(json!({
+            "status": "success",
+            "project_name": summary.project_name,
+            "project_kind": summary.project_kind.display_name(),
+            "modules_indexed": summary.modules_count,
+            "todos_found": summary.todos_count,
+            "capsules_created": summary.capsules_created,
+            "vault_path": target_vault.to_string_lossy()
+        }))
+    }
+
+    fn tool_project_overview(&self, _args: &Value) -> Result<Value, String> {
+        let index_capsule = self
+            .vault
+            .capsules
+            .iter()
+            .find(|c| c.tags.iter().any(|t| t == "overview") || c.file_name == "index.eml");
+
+        let Some(index) = index_capsule else {
+            return Err("No project overview found in this vault. Run 'project_ingest' first.".to_string());
+        };
+
+        let mut overview_text = String::new();
+        for b in &index.blocks {
+            if let Some(t) = b.get("data").and_then(|d| d.get("text")).and_then(Value::as_str) {
+                overview_text.push_str(t);
+                overview_text.push_str("\n\n");
+            }
+        }
+
+        let modules: Vec<Value> = self
+            .vault
+            .capsules
+            .iter()
+            .filter(|c| c.tags.iter().any(|t| t == "module"))
+            .map(|c| {
+                json!({
+                    "subject": c.subject,
+                    "file_name": c.file_name,
+                    "message_id": c.message_id
+                })
+            })
+            .collect();
+
+        Ok(json!({
+            "project_subject": index.subject,
+            "overview": overview_text.trim(),
+            "modules_count": modules.len(),
+            "modules": modules
+        }))
+    }
 }
 
 fn replace_in_blocks(blocks: &mut [Value], target: &str, replacement: &str) -> usize {
@@ -1835,5 +1942,70 @@ mod tests {
         assert_eq!(tasks_val["tasks"][0]["text"], "Task Beta");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mcp_project_ingest_and_overview_flow() {
+        let proj_dir = temp_vault();
+        fs::write(
+            proj_dir.join("Cargo.toml"),
+            "[package]\nname = \"agent-brain\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+
+        let src = proj_dir.join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(
+            src.join("lib.rs"),
+            "//! Core library.\npub fn calculate() -> i32 { 42 }\n// TODO: optimize algo\n",
+        )
+        .unwrap();
+
+        let vault_dir = proj_dir.join(".capsule");
+        let mut handler = McpHandler::new(Some(vault_dir.clone()));
+
+        // Call project_ingest via MCP
+        let ingest_req = json!({
+            "jsonrpc": "2.0",
+            "id": 101,
+            "method": "tools/call",
+            "params": {
+                "name": "project_ingest",
+                "arguments": {
+                    "path": proj_dir.to_str().unwrap()
+                }
+            }
+        })
+        .to_string();
+
+        let resp = handler.handle_message(&ingest_req).expect("ingest response");
+        let val: Value = serde_json::from_str(&resp).unwrap();
+        assert_eq!(val["id"], 101);
+        let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
+        let summary: Value = serde_json::from_str(text_content).unwrap();
+        assert_eq!(summary["status"], "success");
+        assert_eq!(summary["project_name"], "agent-brain");
+
+        // Call project_overview via MCP
+        let overview_req = json!({
+            "jsonrpc": "2.0",
+            "id": 102,
+            "method": "tools/call",
+            "params": {
+                "name": "project_overview",
+                "arguments": {}
+            }
+        })
+        .to_string();
+
+        let resp_over = handler.handle_message(&overview_req).expect("overview response");
+        let val_over: Value = serde_json::from_str(&resp_over).unwrap();
+        assert_eq!(val_over["id"], 102);
+        let over_text = val_over["result"]["content"][0]["text"].as_str().unwrap();
+        let over_json: Value = serde_json::from_str(over_text).unwrap();
+        assert!(over_json["overview"].as_str().unwrap().contains("agent-brain"));
+        assert_eq!(over_json["modules_count"], 1);
+
+        let _ = fs::remove_dir_all(&proj_dir);
     }
 }

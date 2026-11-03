@@ -42,6 +42,9 @@ mod snapshot;
 mod sync_imap;
 mod theme;
 mod ui_state;
+mod project_parser;
+mod project_skill;
+mod project_verify;
 mod util;
 mod vault;
 mod viewer;
@@ -1161,6 +1164,34 @@ impl NativeApp {
         self.refresh_links();
     }
 
+    fn switch_to_vault(&mut self, dir: PathBuf) {
+        let dir = vault::resolve_vault_path(dir);
+        vault::set_active_vault_dir(&dir);
+        self.vault = Vault::load(dir);
+        self.selected = self.vault.selected_root();
+        self.collapsed.clear();
+
+        // For project vaults: keep root open, collapse all child subfolders by default
+        if vault::is_project_vault(&self.vault.dir) {
+            let tree = vault::PageTree::build(&self.vault.capsules);
+            for idx in 0..self.vault.capsules.len() {
+                if !tree.children_of(Some(idx)).is_empty() && !tree.roots().contains(&idx) {
+                    self.collapsed.insert(self.vault.capsules[idx].message_id.clone());
+                }
+            }
+        }
+
+        self.search.clear();
+        self.dirty = false;
+        self.snapshot = None;
+        self.history = history::HistoryStore::default();
+        self.status = t(self.locale, Key::VaultOpened).to_string();
+        self.status_error = false;
+        self.last_write = Instant::now();
+        self.watcher = watch::VaultWatch::start(&self.vault.dir);
+        self.refresh_links();
+    }
+
     fn open_vault_dialog(&mut self) {
         if !self.save_selected() {
             return;
@@ -1170,19 +1201,54 @@ impl NativeApp {
             .set_directory(&self.vault.dir)
             .pick_folder()
         {
-            vault::set_active_vault_dir(&dir);
-            self.vault = Vault::load(dir);
-            self.selected = self.vault.selected_root();
-            self.collapsed.clear();
-            self.search.clear();
-            self.dirty = false;
-            self.snapshot = None;
-            self.history = history::HistoryStore::default();
-            self.status = t(self.locale, Key::VaultOpened).to_string();
-            self.status_error = false;
-            self.last_write = Instant::now();
-            self.watcher = watch::VaultWatch::start(&self.vault.dir);
-            self.refresh_links();
+            self.switch_to_vault(dir);
+        }
+    }
+
+    fn open_project_dialog(&mut self) {
+        if !self.save_selected() {
+            return;
+        }
+        let default_dir = vault::get_active_vault_dir();
+        if let Some(folder) = rfd::FileDialog::new()
+            .set_title(t(self.locale, Key::OpenProjectAsVault))
+            .set_directory(&default_dir)
+            .pick_folder()
+        {
+            let target = folder.join(".capsule");
+            match project_parser::ingest_project(&folder, &target) {
+                Ok(summary) => {
+                    self.switch_to_vault(target);
+                    self.toast(format!(
+                        "Project {} synchronized: {} modules ({} updated, {} removed)",
+                        summary.project_name, summary.modules_count, summary.capsules_updated, summary.capsules_removed
+                    ));
+                }
+                Err(err) => {
+                    self.toast(format!("Error indexing project: {err}"));
+                }
+            }
+        }
+    }
+
+    fn ingest_current_project(&mut self) {
+        let root = self.vault.dir.parent().unwrap_or(&self.vault.dir);
+        let target = if vault::is_project_vault(&self.vault.dir) {
+            self.vault.dir.clone()
+        } else {
+            root.join(".capsule")
+        };
+        match project_parser::ingest_project(root, &target) {
+            Ok(summary) => {
+                self.switch_to_vault(target);
+                self.toast(format!(
+                    "Project {} synchronized: {} modules ({} updated, {} removed)",
+                    summary.project_name, summary.modules_count, summary.capsules_updated, summary.capsules_removed
+                ));
+            }
+            Err(err) => {
+                self.toast(format!("Error syncing project: {err}"));
+            }
         }
     }
 
@@ -1700,6 +1766,10 @@ pub(crate) struct ShellAction {
     pub(crate) toggle_icon_style: bool,
     pub(crate) toggle_sidebar: bool,
     pub(crate) toggle_zen: bool,
+    pub(crate) ingest_project: bool,
+    pub(crate) open_project_dialog: bool,
+    pub(crate) sync_project: bool,
+    pub(crate) switch_vault: Option<PathBuf>,
 }
 
 impl ShellAction {
@@ -1728,6 +1798,10 @@ impl ShellAction {
         self.toggle_icon_style |= other.toggle_icon_style;
         self.toggle_sidebar |= other.toggle_sidebar;
         self.toggle_zen |= other.toggle_zen;
+        self.ingest_project |= other.ingest_project;
+        self.open_project_dialog |= other.open_project_dialog;
+        self.sync_project |= other.sync_project;
+        self.switch_vault = other.switch_vault.or_else(|| self.switch_vault.take());
     }
 }
 
@@ -2193,6 +2267,15 @@ impl NativeApp {
         if shell.toggle_zen {
             self.toggle_zen_mode();
         }
+        if shell.open_project_dialog {
+            self.open_project_dialog();
+        }
+        if shell.sync_project || shell.ingest_project {
+            self.ingest_current_project();
+        }
+        if let Some(path) = shell.switch_vault {
+            self.switch_to_vault(path);
+        }
         if editor.toggle_wide {
             self.toggle_wide_canvas();
         }
@@ -2425,6 +2508,7 @@ impl NativeApp {
             PaletteCommand::ResetZoom => self.reset_zoom(ctx),
             PaletteCommand::ToggleWideCanvas => self.toggle_wide_canvas(),
             PaletteCommand::ToggleIconStyle => self.toggle_icon_style(),
+            PaletteCommand::IndexProject => self.ingest_current_project(),
         }
     }
 

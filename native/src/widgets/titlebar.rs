@@ -309,9 +309,7 @@ pub fn draw_titlebar(
         .vline(divider.center().x, divider.y_range(), theme::hairline());
     ui_left.add_space(6.0);
 
-    if views::vault_switcher(ui_left, vault).clicked() {
-        action.open_vault = true;
-    }
+    views::draw_vault_dropdown(ui_left, vault, locale, &mut action);
 
     // 3. Middle drag area: only the empty space between the left and right groups
     // acts as window drag handle, preventing any click collisions.

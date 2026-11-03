@@ -3,13 +3,45 @@
 use crate::mime::{assemble_eml, parse_eml, Capsule};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Vault {
     pub dir: PathBuf,
     pub capsules: Vec<Capsule>,
     pub load_errors: Vec<String>,
+}
+
+fn collect_vault_eml_files(dir: &Path, base_dir: &Path, out: &mut Vec<(PathBuf, String)>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            // Skip hidden folders (.git, .capsule_backup, etc.) and build caches
+            if name.starts_with('.') || name == "node_modules" || name == "target" || name == "build" {
+                continue;
+            }
+            collect_vault_eml_files(&path, base_dir, out);
+        } else if path.is_file() {
+            if path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("eml"))
+                .unwrap_or(false)
+            {
+                let rel_path = path
+                    .strip_prefix(base_dir)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                out.push((path, rel_path));
+            }
+        }
+    }
 }
 
 impl Vault {
@@ -35,40 +67,15 @@ impl Vault {
             return;
         }
 
-        let entries = match fs::read_dir(&self.dir) {
-            Ok(entries) => entries,
-            Err(err) => {
-                self.load_errors.push(format!(
-                    "Cannot read vault folder {}: {err}",
-                    self.dir.display()
-                ));
-                return;
-            }
-        };
+        let mut files: Vec<(PathBuf, String)> = Vec::new();
+        collect_vault_eml_files(&self.dir, &self.dir, &mut files);
+        files.sort_by(|a, b| a.1.cmp(&b.1));
 
-        let mut files: Vec<PathBuf> = entries
-            .flatten()
-            .filter(|entry| entry.file_type().map(|t| t.is_file()).unwrap_or(false))
-            .map(|entry| entry.path())
-            .filter(|path| {
-                path.extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|ext| ext.eq_ignore_ascii_case("eml"))
-                    .unwrap_or(false)
-            })
-            .collect();
-        files.sort();
-
-        for path in files {
-            let file_name = path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("capsule.eml")
-                .to_string();
+        for (path, rel_name) in files {
             let bytes = match fs::read(&path) {
                 Ok(bytes) => bytes,
                 Err(err) => {
-                    self.load_errors.push(format!("{file_name}: {err}"));
+                    self.load_errors.push(format!("{rel_name}: {err}"));
                     continue;
                 }
             };
@@ -79,9 +86,10 @@ impl Vault {
                 .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
                 .map(|duration| duration.as_millis() as i64)
                 .unwrap_or(0);
-            let capsule = parse_eml(&raw, &file_name, modified);
+            let mut capsule = parse_eml(&raw, &rel_name, modified);
+            capsule.file_name = rel_name.clone();
             if let Some(note) = &capsule.parse_note {
-                self.load_errors.push(format!("{file_name}: {note}"));
+                self.load_errors.push(format!("{rel_name}: {note}"));
             }
             self.capsules.push(capsule);
         }
@@ -97,6 +105,9 @@ impl Vault {
         }
         let raw = assemble_eml(capsule);
         let path = self.dir.join(&capsule.file_name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|err| format!("Cannot create dir: {err}"))?;
+        }
         // Small files: a direct write is acceptable for the prototype. The web
         // app remains the atomic-write path used in production.
         fs::write(&path, raw).map_err(|err| format!("Save failed: {err}"))
@@ -229,6 +240,87 @@ pub fn set_active_vault_dir(dir: &std::path::Path) {
     let app_dir = app_data_dir();
     let _ = fs::create_dir_all(&app_dir);
     let _ = fs::write(active_vault_file(), format!("{}\n", dir.display()));
+    add_recent_vault(dir);
+}
+
+pub fn recent_vaults_file() -> PathBuf {
+    app_data_dir().join("recent-vaults.json")
+}
+
+pub fn get_recent_vaults() -> Vec<PathBuf> {
+    let file = recent_vaults_file();
+    if let Ok(content) = fs::read_to_string(&file) {
+        if let Ok(paths) = serde_json::from_str::<Vec<String>>(&content) {
+            return paths
+                .into_iter()
+                .map(PathBuf::from)
+                .filter(|p| p.is_dir())
+                .collect();
+        }
+    }
+    vec![default_vault_dir()]
+}
+
+pub fn add_recent_vault(dir: &std::path::Path) {
+    let mut list = get_recent_vaults();
+    list.retain(|p| p != dir);
+    list.insert(0, dir.to_path_buf());
+    list.truncate(10);
+
+    let strings: Vec<String> = list.iter().map(|p| p.to_string_lossy().to_string()).collect();
+    if let Ok(json) = serde_json::to_string_pretty(&strings) {
+        let _ = fs::create_dir_all(app_data_dir());
+        let _ = fs::write(recent_vaults_file(), json);
+    }
+}
+
+/// Auto-diverts project roots into a dedicated `.capsule` sub-folder
+/// to keep project codebases clean and isolated.
+pub fn resolve_vault_path(candidate: PathBuf) -> PathBuf {
+    if candidate.file_name().map_or(false, |n| n == ".capsule") {
+        return candidate;
+    }
+    let sub = candidate.join(".capsule");
+    if sub.is_dir() {
+        return sub;
+    }
+    if is_project_root(&candidate) {
+        return sub;
+    }
+    candidate
+}
+
+/// Check if directory looks like a software project root.
+pub fn is_project_root(path: &std::path::Path) -> bool {
+    path.join(".git").exists()
+        || path.join("Cargo.toml").exists()
+        || path.join("package.json").exists()
+        || path.join("pyproject.toml").exists()
+        || path.join("go.mod").exists()
+        || path.join(".capsule").exists()
+}
+
+/// Check if a vault directory is a project-bound `.capsule` vault.
+pub fn is_project_vault(path: &std::path::Path) -> bool {
+    path.file_name().map_or(false, |n| n == ".capsule")
+}
+
+/// Get display name and project badge for a vault folder.
+pub fn get_vault_display_info(path: &std::path::Path) -> (String, bool) {
+    if is_project_vault(path) {
+        let parent_name = path
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("Project");
+        (parent_name.to_string(), true)
+    } else {
+        let folder_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("vault");
+        (folder_name.to_string(), false)
+    }
 }
 
 pub fn default_vault_dir() -> PathBuf {
@@ -451,6 +543,61 @@ mod tests {
         // Reparent p2 to root (None)
         vault.reparent_page(p2, None).unwrap();
         assert_eq!(vault.capsules[p2].parent_id, None);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_resolve_vault_path_project() {
+        let dir = std::env::temp_dir().join(format!(
+            "capsuleos-proj-test-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("Cargo.toml"), "[package]\nname=\"foo\"\n").unwrap();
+
+        let resolved = resolve_vault_path(dir.clone());
+        assert_eq!(resolved, dir.join(".capsule"));
+        assert!(is_project_root(&dir));
+        assert!(is_project_vault(&resolved));
+
+        let (name, is_p) = get_vault_display_info(&resolved);
+        assert!(is_p);
+        assert_eq!(name, dir.file_name().unwrap().to_str().unwrap());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_recursive_vault_loading() {
+        let dir = std::env::temp_dir().join(format!(
+            "capsuleos-vault-rec-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let modules_dir = dir.join("modules");
+        let docs_dir = dir.join("docs");
+        fs::create_dir_all(&modules_dir).unwrap();
+        fs::create_dir_all(&docs_dir).unwrap();
+
+        let cap1 = Capsule::blank("<root-index@capsuleos.local>".into(), "index.eml".into(), "Root".into());
+        let cap2 = Capsule::blank("<mod-main@capsuleos.local>".into(), "modules/module_main.eml".into(), "Module Main".into());
+        let cap3 = Capsule::blank("<doc-guide@capsuleos.local>".into(), "docs/doc_guide.eml".into(), "Doc Guide".into());
+
+        fs::write(dir.join("index.eml"), assemble_eml(&cap1)).unwrap();
+        fs::write(modules_dir.join("module_main.eml"), assemble_eml(&cap2)).unwrap();
+        fs::write(docs_dir.join("doc_guide.eml"), assemble_eml(&cap3)).unwrap();
+
+        let vault = Vault::load(dir.clone());
+        assert_eq!(vault.capsules.len(), 3);
+        assert!(vault.capsules.iter().any(|c| c.file_name == "index.eml"));
+        assert!(vault.capsules.iter().any(|c| c.file_name == "modules/module_main.eml"));
+        assert!(vault.capsules.iter().any(|c| c.file_name == "docs/doc_guide.eml"));
 
         let _ = fs::remove_dir_all(&dir);
     }

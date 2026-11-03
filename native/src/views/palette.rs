@@ -59,6 +59,7 @@ pub enum Command {
     ResetZoom,
     ToggleWideCanvas,
     ToggleIconStyle,
+    IndexProject,
 }
 
 pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
@@ -396,6 +397,24 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 keywords: kw(
                     &["icon", "brand", "mascot", "document"],
                     &["логотип", "иконка", "маскот"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::IndexProject,
+            PaletteCommand {
+                id: "index_project",
+                title: t(locale, Key::IndexProject).into(),
+                hint: if locale == Locale::Ru {
+                    "Парсинг кодовой базы и создание капсул проекта".into()
+                } else {
+                    "Parse codebase and build project knowledge capsules".into()
+                },
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["project", "index", "codebase", "parse", "ast", "ingest"],
+                    &["проект", "индекс", "парсер", "код", "структура"],
                 ),
                 shortcut: None,
             },
