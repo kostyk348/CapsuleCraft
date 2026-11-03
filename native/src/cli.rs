@@ -32,10 +32,16 @@ pub struct Launch {
     pub mcp: bool,
     /// Import an Obsidian vault into CapsuleCraft (.eml) and exit.
     pub import_obsidian: Option<PathBuf>,
+    /// Ingest a software project codebase into .capsule and exit.
+    pub ingest_project: Option<PathBuf>,
+    /// Verify knowledge graph integrity of a project's .capsule and exit.
+    pub verify_project: Option<PathBuf>,
     /// Print MCP client configuration snippet and exit.
     pub print_mcp_config: bool,
     /// Print the parsed launch configuration and exit.
     pub print_config: bool,
+    /// Print usage information and exit.
+    pub help: bool,
 }
 
 pub const DEFAULT_SNAPSHOT_FRAMES: u32 = 6;
@@ -94,6 +100,12 @@ pub fn parse(args: &[String]) -> Launch {
             "--import-obsidian" => {
                 launch.import_obsidian = take_value(&mut index).map(PathBuf::from);
             }
+            "--ingest" | "--ingest-project" => {
+                launch.ingest_project = take_value(&mut index).map(PathBuf::from);
+            }
+            "--verify" | "--verify-project" => {
+                launch.verify_project = take_value(&mut index).map(PathBuf::from);
+            }
             "--from" => {
                 if launch.import_obsidian.is_none() {
                     launch.import_obsidian = take_value(&mut index).map(PathBuf::from);
@@ -104,6 +116,7 @@ pub fn parse(args: &[String]) -> Launch {
             }
             "--print-mcp-config" | "--mcp-config" => launch.print_mcp_config = true,
             "--print-config" => launch.print_config = true,
+            "--help" | "-h" => launch.help = true,
             other if !other.starts_with('-') => {
                 if launch.vault.is_none() {
                     launch.vault = Some(PathBuf::from(other));
@@ -225,5 +238,11 @@ mod tests {
 
         let flag = parse(&args(&["--import-obsidian=D:/notes2"]));
         assert_eq!(flag.import_obsidian, Some(PathBuf::from("D:/notes2")));
+    }
+
+    #[test]
+    fn parses_verify_project_flags() {
+        let cmd = parse(&args(&["--verify-project", "D:/project"]));
+        assert_eq!(cmd.verify_project, Some(PathBuf::from("D:/project")));
     }
 }

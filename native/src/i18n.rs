@@ -596,6 +596,17 @@ strings! {
     PdfEngineMissing => ("Для PDF нужен движок — установите его в Интеграциях", "PDF needs its engine — install it in Integrations"),
     PdfPagesCount => ("страниц", "pages"),
     OcrPrompt => ("Распознай весь текст на изображении, сохрани структуру строк", "Transcribe all text in the image, preserving line structure"),
+    VaultsAndProjects => ("Хранилища и проекты", "Vaults and Projects"),
+    RecentVaults => ("Недавние хранилища и проекты", "Recent Vaults and Projects"),
+    CurrentVaultHeader => ("Текущее хранилище", "Current Vault"),
+    OpenOtherFolder => ("Выбрать другую папку…", "Choose another folder…"),
+    IndexProject => ("Синхронизировать базу знаний проекта", "Sync Project Codebase"),
+    OpenProjectAsVault => ("Открыть проект как базу знаний…", "Open project as knowledge vault…"),
+    ProjectVaultBadge => ("Проект", "Project"),
+    PersonalVaultBadge => ("Личное хранилище", "Personal Vault"),
+    CollapseAllFolders => ("Свернуть все подпапки", "Collapse all subfolders"),
+    ExpandAllFolders => ("Развернуть все подпапки", "Expand all subfolders"),
+    SyncProjectTooltip => ("Синхронизировать базу знаний проекта с кодом", "Sync project knowledge vault with code"),
 }
 
 pub fn t(locale: Locale, key: Key) -> &'static str {

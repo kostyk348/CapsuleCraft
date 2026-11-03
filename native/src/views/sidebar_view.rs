@@ -18,10 +18,100 @@ use crate::text_button;
 use crate::theme;
 use crate::truncate_chars;
 use crate::vault::{PageTree, Vault};
-use crate::ShellAction;
+use crate::{menu_header, menu_row, menu_separator, popover_frame, ShellAction};
+
+pub fn render_vault_menu_contents(
+    ui: &mut Ui,
+    vault: &Vault,
+    locale: Locale,
+    action: &mut ShellAction,
+) {
+    ui.set_min_width(290.0);
+
+    menu_header(ui, t(locale, Key::CurrentVaultHeader));
+    let (current_name, is_project) = crate::vault::get_vault_display_info(&vault.dir);
+    let icon = if is_project { Icon::Doc } else { Icon::Folder };
+    let badge = if is_project {
+        t(locale, Key::ProjectVaultBadge)
+    } else {
+        t(locale, Key::PersonalVaultBadge)
+    };
+    let current_label = format!("{current_name}  [{badge}]");
+    menu_row(ui, Some(icon), &current_label, None, true, false, false)
+        .on_hover_text(vault.dir.display().to_string());
+
+    let recent = crate::vault::get_recent_vaults();
+    let other_recent: Vec<std::path::PathBuf> = recent
+        .into_iter()
+        .filter(|p| p != &vault.dir)
+        .collect();
+    if !other_recent.is_empty() {
+        menu_separator(ui);
+        menu_header(ui, t(locale, Key::RecentVaults));
+        for path in other_recent {
+            let (name, is_project) = crate::vault::get_vault_display_info(&path);
+            let icon = if is_project { Icon::Doc } else { Icon::Folder };
+            let prefix = if is_project { "📦 " } else { "" };
+            let label = format!("{prefix}{name}");
+            if menu_row(ui, Some(icon), &label, None, false, true, false)
+                .on_hover_text(path.display().to_string())
+                .clicked()
+            {
+                action.switch_vault = Some(path);
+            }
+        }
+    }
+
+    menu_separator(ui);
+    if menu_row(
+        ui,
+        Some(Icon::Folder),
+        t(locale, Key::OpenOtherFolder),
+        None,
+        false,
+        true,
+        false,
+    )
+    .clicked()
+    {
+        action.open_vault = true;
+    }
+
+    if menu_row(
+        ui,
+        Some(Icon::Doc),
+        t(locale, Key::OpenProjectAsVault),
+        None,
+        false,
+        true,
+        false,
+    )
+    .clicked()
+    {
+        action.open_project_dialog = true;
+    }
+}
+
+pub fn draw_vault_dropdown(
+    ui: &mut Ui,
+    vault: &Vault,
+    locale: Locale,
+    action: &mut ShellAction,
+) {
+    let button = vault_switcher(ui, vault);
+    egui::Popup::menu(&button)
+        .frame(popover_frame())
+        .align(egui::RectAlign::BOTTOM_START)
+        .show(|ui| {
+            render_vault_menu_contents(ui, vault, locale, action);
+        });
+}
+
 pub fn vault_switcher(ui: &mut Ui, vault: &Vault) -> Response {
-    let name = folder_name(&vault.dir);
-    let name = truncate_chars(&name, 30);
+    let (name, is_project) = crate::vault::get_vault_display_info(&vault.dir);
+    let prefix = if is_project { "📦 " } else { "" };
+    let full_name = format!("{prefix}{name}");
+    let name = truncate_chars(&full_name, 30);
     let font = FontId::new(12.5, theme::medium());
     let galley = ui.painter().layout_no_wrap(name.clone(), font, theme::INK);
     let width = 12.0 + 14.0 + 8.0 + galley.size().x + 10.0 + 12.0;
@@ -100,9 +190,13 @@ pub fn draw_sidebar(
     );
     header.spacing_mut().item_spacing = vec2(0.0, 0.0);
 
-    if vault_card(&mut header, vault).clicked() {
-        action.open_vault = true;
-    }
+    let card = vault_card(&mut header, vault);
+    egui::Popup::menu(&card)
+        .frame(popover_frame())
+        .align(egui::RectAlign::BOTTOM_START)
+        .show(|ui| {
+            render_vault_menu_contents(ui, vault, locale, &mut action);
+        });
     header.add_space(10.0);
     if search_box(&mut header, search).changed() {
         // The list is rebuilt from `search` below; no extra state is needed.
@@ -134,8 +228,71 @@ pub fn draw_sidebar(
             theme::FAINT,
         );
 
+        let is_project = crate::vault::is_project_vault(&vault.dir);
+
+        // Subfolders toggle button (collapse/expand all subfolders)
+        let subfolder_ids: Vec<String> = (0..vault.capsules.len())
+            .filter(|&idx| !tree.children_of(Some(idx)).is_empty() && !tree.roots().contains(&idx))
+            .map(|idx| vault.capsules[idx].message_id.clone())
+            .collect();
+        let has_subfolders = !subfolder_ids.is_empty();
+        let all_subfolders_collapsed = has_subfolders && subfolder_ids.iter().all(|id| collapsed.contains(id));
+
+        let fold_rect = Rect::from_center_size(pos2(rect.right() - 35.0, rect.center().y), vec2(22.0, 22.0));
+        let fold_resp = header
+            .interact(fold_rect, header.scope_id().with("toggle-subfolders"), Sense::click())
+            .on_hover_text(if all_subfolders_collapsed {
+                t(locale, Key::ExpandAllFolders)
+            } else {
+                t(locale, Key::CollapseAllFolders)
+            })
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
+        if fold_resp.hovered() {
+            header.painter().rect_filled(fold_rect, theme::RADIUS, theme::WASH);
+        }
+        icons::paint(
+            header.painter(),
+            Rect::from_center_size(fold_rect.center(), vec2(12.0, 12.0)),
+            if all_subfolders_collapsed { Icon::Folder } else { Icon::ChevronDown },
+            if fold_resp.hovered() { theme::INK } else { theme::FAINT },
+        );
+        if fold_resp.clicked() {
+            if all_subfolders_collapsed {
+                for id in &subfolder_ids {
+                    collapsed.remove(id);
+                }
+            } else {
+                for id in &subfolder_ids {
+                    collapsed.insert(id.clone());
+                }
+            }
+        }
+
+        // Project sync button
+        let mut x_offset = 59.0;
+        if is_project {
+            let sync_rect = Rect::from_center_size(pos2(rect.right() - x_offset, rect.center().y), vec2(22.0, 22.0));
+            let sync_resp = header
+                .interact(sync_rect, header.scope_id().with("sync-project"), Sense::click())
+                .on_hover_text(t(locale, Key::SyncProjectTooltip))
+                .on_hover_cursor(egui::CursorIcon::PointingHand);
+            if sync_resp.hovered() {
+                header.painter().rect_filled(sync_rect, theme::RADIUS, theme::WASH);
+            }
+            icons::paint(
+                header.painter(),
+                Rect::from_center_size(sync_rect.center(), vec2(12.0, 12.0)),
+                Icon::Reload,
+                if sync_resp.hovered() { theme::INK } else { theme::FAINT },
+            );
+            if sync_resp.clicked() {
+                action.sync_project = true;
+            }
+            x_offset += 24.0;
+        }
+
         let collapse_rect =
-            Rect::from_center_size(pos2(rect.right() - 35.0, rect.center().y), vec2(22.0, 22.0));
+            Rect::from_center_size(pos2(rect.right() - x_offset, rect.center().y), vec2(22.0, 22.0));
         let collapse = header
             .interact(
                 collapse_rect,
@@ -441,18 +598,21 @@ fn vault_card(ui: &mut Ui, vault: &Vault) -> Response {
         Icon::Folder,
         theme::ACCENT_INK,
     );
-    let name = truncate_chars(&folder_name(&vault.dir), 24);
+    let (name, is_project) = crate::vault::get_vault_display_info(&vault.dir);
+    let subtext = if is_project { "Project .capsule" } else { "Local .eml folder" };
+    let display_title = if is_project { format!("📦 {name}") } else { name };
+    let truncated_name = truncate_chars(&display_title, 24);
     ui.painter().text(
         pos2(tile.right() + 10.0, rect.center().y - 7.0),
         Align2::LEFT_CENTER,
-        name,
+        truncated_name,
         FontId::new(12.5, theme::semibold()),
         theme::INK,
     );
     ui.painter().text(
         pos2(tile.right() + 10.0, rect.center().y + 8.0),
         Align2::LEFT_CENTER,
-        "Local .eml folder",
+        subtext,
         FontId::new(10.0, theme::mono()),
         theme::FAINT,
     );

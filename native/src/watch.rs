@@ -34,7 +34,7 @@ impl VaultWatch {
                 }
             })
             .ok()?;
-        watcher.watch(dir, RecursiveMode::NonRecursive).ok()?;
+        watcher.watch(dir, RecursiveMode::Recursive).ok()?;
         Some(Self {
             receiver,
             _watcher: watcher,

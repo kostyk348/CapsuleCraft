@@ -27,6 +27,7 @@ cpal = "0.15"
 boa_engine = "0.20"
 pgp = "0.15"
 rand = "0.8"
+ignore = "0.4"
 
 # Downloadable integrations (v1.12.0): components catalog, viewers, local AI.
 # Every crate here is pure Rust except pdfium-render, which loads the pdfium
@@ -62,3 +63,10 @@ debug = "line-tables-only"
 # stack otherwise inflates debug artifacts past small disk quotas.
 [profile.dev.package."*"]
 debug = false
+
+[profile.test]
+debug = false
+incremental = false
+opt-level = 0
+
+

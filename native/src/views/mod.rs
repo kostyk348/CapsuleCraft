@@ -12,7 +12,7 @@ pub mod sidebar_view;
 pub mod threads_view;
 
 pub use document_view::{draw_document, draw_empty_state, EditorAction, LinkContext};
-pub use sidebar_view::{draw_sidebar, vault_switcher};
+pub use sidebar_view::{draw_sidebar, draw_vault_dropdown, render_vault_menu_contents, vault_switcher};
 
 use egui::{
     pos2, vec2, Align, Color32, FontId, Frame, Layout, Margin, Response, RichText, Sense, Ui,
