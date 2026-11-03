@@ -182,24 +182,24 @@ deliberately narrower: local-first storage you can trust for decades.
 The **native AppImage** (recommended, Linux) or the **.deb** package:
 
 ```bash
-chmod +x CapsuleCraft_1.12.2_amd64.AppImage
-./CapsuleCraft_1.12.2_amd64.AppImage            # default vault...
-./CapsuleCraft_1.12.2_amd64.AppImage /path/to/vault   # ...or your folder
+chmod +x CapsuleCraft_2.0.0_amd64.AppImage
+./CapsuleCraft_2.0.0_amd64.AppImage            # default vault...
+./CapsuleCraft_2.0.0_amd64.AppImage /path/to/vault   # ...or your folder
 # or the deb:
-sudo apt install ./CapsuleCraft_1.12.2_amd64.deb
+sudo apt install ./CapsuleCraft_2.0.0_amd64.deb
 ```
 
 It needs only glibc, an X11 or Wayland desktop and (for audio playback) ALSA —
 no WebKitGTK, no WebView2, nothing else. Every GitHub release also carries
 `SHA256SUMS.txt`.
 
-The **native Windows installer** (x64) is `CapsuleCraft_1.12.2_x64-setup.exe`
+The **native Windows installer** (x64) is `CapsuleCraft_2.0.0_x64-setup.exe`
 (NSIS: Start-menu & desktop shortcuts, uninstaller). Prefer portable? Use
-`CapsuleCraft_native_1.12.2_x64.zip`: unzip it and run `CapsuleCraft.exe`.
+`CapsuleCraft_native_2.0.0_x64.zip`: unzip it and run `CapsuleCraft.exe`.
 Standalone native egui shell, zero dependencies, no WebView2 required.
 
 The **native macOS app** (universal: Apple Silicon + Intel) ships as
-`CapsuleCraft_1.12.2_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
+`CapsuleCraft_2.0.0_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
 onto Applications. It is ad-hoc signed; if Gatekeeper blocks the first launch,
 run `xattr -d com.apple.quarantine /Applications/CapsuleCraft.app`.
 
@@ -265,6 +265,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v2.0.0** | Project Knowledge Engine: index any source tree into a `.capsule/` vault of `.eml` pages (incremental FNV-1a scan, signature/docstring parsing for 8 languages, tech-debt registry, zero-loss re-sync) + generated agent skills; folder folding in the sidebar | 2026-11-03 |
 | **v1.12.2** | Fixed the ⚙ Integrations button doing nothing (action field lost in `ShellAction::absorb`); Integrations in the ⌘K palette; installers for every platform (Windows NSIS setup.exe, macOS universal .dmg, Linux .deb) | 2026-11-02 |
 | **v1.12.1** | Native-only releases (Windows zip, Linux AppImage, macOS universal .app); fixed the Integrations modal swallowing clicks; TTS runtime pinned to the sherpa-onnx tag the FFI mirrors (v1.12.40); component URLs decoupled from release tags | 2026-11-02 |
 | **v1.12.0** | Integrations: downloadable local OCR (Xiaomi-OCR-0 on the pure-Rust mistral.rs engine), whisper STT in-process, Russian TTS (piper via sherpa-onnx), native PDF + image viewers | 2026-11-01 |

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "CapsuleCraft",
-  "version": "1.12.2",
+  "version": "2.0.0",
   "identifier": "com.capsuleos.app",
   "build": {
     "frontendDist": "../dist",

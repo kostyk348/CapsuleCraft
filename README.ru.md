@@ -261,6 +261,7 @@ npx vitest run      # 172 теста
 
 | Версия | Что | Когда |
 |---|---|---|
+| **v2.0.0** | Project Knowledge Engine: any source tree → a `.capsule/` vault of `.eml` pages (incremental scan, signature/docstring parsing, tech-debt registry, zero-loss re-sync) + agent skills; folder folding | 2026-11-03 |
 | **v1.12.0** | Интеграции: локальный OCR (Xiaomi-OCR-0 на Rust-движке), whisper-расшифровка, русская озвучка (piper через sherpa-onnx), нативный просмотр PDF и картинок | 2026-11-01 |
 | **v1.11.0** | Полировка: несколько блокеров в веб-редакторе Gantt; undo и рамочное выделение на нативной доске; перемотка и громкость в нативном плеере | 2026-11-01 |
 | **v1.10.0** | Запись с микрофона прямо из аудио-блока (cpal → WAV, живой индикатор уровня); починено прикрепление аудиофайлов, не попадавшее в капсулу; фикс AppImage в CI | 2026-11-01 |

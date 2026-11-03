@@ -3,6 +3,47 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.0.0] — 2026-11-03 — Project Knowledge Engine
+
+The 2.0 line: the native egui shell is the product, the vault stays a plain
+folder of `.eml` files, and a source tree can now become one of those vaults.
+
+### Added
+- **Project Knowledge Engine** (`native/src/project_parser.rs`, ~1.9k lines,
+  `docs/PROJECT_KNOWLEDGE_ENGINE.md`) — index a local repository into a
+  hierarchical knowledge base inside `.capsule/`: `index.eml` (metrics +
+  cross-linked lists), `subsystems/`, `modules/`, `docs/`, plus an aggregated
+  technical-debt registry in `tasks_todo.eml` (every `TODO` / `FIXME` /
+  `BUG:` / `HACK:` / `NOTE:` with file and line).
+  - **Incremental**: a per-file FNV-1a + mtime + size cache in
+    `.capsule/.index_state.json`; an unchanged 500-file project re-scans in
+    well under 30 ms, and deleted/renamed sources have their stale capsules
+    removed instead of left as orphans.
+  - **Signature parsing** for Rust (`pub async fn`, `pub struct`, `pub trait`,
+    `pub enum`, multi-line generics), TypeScript/JavaScript (`export async
+    function`, `export interface`, `export type`, `export class`), Python,
+    Go, C#, Java, Dart, plus Markdown documentation, with `///`, `//!`,
+    JSDoc/Javadoc and Python docstring extraction.
+  - **Zero data loss on re-sync** (`write_capsule_preserving`): manually added
+    paragraphs, checklists, callouts, user tags, capsule status and the
+    whiteboard `canvas_state.json` are extracted before a managed capsule is
+    rewritten; the legacy flat layout (`module_foo.eml`) migrates into
+    `modules/` automatically.
+- **Agent skills scaffolding** (`native/src/project_skill.rs`) — the scan
+  generates skill files and MCP wiring so an autonomous agent opens the
+  project with real context (public API, subsystems, tech debt) instead of
+  guessing; verification helpers live in `project_verify.rs`.
+- **Project open + re-sync from the UI** — "open project as knowledge base"
+  in the palette (native folder dialog via `rfd`) and a sidebar re-sync
+  button that reports updated/removed file counts.
+- **Folder folding in the sidebar** — collapse/expand every subfolder in one
+  click; `index.eml` stays open and nested folders start collapsed, so a
+  repository with hundreds of modules does not bury the overview in noise.
+
+### Changed
+- Version lines unified at **2.0.0** across `package.json`, `native/Cargo.toml`
+  and `src-tauri` (they had drifted to 1.12.2 / 1.12.4 / 1.12.0).
+
 ## [1.12.4] — 2026-11-02 — OCR you can actually see working
 
 ### Fixed
