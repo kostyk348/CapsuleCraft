@@ -25,6 +25,65 @@ pub struct UiState {
     /// Active brand icon style (mascot or minimal document).
     #[serde(default)]
     pub icon_style: BrandIconStyle,
+    /// User-supplied model folders (outside the components catalog).
+    #[serde(default)]
+    pub custom_models: CustomModels,
+}
+
+/// User-supplied model directories: "I already have this model on disk".
+///
+/// Paths are strings because this struct lives in JSON settings; every use
+/// validates the directory first, so a moved folder degrades to the
+/// component catalog instead of breaking the feature.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CustomModels {
+    #[serde(default)]
+    pub stt: Option<String>,
+    #[serde(default)]
+    pub tts: Option<String>,
+    #[serde(default)]
+    pub ocr: Option<String>,
+}
+
+impl CustomModels {
+    pub fn slot(&self, kind: CustomModelKind) -> Option<&str> {
+        match kind {
+            CustomModelKind::Stt => self.stt.as_deref(),
+            CustomModelKind::Tts => self.tts.as_deref(),
+            CustomModelKind::Ocr => self.ocr.as_deref(),
+        }
+    }
+
+    pub fn set(&mut self, kind: CustomModelKind, path: Option<String>) {
+        match kind {
+            CustomModelKind::Stt => self.stt = path,
+            CustomModelKind::Tts => self.tts = path,
+            CustomModelKind::Ocr => self.ocr = path,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CustomModelKind {
+    Stt,
+    Tts,
+    Ocr,
+}
+
+impl CustomModelKind {
+    pub const ALL: [CustomModelKind; 3] = [
+        CustomModelKind::Stt,
+        CustomModelKind::Tts,
+        CustomModelKind::Ocr,
+    ];
+
+    pub fn key(self) -> crate::i18n::Key {
+        match self {
+            CustomModelKind::Stt => crate::i18n::Key::CustomModelStt,
+            CustomModelKind::Tts => crate::i18n::Key::CustomModelTts,
+            CustomModelKind::Ocr => crate::i18n::Key::CustomModelOcr,
+        }
+    }
 }
 
 impl Default for UiState {
@@ -35,6 +94,7 @@ impl Default for UiState {
             sidebar_collapsed: false,
             wide_canvas: false,
             icon_style: BrandIconStyle::default(),
+            custom_models: CustomModels::default(),
         }
     }
 }
@@ -136,9 +196,32 @@ mod tests {
             sidebar_collapsed: true,
             wide_canvas: true,
             icon_style: BrandIconStyle::Mascot,
+            custom_models: CustomModels {
+                stt: Some("/models/whisper".to_string()),
+                tts: None,
+                ocr: None,
+            },
         };
         let json = serde_json::to_string(&state).unwrap();
         let decoded: UiState = serde_json::from_str(&json).unwrap();
         assert_eq!(state, decoded);
+    }
+
+    #[test]
+    fn custom_models_default_to_empty_when_absent() {
+        // Older settings files have no `custom_models`: loading must not fail.
+        let json = r#"{"zoom_factor":1.0,"sidebar_width":280.0,"sidebar_collapsed":false,"wide_canvas":false}"#;
+        let decoded: UiState = serde_json::from_str(json).unwrap();
+        assert_eq!(decoded.custom_models, CustomModels::default());
+    }
+
+    #[test]
+    fn custom_model_slots_are_addressable() {
+        let mut models = CustomModels::default();
+        assert_eq!(models.slot(CustomModelKind::Stt), None);
+        models.set(CustomModelKind::Ocr, Some("/m/ocr".to_string()));
+        assert_eq!(models.slot(CustomModelKind::Ocr), Some("/m/ocr"));
+        models.set(CustomModelKind::Ocr, None);
+        assert_eq!(models.slot(CustomModelKind::Ocr), None);
     }
 }

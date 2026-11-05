@@ -2,6 +2,7 @@
 //! (sherpa-onnx) — all backed by downloadable components from
 //! `crate::components`.
 
+pub mod custom;
 pub mod ocr;
 pub mod stt;
 pub mod tts;

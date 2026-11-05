@@ -3,6 +3,53 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.1.0] — 2026-11-05 — PDF, images, OCR, English voices
+
+Closes every gap named in the 2.0.0 release notes.
+
+### Fixed
+- **PDF viewer rendered nothing** (`native/src/pdf.rs`, new): the inline
+  preview and the viewer each called `Pdfium::bind_to_library()`, and
+  `pdfium-render` 0.9 rejects the second bind
+  (`PdfiumLibraryBindingsAlreadyInitialized`), so opening a page after the
+  preview always failed. One binding per process now, cached in a thread-local
+  and shared by both paths.
+- **OCR never started**: `-a qwen3_5` named a loader that this engine build does
+  not have, so the process exited instantly. The flag is gone — the engine reads
+  `model_type` from the checkpoint's `config.json`; `--no-ui` keeps the bundled
+  web chat off the local port.
+- **OCR requests were rejected by a healthy engine**: the request sent
+  `"model": "ocr"` instead of the id advertised by `/v1/models`
+  (`model "ocr" not found`). The id is now read from `/v1/models` at startup.
+- **OCR timed out on cold starts**: the readiness window is 15 minutes (was 5)
+  and inference gets the same budget.
+- **OCR could only read attachments**: the viewer's OCR button now renders the
+  current PDF page at 2000 px and recognizes that.
+- **STT forced Russian**: whisper was decoded with a hard-coded `<|ru|>`; the
+  language now follows the app locale (`whisper::Language`).
+
+### Added
+- **Image block** (`native/src/blocks/image.rs`, type `image`): insert a
+  picture below any block (*Вставить изображение ниже*) or from the add menu,
+  pick a file or reuse an existing attachment, set width 25/50/75/100 % and a
+  caption, click to open the viewer. Bytes are stored once in
+  `capsule.attachments`; re-picking a file replaces them.
+- **English TTS voice** `en_US-amy` (piper medium) in Integrations; the voice
+  is picked from the page's script (Cyrillic → Russian, Latin → English) with
+  any installed voice as fallback.
+- **Custom model folders** (Integrations → *Своя модель*): point STT, TTS or
+  OCR at a directory on disk. Paths are validated before use, persisted in
+  `ui_state.json` (`custom_models`), and a changed OCR model restarts the
+  engine. `components::find_onnx` / `find_with_extension` resolve vendor-named
+  voice files, so TTS no longer hard-codes `ru_RU-*.onnx`.
+
+### Changed
+- `ai::stt::best_model_dir` and `ai::ocr::resolve_paths` take the custom model
+  path and prefer it over the downloaded component.
+- `ai::tts::synthesize` finds any `.onnx` in the voice folder.
+- `snapshot::encode_png` exposes PNG encoding (used to hand a rendered PDF page
+  to the OCR engine); `write_png` builds on it.
+
 ## [2.0.0] — 2026-11-03 — Project Knowledge Engine
 
 The 2.0 line: the native egui shell is the product, the vault stays a plain

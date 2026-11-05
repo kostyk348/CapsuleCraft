@@ -10,6 +10,27 @@ use std::path::Path;
 
 use egui::ColorImage;
 
+/// Encode an image as 8-bit RGBA PNG bytes (used to hand a rendered PDF page
+/// to the OCR engine, which takes raster input, and to attach images).
+pub fn encode_png(image: &ColorImage) -> Result<Vec<u8>, String> {
+    let [width, height] = image.size;
+    let mut bytes = Vec::with_capacity(width * height * 4);
+    for pixel in &image.pixels {
+        let [r, g, b, a] = pixel.to_array();
+        bytes.extend_from_slice(&[r, g, b, a]);
+    }
+    let mut png_bytes = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut png_bytes, width as u32, height as u32);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+        writer.write_image_data(&bytes).map_err(|e| e.to_string())?;
+        writer.finish().map_err(|e| e.to_string())?;
+    }
+    Ok(png_bytes)
+}
+
 /// Encode a rendered frame as 8-bit RGBA PNG.
 pub fn write_png(path: &Path, image: &ColorImage) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
@@ -17,28 +38,8 @@ pub fn write_png(path: &Path, image: &ColorImage) -> std::io::Result<()> {
             std::fs::create_dir_all(parent)?;
         }
     }
-    let [width, height] = image.size;
-    let mut bytes = Vec::with_capacity(width * height * 4);
-    for pixel in &image.pixels {
-        let [r, g, b, a] = pixel.to_array();
-        bytes.extend_from_slice(&[r, g, b, a]);
-    }
-
-    let file = std::fs::File::create(path)?;
-    let writer = std::io::BufWriter::new(file);
-    let mut encoder = png::Encoder::new(writer, width as u32, height as u32);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    let mut writer = encoder
-        .write_header()
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
-    writer
-        .write_image_data(&bytes)
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
-    writer
-        .finish()
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
-    Ok(())
+    let bytes = encode_png(image).map_err(std::io::Error::other)?;
+    std::fs::write(path, bytes)
 }
 
 #[cfg(test)]

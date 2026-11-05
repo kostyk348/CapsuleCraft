@@ -182,24 +182,24 @@ deliberately narrower: local-first storage you can trust for decades.
 The **native AppImage** (recommended, Linux) or the **.deb** package:
 
 ```bash
-chmod +x CapsuleCraft_2.0.0_amd64.AppImage
-./CapsuleCraft_2.0.0_amd64.AppImage            # default vault...
-./CapsuleCraft_2.0.0_amd64.AppImage /path/to/vault   # ...or your folder
+chmod +x CapsuleCraft_2.1.0_amd64.AppImage
+./CapsuleCraft_2.1.0_amd64.AppImage            # default vault...
+./CapsuleCraft_2.1.0_amd64.AppImage /path/to/vault   # ...or your folder
 # or the deb:
-sudo apt install ./CapsuleCraft_2.0.0_amd64.deb
+sudo apt install ./CapsuleCraft_2.1.0_amd64.deb
 ```
 
 It needs only glibc, an X11 or Wayland desktop and (for audio playback) ALSA —
 no WebKitGTK, no WebView2, nothing else. Every GitHub release also carries
 `SHA256SUMS.txt`.
 
-The **native Windows installer** (x64) is `CapsuleCraft_2.0.0_x64-setup.exe`
+The **native Windows installer** (x64) is `CapsuleCraft_2.1.0_x64-setup.exe`
 (NSIS: Start-menu & desktop shortcuts, uninstaller). Prefer portable? Use
-`CapsuleCraft_native_2.0.0_x64.zip`: unzip it and run `CapsuleCraft.exe`.
+`CapsuleCraft_native_2.1.0_x64.zip`: unzip it and run `CapsuleCraft.exe`.
 Standalone native egui shell, zero dependencies, no WebView2 required.
 
 The **native macOS app** (universal: Apple Silicon + Intel) ships as
-`CapsuleCraft_2.0.0_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
+`CapsuleCraft_2.1.0_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
 onto Applications. It is ad-hoc signed; if Gatekeeper blocks the first launch,
 run `xattr -d com.apple.quarantine /Applications/CapsuleCraft.app`.
 
@@ -265,6 +265,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v2.1.0** | PDF pages render again (one pdfium binding per process); image block inserts a picture below any block with width/caption and viewer; OCR fixed (no invalid `-a`, real model id from `/v1/models`, 15-minute cold start, PDF page → OCR); English TTS voice Amy + STT language follows the locale; custom model folders for STT/TTS/OCR | 2026-11-05 |
 | **v2.0.0** | Project Knowledge Engine: index any source tree into a `.capsule/` vault of `.eml` pages (incremental FNV-1a scan, signature/docstring parsing for 8 languages, tech-debt registry, zero-loss re-sync) + generated agent skills; folder folding in the sidebar | 2026-11-03 |
 | **v1.12.2** | Fixed the ⚙ Integrations button doing nothing (action field lost in `ShellAction::absorb`); Integrations in the ⌘K palette; installers for every platform (Windows NSIS setup.exe, macOS universal .dmg, Linux .deb) | 2026-11-02 |
 | **v1.12.1** | Native-only releases (Windows zip, Linux AppImage, macOS universal .app); fixed the Integrations modal swallowing clicks; TTS runtime pinned to the sherpa-onnx tag the FFI mirrors (v1.12.40); component URLs decoupled from release tags | 2026-11-02 |

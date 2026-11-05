@@ -43,6 +43,7 @@ pub enum Icon {
     Sparkle,
     Speaker,
     Chip,
+    Image,
 }
 
 fn at(rect: Rect, x: f32, y: f32) -> Pos2 {
@@ -68,6 +69,23 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::Record => {
             // Filled dot — the universal "recording" affordance.
             dot(0.5, 0.5, 0.42);
+        }
+        Icon::Image => {
+            // Frame, sun, two peaks — reads as "picture" at 14 px.
+            p.rect_stroke(
+                Rect::from_min_max(at(rect, 0.14, 0.18), at(rect, 0.86, 0.82)),
+                1.5,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+            p.circle_filled(at(rect, 0.34, 0.37), rect.width() * 0.06, color);
+            line(&[
+                (0.19, 0.72),
+                (0.42, 0.5),
+                (0.56, 0.62),
+                (0.68, 0.46),
+                (0.81, 0.72),
+            ]);
         }
         Icon::Eye => {
             line(&[

@@ -74,6 +74,7 @@ pub enum ComponentId {
     TtsRuntime,
     TtsVoiceIrina,
     TtsVoiceDmitri,
+    TtsVoiceAmy,
     PdfEngine,
 }
 
@@ -103,7 +104,7 @@ pub struct ComponentSpec {
 }
 
 impl ComponentId {
-    pub const ALL: [ComponentId; 9] = [
+    pub const ALL: [ComponentId; 10] = [
         ComponentId::OcrEngine,
         ComponentId::OcrModel,
         ComponentId::SttWhisperTiny,
@@ -112,6 +113,7 @@ impl ComponentId {
         ComponentId::TtsRuntime,
         ComponentId::TtsVoiceIrina,
         ComponentId::TtsVoiceDmitri,
+        ComponentId::TtsVoiceAmy,
         ComponentId::PdfEngine,
     ];
 
@@ -125,6 +127,7 @@ impl ComponentId {
             ComponentId::TtsRuntime => "tts-runtime",
             ComponentId::TtsVoiceIrina => "tts-voice-irina",
             ComponentId::TtsVoiceDmitri => "tts-voice-dmitri",
+            ComponentId::TtsVoiceAmy => "tts-voice-amy",
             ComponentId::PdfEngine => "pdf-engine",
         }
     }
@@ -155,8 +158,9 @@ impl ComponentId {
                 archive: ArchiveKind::TarBz2,
                 requires: &[],
             },
-            ComponentId::TtsVoiceIrina => voice_spec(self, "irina", 67_200_000),
-            ComponentId::TtsVoiceDmitri => voice_spec(self, "dmitri", 67_200_000),
+            ComponentId::TtsVoiceIrina => voice_spec(self, "ru_RU-irina", 67_200_000),
+            ComponentId::TtsVoiceDmitri => voice_spec(self, "ru_RU-dmitri", 67_200_000),
+            ComponentId::TtsVoiceAmy => voice_spec(self, "en_US-amy", 67_200_000),
             ComponentId::PdfEngine => ComponentSpec {
                 id: self,
                 version: "8125",
@@ -181,6 +185,7 @@ impl ComponentId {
             ComponentId::TtsRuntime => Key::CompTtsRuntime,
             ComponentId::TtsVoiceIrina => Key::CompTtsIrina,
             ComponentId::TtsVoiceDmitri => Key::CompTtsDmitri,
+            ComponentId::TtsVoiceAmy => Key::CompTtsAmy,
             ComponentId::PdfEngine => Key::CompPdfEngine,
         }
     }
@@ -223,8 +228,9 @@ impl ComponentId {
                 .to_string(),
                 name: "runtime.tar.bz2".to_string(),
             }],
-            ComponentId::TtsVoiceIrina => voice_files("irina"),
-            ComponentId::TtsVoiceDmitri => voice_files("dmitri"),
+            ComponentId::TtsVoiceIrina => voice_files("ru_RU-irina"),
+            ComponentId::TtsVoiceDmitri => voice_files("ru_RU-dmitri"),
+            ComponentId::TtsVoiceAmy => voice_files("en_US-amy"),
             ComponentId::PdfEngine => vec![FileSpec {
                 url: format!(
                     "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8125/pdfium-{}.tgz",
@@ -251,6 +257,7 @@ impl ComponentId {
             ComponentId::TtsRuntime => TTS_C_API_BASE,
             ComponentId::TtsVoiceIrina => "ru_RU-irina-medium.onnx",
             ComponentId::TtsVoiceDmitri => "ru_RU-dmitri-medium.onnx",
+            ComponentId::TtsVoiceAmy => "en_US-amy-medium.onnx",
             ComponentId::PdfEngine => PDFIUM_BASE,
         }
     }
@@ -286,12 +293,15 @@ fn voice_spec(id: ComponentId, _voice: &'static str, size: u64) -> ComponentSpec
     }
 }
 
-fn voice_files(voice: &str) -> Vec<FileSpec> {
+/// `stem` is the full piper voice id, e.g. `ru_RU-irina` or `en_US-amy`;
+/// the tarball is `vits-piper-<stem>-medium.tar.bz2` in sherpa-onnx's
+/// `tts-models` release and unpacks into `vits-piper-<stem>-medium/`.
+fn voice_files(stem: &str) -> Vec<FileSpec> {
     vec![FileSpec {
         url: format!(
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ru_RU-{voice}-medium.tar.bz2"
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-{stem}-medium.tar.bz2"
         ),
-        name: format!("voice-{voice}.tar.bz2"),
+        name: format!("voice-{stem}.tar.bz2"),
     }]
 }
 
@@ -333,6 +343,32 @@ pub fn find_file(dir: &Path, name: &Path) -> Option<PathBuf> {
     }
     for sub in subdirs {
         if let Some(found) = find_file(&sub, name) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// Depth-first search for any file with the given extension (`onnx`), used
+/// where the model file keeps its vendor name (`en_US-amy-medium.onnx`).
+pub fn find_onnx(dir: &Path) -> Option<PathBuf> {
+    find_with_extension(dir, "onnx")
+}
+
+pub fn find_with_extension(dir: &Path, extension: &str) -> Option<PathBuf> {
+    let entries = fs::read_dir(dir).ok()?;
+    let mut subdirs = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() && path.extension().and_then(|ext| ext.to_str()) == Some(extension) {
+            return Some(path);
+        }
+        if path.is_dir() {
+            subdirs.push(path);
+        }
+    }
+    for sub in subdirs {
+        if let Some(found) = find_with_extension(&sub, extension) {
             return Some(found);
         }
     }
@@ -812,6 +848,32 @@ mod tests {
         assert_eq!(spec.requires, &[ComponentId::OcrEngine]);
         let voice = ComponentId::TtsVoiceIrina.spec();
         assert_eq!(voice.requires, &[ComponentId::TtsRuntime]);
+    }
+
+    #[test]
+    fn voice_urls_cover_both_languages() {
+        // v2.1.0: English voice. The piper tarball is `vits-piper-<stem>-medium`
+        // and the sentinel is the vendor .onnx name — both must match the real
+        // release, or the download "succeeds" into an unreadable voice.
+        let amy = ComponentId::TtsVoiceAmy;
+        let files = amy.files(Platform::LinuxX64);
+        assert!(
+            files[0].url.ends_with("vits-piper-en_US-amy-medium.tar.bz2"),
+            "{}",
+            files[0].url
+        );
+        assert_eq!(amy.sentinel(), "en_US-amy-medium.onnx");
+        assert_eq!(amy.slug(), "tts-voice-amy");
+        assert_eq!(amy.spec().requires, &[ComponentId::TtsRuntime]);
+
+        for voice in [
+            ComponentId::TtsVoiceIrina,
+            ComponentId::TtsVoiceDmitri,
+            ComponentId::TtsVoiceAmy,
+        ] {
+            let url = &voice.files(Platform::LinuxX64)[0].url;
+            assert!(url.contains("/tts-models/vits-piper-"), "{url}");
+        }
     }
 
     #[test]

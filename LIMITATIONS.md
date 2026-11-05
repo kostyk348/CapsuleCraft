@@ -70,17 +70,27 @@ _Last updated: 2026-11-01 (v1.12.0)_
 - **whisper models are fp32 safetensors** (tiny 151 MB / base 290 MB / small
   967 MB) running on CPU in-process. Transcription of a long recording blocks
   that one job (not the UI); there is no streaming or word-level timing yet,
-  and the transcript lands as plain text.
-- **TTS voices are piper-medium quality** (Ирина / Дмитрий): clear, slightly
-  robotic. Speed is fixed at 1.0 in the UI; speaker id and rate are constants
-  in code. sherpa-onnx (the TTS runtime) and pdfium (the PDF renderer) are the
-  only non-Rust pieces — both are runtime libraries loaded on demand, not
-  inference engines; the OCR/STT inference itself is pure Rust.
+  and the transcript lands as plain text. Since v2.1.0 the decoded language
+  follows the app locale (ru in a Russian UI, en in an English one) — there is
+  no per-recording language switch and no auto-detect.
+- **TTS voices are piper-medium quality** (Ирина / Дмитрий / Amy): clear,
+  slightly robotic. Speed is fixed at 1.0 in the UI; speaker id and rate are
+  constants in code. Since v2.1.0 the voice follows the page script (Cyrillic →
+  Russian, Latin → English). sherpa-onnx (the TTS runtime) and pdfium (the PDF
+  renderer) are the only non-Rust pieces — both are runtime libraries loaded on
+  demand, not inference engines; the OCR/STT inference itself is pure Rust.
+- **Custom model folders are validated, not converted** (v2.1.0): a directory
+  must already hold `config.json` + `model.safetensors` (whisper / OCR) or any
+  `.onnx` + `tokens.txt` (piper voice). The app does not convert, quantize or
+  download on your behalf, and a moved folder falls back to the catalog
+  silently — Integrations shows the path in red when it stops validating.
 - **The OCR engine process stays alive** after the first recognition (it holds
   ~2 GB of RAM with the model loaded) and exits with the app. There is no
-  "stop engine" button yet.
-- **Viewer scope**: the PDF viewer has page navigation and zoom but no text
-  selection, search or printing; the image viewer has no rotation or crop.
+  "stop engine" button yet; changing the custom OCR model folder does restart
+  it.
+- **Viewer scope**: the PDF viewer has page navigation, zoom and "recognize
+  this page" (v2.1.0) but no text selection, search or printing; the image
+  viewer has no rotation or crop.
 
 ## Architecture / product
 

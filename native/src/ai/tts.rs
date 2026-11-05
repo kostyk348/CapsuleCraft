@@ -186,6 +186,23 @@ fn load_libraries(lib_dir: &Path, c_api: &Path) -> Result<&'static Library, Stri
     Ok(c_api_lib)
 }
 
+/// True when the text is predominantly Cyrillic — used to pick a Russian vs
+/// English piper voice without asking the user to configure anything.
+pub fn looks_russian(text: &str) -> bool {
+    let mut cyrillic = 0usize;
+    let mut latin = 0usize;
+    for ch in text.chars() {
+        if ch.is_alphabetic() {
+            if ch.is_ascii_alphabetic() {
+                latin += 1;
+            } else if ('\u{0400}'..='\u{04FF}').contains(&ch) {
+                cyrillic += 1;
+            }
+        }
+    }
+    cyrillic > latin
+}
+
 /// Synthesize `text` to WAV bytes using the piper voice in `voice_dir`
 /// (containing `*.onnx`, `tokens.txt`, `espeak-ng-data/`).
 pub fn synthesize(
@@ -198,11 +215,7 @@ pub fn synthesize(
         return Err("empty text".to_string());
     }
     let model = components::find_file(voice_dir, Path::new("model.onnx"))
-        .or_else(|| {
-            // Piper voices keep their original file name; take any .onnx.
-            components::find_file(voice_dir, Path::new("ru_RU-irina-medium.onnx"))
-                .or_else(|| components::find_file(voice_dir, Path::new("ru_RU-dmitri-medium.onnx")))
-        })
+        .or_else(|| components::find_onnx(voice_dir))
         .ok_or_else(|| "voice .onnx not found".to_string())?;
     let tokens = components::find_file(voice_dir, Path::new("tokens.txt"))
         .ok_or_else(|| "tokens.txt not found".to_string())?;

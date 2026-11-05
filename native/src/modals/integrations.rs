@@ -10,11 +10,14 @@ use crate::components::{ComponentId, JobPhase, Manager};
 use crate::i18n::{t, Key, Locale};
 use crate::icons::{self, Icon};
 use crate::theme;
+use crate::ui_state::{CustomModelKind, CustomModels};
 use crate::{hud, secondary_button, text_button};
 
 pub enum IntegrationsAction {
     None,
     Close,
+    /// A custom model folder was added or removed — persist the settings.
+    Changed,
 }
 
 const GROUPS: &[(Key, &[ComponentId])] = &[
@@ -36,6 +39,7 @@ const GROUPS: &[(Key, &[ComponentId])] = &[
             ComponentId::TtsRuntime,
             ComponentId::TtsVoiceIrina,
             ComponentId::TtsVoiceDmitri,
+            ComponentId::TtsVoiceAmy,
         ],
     ),
     (Key::CompGroupViewers, &[ComponentId::PdfEngine]),
@@ -44,6 +48,7 @@ const GROUPS: &[(Key, &[ComponentId])] = &[
 pub fn draw_integrations_modal(
     show: bool,
     manager: &Manager,
+    custom_models: &mut CustomModels,
     locale: Locale,
     ctx: &egui::Context,
 ) -> IntegrationsAction {
@@ -51,6 +56,7 @@ pub fn draw_integrations_modal(
         return IntegrationsAction::None;
     }
     let mut action = IntegrationsAction::None;
+    let mut custom_changed = false;
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         action = IntegrationsAction::Close;
     }
@@ -128,6 +134,18 @@ pub fn draw_integrations_modal(
                             ui.add_space(6.0);
                         }
                     }
+                    // "Подключить свои": any local folder beats a download for
+                    // users who already keep models on disk.
+                    ui.add_space(4.0);
+                    crate::views::section(ui, t(locale, Key::CustomModel));
+                    let _ = hud(ui, t(locale, Key::CustomModelHint), theme::FAINT);
+                    ui.add_space(6.0);
+                    for kind in CustomModelKind::ALL {
+                        if custom_model_row(ui, custom_models, kind, locale) {
+                            custom_changed = true;
+                        }
+                        ui.add_space(6.0);
+                    }
                     ui.add_space(8.0);
                 });
         });
@@ -141,7 +159,86 @@ pub fn draw_integrations_modal(
     if busy {
         ctx.request_repaint_after(std::time::Duration::from_millis(120));
     }
+    if custom_changed && matches!(action, IntegrationsAction::None) {
+        action = IntegrationsAction::Changed;
+    }
     action
+}
+
+/// One "use my own model folder" row: current path, pick, remove.
+fn custom_model_row(
+    ui: &mut egui::Ui,
+    models: &mut CustomModels,
+    kind: CustomModelKind,
+    locale: Locale,
+) -> bool {
+    let mut changed = false;
+    let current = models.slot(kind).map(str::to_string);
+    let valid = current
+        .as_deref()
+        .map(|path| crate::ai::custom::validate(kind, std::path::Path::new(path)).is_ok())
+        .unwrap_or(false);
+
+    Frame::new()
+        .fill(theme::WASH)
+        .corner_radius(theme::RADIUS)
+        .stroke(theme::hairline())
+        .inner_margin(Margin::same(10))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                icons::paint(
+                    ui.painter(),
+                    Rect::from_min_size(ui.cursor().min + vec2(0.0, 2.0), vec2(14.0, 14.0)),
+                    Icon::Folder,
+                    theme::ACCENT_INK,
+                );
+                ui.add_space(20.0);
+                ui.label(
+                    RichText::new(t(locale, kind.key()))
+                        .family(theme::medium())
+                        .size(13.0)
+                        .color(theme::INK),
+                );
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if current.is_some()
+                        && text_button(ui, Some(Icon::Trash), t(locale, Key::CustomModelClear), false)
+                            .clicked()
+                    {
+                        models.set(kind, None);
+                        changed = true;
+                    }
+                    if text_button(
+                        ui,
+                        Some(Icon::Folder),
+                        t(locale, Key::CustomModelPick),
+                        false,
+                    )
+                    .clicked()
+                    {
+                        if let Some(dir) = rfd::FileDialog::new()
+                            .set_title(t(locale, Key::CustomModelPick))
+                            .pick_folder()
+                        {
+                            models.set(kind, Some(dir.display().to_string()));
+                            changed = true;
+                        }
+                    }
+                });
+            });
+            match &current {
+                Some(path) if valid => {
+                    let _ = hud(ui, path, theme::OK);
+                }
+                Some(path) => {
+                    let _ = hud(ui, path, theme::BAD);
+                    let _ = hud(ui, t(locale, Key::CustomModelBad), theme::BAD);
+                }
+                None => {
+                    let _ = hud(ui, t(locale, Key::CustomModelHint), theme::FAINT);
+                }
+            }
+        });
+    changed
 }
 
 fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale: Locale) {
@@ -319,7 +416,8 @@ fn group_icon(id: ComponentId) -> Icon {
         | ComponentId::SttWhisperSmall
         | ComponentId::TtsRuntime
         | ComponentId::TtsVoiceIrina
-        | ComponentId::TtsVoiceDmitri => Icon::Audio,
+        | ComponentId::TtsVoiceDmitri
+        | ComponentId::TtsVoiceAmy => Icon::Audio,
         ComponentId::PdfEngine => Icon::Doc,
     }
 }
@@ -334,6 +432,7 @@ fn desc_key(id: ComponentId) -> Key {
         ComponentId::TtsRuntime => Key::TtsRuntimeDesc,
         ComponentId::TtsVoiceIrina => Key::TtsIrinaDesc,
         ComponentId::TtsVoiceDmitri => Key::TtsDmitriDesc,
+        ComponentId::TtsVoiceAmy => Key::TtsAmyDesc,
         ComponentId::PdfEngine => Key::PdfEngineDesc,
     }
 }
@@ -367,6 +466,7 @@ mod tests {
         let ctx = egui::Context::default();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::new(1200.0, 800.0));
         let manager = Manager::load_for_tests();
+        let mut custom_models = CustomModels::default();
 
         let mut raw = egui::RawInput {
             screen_rect: Some(screen),
@@ -375,7 +475,7 @@ mod tests {
         let mut action = IntegrationsAction::None;
         let sink = &mut action;
         let mut run = |ctx: &egui::Context| {
-            *sink = draw_integrations_modal(true, &manager, Locale::En, ctx);
+            *sink = draw_integrations_modal(true, &manager, &mut custom_models, Locale::En, ctx);
         };
         let mut pass = |input: egui::RawInput| {
             let mut out = ctx.run_pass(input, &mut run);

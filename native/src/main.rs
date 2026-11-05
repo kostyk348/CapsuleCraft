@@ -34,6 +34,7 @@ mod mail;
 mod mcp;
 mod mime;
 mod modals;
+mod pdf;
 mod planning;
 mod preview;
 pub mod rich_text;
@@ -259,6 +260,9 @@ struct NativeApp {
     previews: preview::PreviewCache,
     /// Running local OCR engine actor (process lives in a worker thread).
     ocr: Option<ai::ocr::OcrActor>,
+    /// Model directory the running actor was spawned with; a custom-model
+    /// change restarts the engine instead of silently ignoring the new path.
+    ocr_model_dir: Option<PathBuf>,
     /// The single in-flight OCR job; progress is streamed as events and
     /// surfaced in the bottom-right status card.
     ocr_job: Option<OcrJob>,
@@ -395,6 +399,7 @@ impl NativeApp {
             viewer: None,
             previews: preview::PreviewCache::default(),
             ocr: None,
+            ocr_model_dir: None,
             ocr_job: None,
             ocr_result: None,
             ocr_highlight: None,
@@ -447,7 +452,9 @@ impl NativeApp {
             ));
             return;
         }
-        let Some((engine_bin, model_dir)) = ai::ocr::resolve_paths(&self.components) else {
+        let Some((engine_bin, model_dir)) =
+            ai::ocr::resolve_paths(&self.components, self.ui_state.custom_models.ocr.as_deref())
+        else {
             // Point the user straight at the download, not just at a notice.
             self.toast(t(self.locale, Key::NeedComponentsToast));
             self.show_integrations = true;
@@ -461,6 +468,12 @@ impl NativeApp {
             return;
         };
         let mime = ai::ocr::sniff_image_mime(&image).to_string();
+        // A different model folder means a different engine process: drop the
+        // old actor (it kills its child on Drop) and spawn with the new path.
+        if self.ocr_model_dir.as_deref() != Some(model_dir.as_path()) {
+            self.ocr = None;
+            self.ocr_model_dir = Some(model_dir.clone());
+        }
         let actor = self.ocr.get_or_insert_with(|| {
             ai::ocr::OcrActor::start(engine_bin, model_dir, ai::ocr::DEFAULT_PORT)
         });
@@ -483,7 +496,10 @@ impl NativeApp {
         if self.stt.is_running(cid) {
             return;
         }
-        let Some(model_dir) = ai::stt::best_model_dir(&self.components) else {
+        let Some(model_dir) = ai::stt::best_model_dir(
+            &self.components,
+            self.ui_state.custom_models.stt.as_deref(),
+        ) else {
             self.toast(t(self.locale, Key::NeedComponentsToast));
             self.show_integrations = true;
             return;
@@ -491,7 +507,16 @@ impl NativeApp {
         let Some(bytes) = self.audio_attachment_bytes(cid) else {
             return;
         };
-        if self.stt.start(model_dir, cid, bytes).is_ok() {
+        if self
+            .stt
+            .start(
+                model_dir,
+                cid,
+                bytes,
+                ai::whisper::Language::from_locale(self.locale),
+            )
+            .is_ok()
+        {
             self.toast(t(self.locale, Key::Transcribing));
         }
     }
@@ -515,17 +540,9 @@ impl NativeApp {
         if self.tts_rx.is_some() {
             return;
         }
-        let voice = [
-            components::ComponentId::TtsVoiceIrina,
-            components::ComponentId::TtsVoiceDmitri,
-        ]
-        .into_iter()
-        .find(|id| self.components.ready(*id));
-        let Some(voice) = voice else {
-            self.toast(t(self.locale, Key::NeedComponentsToast));
-            self.show_integrations = true;
-            return;
-        };
+        // Requirements first (runtime library + at least one voice, catalog or
+        // user-supplied): "нет компонентов" must be answered with the download
+        // modal, not with the later "empty page" toast.
         let Some(lib) = self
             .components
             .lib_path(components::ComponentId::TtsRuntime, "sherpa-onnx-c-api")
@@ -534,13 +551,56 @@ impl NativeApp {
             self.show_integrations = true;
             return;
         };
+        let custom_voice = ai::custom::resolve(
+            ui_state::CustomModelKind::Tts,
+            self.ui_state.custom_models.tts.as_deref(),
+        );
+        let catalog_voice = [
+            components::ComponentId::TtsVoiceIrina,
+            components::ComponentId::TtsVoiceDmitri,
+            components::ComponentId::TtsVoiceAmy,
+        ]
+        .into_iter()
+        .any(|id| self.components.ready(id));
+        if custom_voice.is_none() && !catalog_voice {
+            self.toast(t(self.locale, Key::NeedComponentsToast));
+            self.show_integrations = true;
+            return;
+        }
         let Some(index) = self.selected else { return };
         let text = links::page_text(&self.vault.capsules[index]);
         if text.trim().is_empty() {
             self.toast(t(self.locale, Key::TtsEmptyToast));
             return;
         }
-        let voice_dir = self.components.dir(voice);
+        // v2.1.0: the voice follows the language of the page — a Cyrillic page
+        // gets a Russian voice, a Latin one the English voice. A user-supplied
+        // voice folder wins over the catalog, so "подключить свои модели"
+        // never requires a download first.
+        let voice_dir = match custom_voice {
+            Some(dir) => dir,
+            None => {
+                let candidates: [components::ComponentId; 3] = if ai::tts::looks_russian(&text) {
+                    [
+                        components::ComponentId::TtsVoiceIrina,
+                        components::ComponentId::TtsVoiceDmitri,
+                        components::ComponentId::TtsVoiceAmy,
+                    ]
+                } else {
+                    [
+                        components::ComponentId::TtsVoiceAmy,
+                        components::ComponentId::TtsVoiceIrina,
+                        components::ComponentId::TtsVoiceDmitri,
+                    ]
+                };
+                let Some(voice) = candidates.into_iter().find(|id| self.components.ready(*id)) else {
+                    self.toast(t(self.locale, Key::NeedComponentsToast));
+                    self.show_integrations = true;
+                    return;
+                };
+                self.components.dir(voice)
+            }
+        };
         let (tx, rx) = std::sync::mpsc::channel();
         self.tts_rx = Some(rx);
         std::thread::spawn(move || {
@@ -2316,10 +2376,12 @@ impl NativeApp {
         match modals::integrations::draw_integrations_modal(
             self.show_integrations,
             &self.components,
+            &mut self.ui_state.custom_models,
             self.locale,
             &ctx,
         ) {
             modals::integrations::IntegrationsAction::Close => self.show_integrations = false,
+            modals::integrations::IntegrationsAction::Changed => self.ui_state.save(),
             modals::integrations::IntegrationsAction::None => {}
         }
 

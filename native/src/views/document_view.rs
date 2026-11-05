@@ -306,7 +306,9 @@ pub fn draw_document(
                             }
                             BlockOp::InsertBelow(kind, text) => {
                                 let mut new_b = kind.block(locale);
-                                crate::mime::set_block_text(&mut new_b, text);
+                                if !text.is_empty() {
+                                    crate::mime::set_block_text(&mut new_b, text);
+                                }
                                 if index + 1 <= capsule.blocks.len() {
                                     capsule.blocks.insert(index + 1, new_b);
                                 } else {
@@ -330,6 +332,47 @@ pub fn draw_document(
                                     raw_b64: Some(b64),
                                 });
                                 action.changed = true;
+                            }
+                            BlockOp::AttachImage {
+                                name,
+                                cid,
+                                mime,
+                                b64,
+                                size,
+                            } => {
+                                // Same cid means "replace these bytes": picking
+                                // the same picture twice must not duplicate the
+                                // attachment.
+                                let attachment = crate::mime::Attachment {
+                                    name,
+                                    cid: cid.clone(),
+                                    mime_type: mime,
+                                    content: String::new(),
+                                    size_bytes: size,
+                                    raw_b64: Some(b64),
+                                };
+                                match capsule
+                                    .attachments
+                                    .iter_mut()
+                                    .find(|existing| existing.cid == cid)
+                                {
+                                    Some(existing) => *existing = attachment,
+                                    None => capsule.attachments.push(attachment),
+                                }
+                                action.changed = true;
+                            }
+                            BlockOp::OpenViewer(cid) => {
+                                if let Some(attachment) =
+                                    capsule.attachments.iter().find(|a| a.cid == cid)
+                                {
+                                    if let Some(bytes) = attachment_bytes(attachment) {
+                                        action.attachments.push(AttachmentAction::View {
+                                            name: attachment.name.clone(),
+                                            mime: attachment.mime_type.clone(),
+                                            bytes,
+                                        });
+                                    }
+                                }
                             }
                             BlockOp::RequestTranscribe(cid) => {
                                 action.transcribe = Some(cid);

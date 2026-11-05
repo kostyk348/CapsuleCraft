@@ -503,9 +503,40 @@ pub fn decode_wav(bytes: &[u8]) -> Result<(Vec<f32>, u32), String> {
     Ok((mono, sample_rate))
 }
 
+/// Spoken language forced into the whisper decoder. Multilingual whisper
+/// checkpoints need an explicit prompt language; v2.0.0 hard-coded `<|ru|>`,
+/// so English audio came out as Russian-sounding gibberish.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Language {
+    Russian,
+    English,
+}
+
+impl Language {
+    /// The special token that tells whisper which language it hears.
+    pub fn token(self) -> &'static str {
+        match self {
+            Language::Russian => "<|ru|>",
+            Language::English => "<|en|>",
+        }
+    }
+
+    /// Follow the UI locale: an English app transcribes English.
+    pub fn from_locale(locale: crate::i18n::Locale) -> Self {
+        match locale {
+            crate::i18n::Locale::Ru => Language::Russian,
+            crate::i18n::Locale::En => Language::English,
+        }
+    }
+}
+
 /// Transcribe `wav_bytes` (any PCM WAV) with the whisper model in `model_dir`.
-/// The audio is resampled to 16 kHz mono and decoded with Russian forced.
-pub fn transcribe(model_dir: &Path, wav_bytes: &[u8]) -> Result<String, String> {
+/// The audio is resampled to 16 kHz mono and decoded with `language` forced.
+pub fn transcribe(
+    model_dir: &Path,
+    wav_bytes: &[u8],
+    language: Language,
+) -> Result<String, String> {
     let config_path = model_dir.join("config.json");
     let weights_path = model_dir.join("model.safetensors");
     let tokenizer_path = model_dir.join("tokenizer.json");
@@ -546,7 +577,7 @@ pub fn transcribe(model_dir: &Path, wav_bytes: &[u8]) -> Result<String, String> 
     };
     let model = Model::Normal(m::model::Whisper::load(&vb, config).map_err(e2s)?);
 
-    let language_token = Some(token_id(&tokenizer, "<|ru|>")?);
+    let language_token = Some(token_id(&tokenizer, language.token())?);
     let mut decoder = Decoder::new(model, tokenizer, 299_792_458, &device, language_token)?;
     decoder.run(&mel)
 }
@@ -629,7 +660,17 @@ mod tests {
     #[test]
     fn transcribe_requires_model_dir() {
         let bytes = wav_bytes(&[0; 1600], 16_000);
-        let err = transcribe(Path::new("/nonexistent-model"), &bytes);
+        let err = transcribe(Path::new("/nonexistent-model"), &bytes, Language::Russian);
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn language_tokens_match_the_whisper_vocabulary() {
+        assert_eq!(Language::Russian.token(), "<|ru|>");
+        assert_eq!(Language::English.token(), "<|en|>");
+        assert_eq!(
+            Language::from_locale(crate::i18n::Locale::En),
+            Language::English
+        );
     }
 }

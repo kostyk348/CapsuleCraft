@@ -7,6 +7,7 @@ pub mod callout;
 pub mod canvas;
 pub mod code;
 pub mod grid;
+pub mod image;
 pub mod opponent;
 pub mod todo;
 
@@ -15,6 +16,7 @@ pub use callout::draw_callout_block;
 pub use canvas::{canvas_element, draw_canvas_block};
 pub use code::draw_code_block;
 pub use grid::{draw_grid_block, parse_csv, to_csv};
+pub use image::draw_image_block;
 pub use opponent::draw_opponent_block;
 pub use todo::draw_todo_block;
 
@@ -56,6 +58,16 @@ pub enum BlockOp {
         b64: String,
         size: usize,
     },
+    /// Same, for the image block (`BlockKind::Image`).
+    AttachImage {
+        name: String,
+        cid: String,
+        mime: String,
+        b64: String,
+        size: usize,
+    },
+    /// An image block asked for the full-screen viewer for this attachment.
+    OpenViewer(String),
     /// The audio block asks the shell to transcribe this attachment with the
     /// local whisper engine (or to show the Integrations hint when missing).
     RequestTranscribe(String),
@@ -151,6 +163,7 @@ pub enum BlockKind {
     Code,
     Grid,
     Audio,
+    Image,
     Canvas,
     Opponent,
 }
@@ -208,6 +221,11 @@ impl BlockKind {
                 "type": "interactive_canvas",
                 "data": { "scene_cid": "", "elements": [] }
             }),
+            BlockKind::Image => json!({
+                "id": new_block_id("image"),
+                "type": "image",
+                "data": { "cid": "", "caption": "", "width": 100 }
+            }),
             BlockKind::Opponent => json!({
                 "id": new_block_id("ai_opponent_block"),
                 "type": "ai_opponent_block",
@@ -241,6 +259,7 @@ pub fn add_block_menu(ui: &mut Ui, locale: Locale) -> Option<BlockKind> {
                 (Icon::Code, Key::BlockCode, BlockKind::Code, None),
                 (Icon::Table, Key::BlockGrid, BlockKind::Grid, None),
                 (Icon::Audio, Key::BlockAudio, BlockKind::Audio, None),
+                (Icon::Image, Key::BlockImage, BlockKind::Image, None),
                 (Icon::Board, Key::BlockCanvas, BlockKind::Canvas, None),
                 (Icon::Command, Key::BlockAi, BlockKind::Opponent, None),
             ];
@@ -404,6 +423,23 @@ pub fn draw_block_row(
             .clicked()
             {
                 op = Some(BlockOp::TransformTo(BlockKind::Code));
+            }
+            menu_separator(ui);
+
+            // Any block can host an image directly below it — this is how a
+            // picture lands exactly where the user wants it in the page.
+            if menu_row(
+                ui,
+                Some(Icon::Image),
+                t(locale, Key::ImageInsertBelow),
+                None,
+                false,
+                true,
+                false,
+            )
+            .clicked()
+            {
+                op = Some(BlockOp::InsertBelow(BlockKind::Image, String::new()));
             }
             menu_separator(ui);
 
@@ -948,6 +984,7 @@ pub fn draw_block_content(
         "code_repl" => draw_code_block(ui, block, locale),
         "data_grid_view" => draw_grid_block(ui, block, attachments, locale),
         "audio_note" => draw_audio_block(ui, block, attachments, locale, op),
+        "image" => draw_image_block(ui, block, attachments, locale, op),
         "interactive_canvas" => draw_canvas_block(ui, block, locale),
         "ai_opponent_block" => draw_opponent_block(ui, block, locale),
         _ => {

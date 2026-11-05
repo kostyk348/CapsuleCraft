@@ -110,15 +110,32 @@ impl ViewerState {
     pub fn is_pdf(&self) -> bool {
         self.pdf.is_some()
     }
+
+    /// Raster bytes of what the viewer is showing, for the OCR engine: the
+    /// attachment itself for images, a fresh high-resolution render of the
+    /// current page for PDFs (an OCR engine can only read pixels — the v2.1.0
+    /// request was that a scanned page be readable straight from the viewer).
+    pub fn ocr_payload(&self) -> Result<Vec<u8>, String> {
+        if let Some(bytes) = &self.raw_image {
+            return Ok(bytes.clone());
+        }
+        let pdf = self
+            .pdf
+            .as_ref()
+            .ok_or_else(|| "nothing to recognize".to_string())?;
+        // 2000 px keeps small print legible; the visible texture can be much
+        // smaller at zoom 1.0 and OCR quality tracks resolution.
+        let page = pdf.render_page(self.page, 2000.0)?;
+        crate::snapshot::encode_png(&page)
+    }
 }
 
 impl PdfDoc {
     fn open(lib_path: &Path, bytes: Vec<u8>) -> Result<Self, String> {
-        use pdfium_render::prelude::*;
-        let bindings =
-            Pdfium::bind_to_library(lib_path).map_err(|e| format!("pdfium load: {e}"))?;
-        // Leak: PdfDocument borrows the Pdfium for its lifetime.
-        let pdfium: &'static Pdfium = Box::leak(Box::new(Pdfium::new(bindings)));
+        // Binding is process-wide and idempotent (`crate::pdf`): the inline
+        // preview and this viewer share one engine. Binding per document was
+        // the v2.0.0 bug — the second bind failed with "already initialised".
+        let pdfium = crate::pdf::engine(lib_path)?;
         let document = pdfium
             .load_pdf_from_byte_vec(bytes, None)
             .map_err(|e| format!("pdf open: {e}"))?;
@@ -275,10 +292,11 @@ pub fn draw(
                 {
                     close = true;
                 }
-                // OCR affordance: only for images (the engine takes raster).
-                // While a job is running the slot becomes a spinner; the
-                // status card in the corner carries the detailed phase.
-                if state.raw_image.is_some() {
+                // OCR affordance: images are sent as-is, PDFs as a fresh
+                // render of the page on screen (v2.1.0 — a scanned PDF was
+                // previously a dead end: only raster attachments had the
+                // button). While a job runs the slot becomes a spinner.
+                if state.raw_image.is_some() || state.is_pdf() {
                     if ocr_busy {
                         ui.add(egui::Spinner::new().size(15.0))
                             .on_hover_text(t(locale, Key::OcrAlreadyRunning));
@@ -291,8 +309,9 @@ pub fn draw(
                     .on_hover_text(t(locale, Key::OcrAttachment))
                     .clicked()
                     {
-                        if let Some(bytes) = state.raw_image.clone() {
-                            outcome.ocr = Some((state.name.clone(), bytes));
+                        match state.ocr_payload() {
+                            Ok(bytes) => outcome.ocr = Some((state.name.clone(), bytes)),
+                            Err(message) => state.error = Some(message),
                         }
                     }
                 }

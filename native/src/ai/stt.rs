@@ -30,8 +30,15 @@ impl Default for SttJobs {
 
 impl SttJobs {
     /// Queue transcription of `wav_bytes` for attachment `cid`. No-op when a
-    /// job for the same audio is already active.
-    pub fn start(&self, model_dir: PathBuf, cid: &str, wav_bytes: Vec<u8>) -> Result<(), String> {
+    /// job for the same audio is already active. `language` is forced into the
+    /// whisper decoder — English audio must not be decoded as Russian.
+    pub fn start(
+        &self,
+        model_dir: PathBuf,
+        cid: &str,
+        wav_bytes: Vec<u8>,
+        language: whisper::Language,
+    ) -> Result<(), String> {
         let mut jobs = self.inner.lock().map_err(|_| "stt lock poisoned")?;
         if jobs.get(cid) == Some(&SttPhase::Running) {
             return Err("already running".to_string());
@@ -42,7 +49,7 @@ impl SttJobs {
         let inner = Arc::clone(&self.inner);
         let cid = cid.to_string();
         thread::spawn(move || {
-            let phase = match whisper::transcribe(&model_dir, &wav_bytes) {
+            let phase = match whisper::transcribe(&model_dir, &wav_bytes, language) {
                 Ok(text) if text.trim().is_empty() => {
                     SttPhase::Failed("empty transcript".to_string())
                 }
@@ -76,7 +83,14 @@ impl SttJobs {
 }
 
 /// Directory of the best installed whisper model (small > base > tiny).
-pub fn best_model_dir(components: &crate::components::Manager) -> Option<PathBuf> {
+/// A user-supplied folder wins over the catalog when it holds a checkpoint.
+pub fn best_model_dir(
+    components: &crate::components::Manager,
+    custom: Option<&str>,
+) -> Option<PathBuf> {
+    if let Some(dir) = crate::ai::custom::resolve(crate::ui_state::CustomModelKind::Stt, custom) {
+        return Some(dir);
+    }
     [
         crate::components::ComponentId::SttWhisperSmall,
         crate::components::ComponentId::SttWhisperBase,
@@ -100,13 +114,19 @@ mod tests {
             Path::new("/nonexistent").to_path_buf(),
             "cid-1",
             b"xx".to_vec(),
+            whisper::Language::Russian,
         );
         // The job is queued and fails asynchronously; starting itself is fine.
         assert!(err.is_ok());
         // Busy-flag prevents double starts while the (failing) job runs.
         assert!(jobs.is_running("cid-1"));
         assert!(jobs
-            .start(PathBuf::from("/x"), "cid-1", Vec::new())
+            .start(
+                PathBuf::from("/x"),
+                "cid-1",
+                Vec::new(),
+                whisper::Language::English
+            )
             .is_err());
         // Eventually the worker marks the failure.
         std::thread::sleep(std::time::Duration::from_millis(300));
@@ -120,7 +140,8 @@ mod tests {
     fn best_model_prefers_larger_models() {
         use crate::components::{ComponentId, Manager};
         let manager = Manager::load_for_tests();
-        assert_eq!(best_model_dir(&manager), None);
+        assert_eq!(best_model_dir(&manager, None), None);
+        assert_eq!(best_model_dir(&manager, Some("/nope/whisper")), None);
         let _ = ComponentId::SttWhisperTiny; // silence unused import in some cfgs
     }
 }

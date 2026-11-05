@@ -18,6 +18,14 @@ pub const DEFAULT_PORT: u16 = 8_471;
 
 /// Command-line shape for the downloaded engine. Kept pure so the spawn is
 /// unit-testable without the 1.7 GB model.
+///
+/// v2.1.0: no `-a qwen3_5`. The architecture flag only accepts the exact
+/// loader names of the engine build, so a renamed/absent arch makes the
+/// process die instantly ("invalid value for --arch") and OCR never starts —
+/// while the app could only report "engine exited before readiness". The
+/// engine reads `model_type` from the model's own `config.json` when `-a` is
+/// absent, which is both version-proof and correct for the OCR checkpoint.
+/// `--no-ui` keeps the bundled web chat out of the local port.
 pub fn serve_args(port: u16, model_dir: &Path) -> Vec<String> {
     vec![
         "serve".to_string(),
@@ -25,11 +33,10 @@ pub fn serve_args(port: u16, model_dir: &Path) -> Vec<String> {
         port.to_string(),
         "--host".to_string(),
         "127.0.0.1".to_string(),
+        "--no-ui".to_string(),
         "multimodal".to_string(),
         "-m".to_string(),
         model_dir.display().to_string(),
-        "-a".to_string(),
-        "qwen3_5".to_string(),
     ]
 }
 
@@ -37,6 +44,10 @@ pub fn serve_args(port: u16, model_dir: &Path) -> Vec<String> {
 pub struct OcrEngine {
     child: Child,
     pub port: u16,
+    /// Model id advertised by `/v1/models`; the chat endpoint rejects an
+    /// invented name ("model \"ocr\" not found"), which is how a perfectly
+    /// healthy engine looked broken.
+    pub model: String,
 }
 
 impl Drop for OcrEngine {
@@ -64,14 +75,27 @@ impl OcrEngine {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         let child = command.spawn().map_err(|e| format!("spawn engine: {e}"))?;
-        let mut engine = Self { child, port };
-        engine.wait_ready(Duration::from_secs(300))?;
+        let mut engine = Self {
+            child,
+            port,
+            model: String::new(),
+        };
+        // v2.1.0: 15 minutes. A cold start on a laptop loads 1.75 GB of
+        // weights plus the vision tower; the old 5-minute ceiling expired
+        // *after* the engine had already come up on slower machines, which
+        // looked exactly like a broken OCR.
+        engine.wait_ready(Duration::from_secs(900))?;
         Ok(engine)
     }
 
     /// Poll `/v1/models` until the server is ready or the timeout expires.
     /// A process that exits early must fail immediately — burning five
     /// minutes of a silent progress bar is the bug, not the remedy.
+    ///
+    /// On success the advertised model id is recorded: the chat endpoint only
+    /// accepts *that* id, and the old hard-coded `"model": "ocr"` made a
+    /// healthy engine answer `model "ocr" not found` — the actual v2.0.0 OCR
+    /// failure.
     pub fn wait_ready(&mut self, timeout: Duration) -> Result<(), String> {
         let url = format!("http://127.0.0.1:{}/v1/models", self.port);
         let deadline = Instant::now() + timeout;
@@ -91,7 +115,8 @@ impl OcrEngine {
             match ureq::get(&url).timeout(Duration::from_secs(2)).call() {
                 Ok(response) => match response.into_string() {
                     Ok(body) => {
-                        if body.contains("\"data\"") {
+                        if let Some(model) = parse_model_id(&body) {
+                            self.model = model;
                             return Ok(());
                         }
                         last_error = body.chars().take(400).collect();
@@ -110,11 +135,18 @@ impl OcrEngine {
     }
 
     /// Recognize text in an image (PNG/JPEG bytes) via chat completions.
-    pub fn recognize(port: u16, image: &[u8], mime: &str, prompt: &str) -> Result<String, String> {
+    /// `model` is the id returned by `/v1/models` — never a guess.
+    pub fn recognize(
+        port: u16,
+        model: &str,
+        image: &[u8],
+        mime: &str,
+        prompt: &str,
+    ) -> Result<String, String> {
         let url = format!("http://127.0.0.1:{port}/v1/chat/completions");
         let data_url = format!("data:{mime};base64,{}", BASE64.encode(image));
         let body = json!({
-            "model": "ocr",
+            "model": model,
             "messages": [{
                 "role": "user",
                 "content": [
@@ -126,7 +158,7 @@ impl OcrEngine {
             "temperature": 0.0,
         });
         let response = ureq::post(&url)
-            .timeout(Duration::from_secs(600))
+            .timeout(Duration::from_secs(900))
             .send_json(body)
             .map_err(|e| format!("ocr request: {e}"))?;
         let mut text = String::new();
@@ -136,6 +168,20 @@ impl OcrEngine {
             .map_err(|e| format!("ocr read: {e}"))?;
         parse_completion(&text)
     }
+}
+
+/// First model id advertised by an OpenAI-style `/v1/models` body:
+/// `{"object":"list","data":[{"id":"...","object":"model"}]}`.
+pub fn parse_model_id(body: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(body).ok()?;
+    value
+        .get("data")
+        .and_then(Value::as_array)
+        .and_then(|models| models.first())
+        .and_then(|model| model.get("id"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .filter(|id| !id.is_empty())
 }
 
 /// Extract `choices[0].message.content` from an OpenAI-style response.
@@ -152,11 +198,18 @@ pub fn parse_completion(body: &str) -> Result<String, String> {
     Ok(message.trim().to_string())
 }
 
-/// Resolve the engine binary + model dir from installed components.
-pub fn resolve_paths(components: &crate::components::Manager) -> Option<(PathBuf, PathBuf)> {
-    if !components.ready(crate::components::ComponentId::OcrEngine)
-        || !components.ready(crate::components::ComponentId::OcrModel)
-    {
+/// Resolve the engine binary + model dir from installed components. A custom
+/// OCR model folder replaces the downloaded checkpoint; the engine binary is
+/// still the component (it is the runtime, not the model).
+pub fn resolve_paths(
+    components: &crate::components::Manager,
+    custom_model: Option<&str>,
+) -> Option<(PathBuf, PathBuf)> {
+    let custom = crate::ai::custom::resolve(crate::ui_state::CustomModelKind::Ocr, custom_model);
+    if !components.ready(crate::components::ComponentId::OcrEngine) {
+        return None;
+    }
+    if custom.is_none() && !components.ready(crate::components::ComponentId::OcrModel) {
         return None;
     }
     let engine_dir = components.dir(crate::components::ComponentId::OcrEngine);
@@ -166,7 +219,7 @@ pub fn resolve_paths(components: &crate::components::Manager) -> Option<(PathBuf
         "mistralrs"
     };
     let engine_bin = crate::components::find_file(&engine_dir, Path::new(engine_name))?;
-    let model_dir = components.dir(crate::components::ComponentId::OcrModel);
+    let model_dir = custom.unwrap_or_else(|| components.dir(crate::components::ComponentId::OcrModel));
     Some((engine_bin, model_dir))
 }
 
@@ -206,11 +259,13 @@ impl OcrActor {
             let mut engine: Option<OcrEngine> = None;
             for request in rx.iter() {
                 let _ = request.reply.send(OcrEvent::Starting);
-                let alive = engine
+                // An engine without an advertised model id cannot answer the
+                // chat endpoint, so it counts as dead and gets respawned.
+                let healthy = engine
                     .as_mut()
-                    .map(|engine| engine.is_alive())
+                    .map(|engine| engine.is_alive() && !engine.model.is_empty())
                     .unwrap_or(false);
-                if !alive {
+                if !healthy {
                     engine = None;
                     match OcrEngine::spawn(&engine_bin, &model_dir, port) {
                         Ok(spawned) => engine = Some(spawned),
@@ -220,9 +275,18 @@ impl OcrActor {
                         }
                     }
                 }
+                let Some(active) = engine.as_ref() else {
+                    continue;
+                };
+                let model = active.model.clone();
                 let _ = request.reply.send(OcrEvent::Ready);
-                let result =
-                    OcrEngine::recognize(port, &request.image, &request.mime, &request.prompt);
+                let result = OcrEngine::recognize(
+                    port,
+                    &model,
+                    &request.image,
+                    &request.mime,
+                    &request.prompt,
+                );
                 let _ = request.reply.send(match result {
                     Ok(text) => OcrEvent::Done(text),
                     Err(message) => OcrEvent::Failed(message),
@@ -281,8 +345,33 @@ mod tests {
         assert!(args.windows(2).any(|w| w == ["--port", "8471"]));
         assert!(args.contains(&"multimodal".to_string()));
         assert!(args.contains(&"/models/ocr".to_string()));
-        assert!(args.contains(&"qwen3_5".to_string()));
         assert!(args.contains(&"127.0.0.1".to_string()));
+        assert!(args.contains(&"--no-ui".to_string()));
+        // The arch flag is what killed the engine on v2.0.0: the loader name
+        // is build-specific and an unknown value aborts the process at once.
+        assert!(!args.contains(&"-a".to_string()), "{args:?}");
+        assert!(!args.iter().any(|arg| arg.contains("qwen")), "{args:?}");
+        // Order matters: parent `serve` options must precede the subcommand.
+        let sub = args.iter().position(|arg| arg == "multimodal").unwrap();
+        let port = args.iter().position(|arg| arg == "--port").unwrap();
+        assert!(port < sub, "serve options must precede the subcommand");
+    }
+
+    #[test]
+    fn reads_the_advertised_model_id() {
+        let body = serde_json::json!({
+            "object": "list",
+            "data": [
+                { "id": "org/ocr-model", "object": "model" },
+                { "id": "other", "object": "model" }
+            ]
+        })
+        .to_string();
+        assert_eq!(parse_model_id(&body).as_deref(), Some("org/ocr-model"));
+        // A body that merely mentions "data" is not ready.
+        assert_eq!(parse_model_id("{\"detail\":\"loading\"}"), None);
+        assert_eq!(parse_model_id("{\"data\":[]}"), None);
+        assert_eq!(parse_model_id("not json"), None);
     }
 
     #[test]
@@ -303,7 +392,9 @@ mod tests {
     #[test]
     fn resolve_paths_requires_both_components() {
         let manager = crate::components::Manager::load_for_tests();
-        assert!(resolve_paths(&manager).is_none());
+        assert!(resolve_paths(&manager, None).is_none());
+        // An invalid custom folder must not smuggle a model in.
+        assert!(resolve_paths(&manager, Some("/nope/ocr")).is_none());
     }
 
     #[test]
