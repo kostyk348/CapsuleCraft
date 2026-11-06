@@ -215,6 +215,8 @@ struct NativeApp {
     /// Block index pending confirmation (None = no block delete in flight).
     confirm_block: Option<usize>,
     show_appearance: bool,
+    show_onboarding: bool,
+    onboarding_step: usize,
     show_mcp_modal: bool,
     mcp_tab: usize,
     show_imap_modal: bool,
@@ -376,6 +378,8 @@ impl NativeApp {
             confirm_delete: false,
             confirm_block: None,
             show_appearance: false,
+            show_onboarding: false,
+            onboarding_step: 0,
             show_mcp_modal: false,
             mcp_tab: 0,
             show_imap_modal: false,
@@ -414,6 +418,17 @@ impl NativeApp {
         }
         .with_links();
         app.show_faq_modal = matches!(launch.view, Some(View::Faq));
+        if launch.onboarding {
+            app.show_onboarding = true;
+        }
+        // First-run auto-open: never inside tests (the overlay would eat
+        // synthetic clicks) and never in --snapshot captures.
+        #[cfg(not(test))]
+        if !launch.onboarding && app.snapshot_job.is_none() {
+            if let Some(dir) = i18n::settings_dir() {
+                app.show_onboarding = !modals::onboarding::is_done(&dir);
+            }
+        }
         app.watcher = watch::VaultWatch::start(&app.vault.dir);
         app
     }
@@ -1961,6 +1976,7 @@ impl NativeApp {
             || self.confirm_delete
             || self.confirm_block.is_some()
             || self.show_appearance
+            || self.show_onboarding
             || self.show_mcp_modal
             || self.show_imap_modal
             || self.show_cothink_modal
@@ -2497,6 +2513,42 @@ impl NativeApp {
             modals::CoThinkModalAction::None => {}
         }
 
+        match modals::draw_onboarding(
+            self.show_onboarding,
+            self.onboarding_step,
+            self.locale,
+            &ctx,
+        ) {
+            modals::OnboardingAction::Next => {
+                self.onboarding_step = (self.onboarding_step + 1).min(modals::STEP_COUNT - 1);
+            }
+            modals::OnboardingAction::Prev => {
+                self.onboarding_step = self.onboarding_step.saturating_sub(1);
+            }
+            modals::OnboardingAction::Complete => {
+                self.show_onboarding = false;
+                self.onboarding_step = 0;
+                if let Some(dir) = i18n::settings_dir() {
+                    modals::onboarding::mark_done(&dir);
+                }
+            }
+            modals::OnboardingAction::Try(try_action) => {
+                // Close the tour so the feature is front and centre; the
+                // tour resumes from the palette with its step preserved.
+                self.show_onboarding = false;
+                match try_action {
+                    modals::TryAction::Palette => self.palette.open = true,
+                    modals::TryAction::Appearance => self.show_appearance = true,
+                    modals::TryAction::Graph => self.view = View::Graph,
+                    modals::TryAction::Planning => self.view = View::Planning,
+                    modals::TryAction::Integrations => self.show_integrations = true,
+                    modals::TryAction::Mcp => self.show_mcp_modal = true,
+                    modals::TryAction::Faq => self.show_faq_modal = true,
+                }
+            }
+            modals::OnboardingAction::None => {}
+        }
+
         if modals::draw_faq_modal(self.show_faq_modal, self.locale, &ctx) {
             self.show_faq_modal = false;
         }
@@ -2618,6 +2670,10 @@ impl NativeApp {
                 theme::apply(ctx);
             }
             PaletteCommand::Appearance => self.show_appearance = true,
+            PaletteCommand::Onboarding => {
+                self.onboarding_step = 0;
+                self.show_onboarding = true;
+            }
             PaletteCommand::SetView(view) => self.view = view,
             PaletteCommand::OpenPage(index) => {
                 self.select_page(index);

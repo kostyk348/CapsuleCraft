@@ -919,6 +919,151 @@ fn base36(mut value: u32) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// Maintainer tool: writes a populated demo vault for screenshots.
+    /// Run: cargo test generate_demo_vault -- --ignored --nocapture
+    #[test]
+    #[ignore = "writes a demo vault; run explicitly when regenerating screenshots"]
+    fn generate_demo_vault() {
+        use serde_json::json;
+
+        let dir = std::path::Path::new("/tmp/capsule-demo-vault");
+        let _ = std::fs::remove_dir_all(dir);
+        std::fs::create_dir_all(dir).unwrap();
+
+        let block = |kind: &str, data: serde_json::Value| {
+            json!({ "id": new_block_id(kind), "type": kind, "data": data })
+        };
+        let para = |text: &str| block("paragraph", json!({ "text": text }));
+        let heading = |text: &str| block("heading", json!({ "text": text, "level": 2 }));
+        let todos = |items: Vec<(&str, &str, Option<&str>)>| {
+            let arr: Vec<serde_json::Value> = items
+                .iter()
+                .enumerate()
+                .map(|(index, (text, status, due))| {
+                    let mut item = json!({
+                        "id": format!("item-{}", index + 1),
+                        "text": text,
+                        "status": status,
+                    });
+                    if let Some(d) = due {
+                        item["due"] = json!(d);
+                    }
+                    item
+                })
+                .collect();
+            block("todo_list", json!({ "items": arr }))
+        };
+        struct Page<'a> {
+            id: &'a str,
+            subject: &'a str,
+            tags: Vec<&'a str>,
+            parent: Option<&'a str>,
+            blocks: Vec<serde_json::Value>,
+        }
+
+        let pages = [
+            Page {
+                id: "welcome",
+                subject: "Welcome to CapsuleCraft",
+                tags: vec!["start", "capsulecraft"],
+                parent: None,
+                blocks: vec![
+                    para("Every page here is a real .eml file on your disk — open the vault folder in any mail client and the notes are simply emails. No database, no cloud, no accounts."),
+                    para("This demo vault exercises every view — pages, planning, search, threads and the link graph. Generate it yourself with: cargo test generate_demo_vault -- --ignored."),
+                    heading("Where to look first"),
+                    todos(vec![
+                        ("Skim the FAQ (F1) — storage and search explained", "todo", None),
+                        ("Press Ctrl+K and browse the command palette", "done", None),
+                        ("Open the graph view and follow a few links", "todo", None),
+                    ]),
+                    para("\"/\" in an empty paragraph inserts any block — a spreadsheet grid, a runnable snippet, a callout, an audio recorder or a PDF."),
+                ],
+            },
+            Page {
+                id: "roadmap-q4",
+                subject: "Roadmap Q4 — release train",
+                tags: vec!["planning"],
+                parent: Some("welcome"),
+                blocks: vec![
+                    para("The Q4 release train: three cuts, each with a theme. Everything below is tracked in the planning view (agenda, kanban and Gantt share the same .eml tasks)."),
+                    heading("Milestones"),
+                    todos(vec![
+                        ("Freeze the .eml schema and document it", "done", None),
+                        ("Ship the Obsidian importer to beta users", "done", Some("2026-10-20")),
+                        ("Land the Project Knowledge Engine v2", "todo", Some("2026-11-18")),
+                        ("Publish v2.2.0 with themes and onboarding", "todo", Some("2026-11-30")),
+                        ("Audit IMAP sync against Dovecot", "todo", Some("2026-12-09")),
+                    ]),
+                    para("See also [[Project Knowledge Engine]] and [[Meeting notes — vault sync]] for the two workstreams feeding this roadmap."),
+                ],
+            },
+            Page {
+                id: "pke",
+                subject: "Project Knowledge Engine",
+                tags: vec!["pkm", "ai"],
+                parent: Some("roadmap-q4"),
+                blocks: vec![
+                    para("The engine turns a code repository into a knowledge base: it parses signatures and docstrings from eight languages, caches file state with FNV-1a + mtime, and writes .eml capsules into .capsule/ that agents can read over MCP."),
+                    heading("Pipeline"),
+                    para("source tree -> incremental filter -> signature parser -> bidirectional merge -> .capsule/ capsules -> AI skills + MCP injection"),
+                    para("Rescanning 500+ unchanged files takes under 30 ms, and orphaned capsules are cleaned automatically when a source file is renamed or deleted."),
+                    para("The whole engine was contributed by kobaltGIT — parser, cache, skills scaffolding and the folder-folding controls."),
+                ],
+            },
+            Page {
+                id: "meeting-vault-sync",
+                subject: "Meeting notes — vault sync",
+                tags: vec!["meeting"],
+                parent: Some("roadmap-q4"),
+                blocks: vec![
+                    para("Weekly sync about [[Roadmap Q4 — release train]]. Decisions and follow-ups below; the notes thread with the previous meeting via In-Reply-To, so the threads view shows the whole discussion."),
+                    todos(vec![
+                        ("Rotate the IMAP app password before the audit", "todo", Some("2026-11-12")),
+                        ("Draft the data-migration chapter for the FAQ", "todo", None),
+                    ]),
+                    para("Action items from last week are all done except the Dovecot audit — that one slipped into December."),
+                ],
+            },
+            Page {
+                id: "themes",
+                subject: "Themes and appearance",
+                tags: vec!["design"],
+                parent: Some("welcome"),
+                blocks: vec![
+                    para("Eight presets ship with the app: Graphite (the original dark), Paper, Nord, Gruvbox, Catppuccin, Solarized, Everforest and Rosé Pine. Any preset accepts a personal accent colour and an interface scale from 80% to 140%."),
+                    para("Everything is stored in native-appearance.json next to the locale setting, so a fresh machine restores the look in one file copy."),
+                ],
+            },
+            Page {
+                id: "recipes",
+                subject: "Recipes — search and snippets",
+                tags: vec!["cooking", "fun"],
+                parent: None,
+                blocks: vec![
+                    para("A page that only exists to make search look alive: it mentions mmap headers, BM25 ranking, sourdough hydration and the exact grind size for aeropress."),
+                    para("hydration 78% / 200 g flour / 4 g salt / 2 g starter"),
+                ],
+            },
+        ];
+
+        for page in pages {
+            let mut capsule = Capsule::blank(
+                format!("<{}@capsuleos.local>", page.id),
+                format!("{}.eml", page.id),
+                page.subject.to_string(),
+            );
+            capsule.tags = page.tags.iter().map(|t| t.to_string()).collect();
+            if let Some(parent) = page.parent {
+                capsule.parent_id = Some(format!("<{}@capsuleos.local>", parent));
+            }
+            capsule.blocks = page.blocks;
+            let raw = assemble_eml(&capsule);
+            std::fs::write(dir.join(&capsule.file_name), raw).unwrap();
+        }
+
+        println!("demo vault written to {}", dir.display());
+    }
+
     use super::*;
 
     fn sample() -> Capsule {
