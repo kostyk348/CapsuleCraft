@@ -304,6 +304,8 @@ strings! {
     CanvasReset => ("Сброс вида", "Reset view"),
     CanvasUndo => ("Отменить", "Undo"),
     CanvasHint => ("Тяните элементы; рамкой выделяйте несколько", "Drag elements; marquee selects several"),
+    CanvasFit => ("Вписать", "Fit"),
+    CanvasViewHint => ("Колесо — панорама, Ctrl+колесо — масштаб", "Wheel pans, Ctrl+wheel zooms"),
     Confidence => ("уверенность", "confidence"),
     SourceClaim => ("Исходное утверждение", "Source claim"),
 
