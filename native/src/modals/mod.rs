@@ -1,5 +1,6 @@
 //! Modal dialogs and overlay views.
 
+pub mod appearance;
 pub mod confirm_delete;
 pub mod cothink;
 pub mod encrypt;
@@ -9,6 +10,7 @@ pub mod integrations;
 pub mod mcp_connect;
 pub mod toasts;
 
+pub use appearance::{draw_appearance, AppearanceAction};
 pub use confirm_delete::{draw_confirm_delete, ConfirmDeleteAction};
 pub use cothink::{draw_cothink_modal, CoThinkModalAction};
 pub use encrypt::{draw_encrypt_modal, EncryptAction, EncryptMode, EncryptState};
