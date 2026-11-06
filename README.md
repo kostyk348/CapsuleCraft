@@ -11,7 +11,7 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 
 [![Release](https://img.shields.io/github/v/release/kostyk348/CapsuleCraft?sort=semver&color=0ea5e9&label=release)](https://github.com/kostyk348/CapsuleCraft/releases)
 [![CI](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml)
-[![native tests](https://img.shields.io/badge/native%20tests-230%20passing-22c55e)](native/)
+[![native tests](https://img.shields.io/badge/native%20tests-233%20passing-22c55e)](native/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![No DB](https://img.shields.io/badge/database-none-orange)](#why-eml)
 [![Offline](https://img.shields.io/badge/offline--first-success)](#strengths)
@@ -225,24 +225,24 @@ deliberately narrower: local-first storage you can trust for decades.
 The **native AppImage** (recommended, Linux) or the **.deb** package:
 
 ```bash
-chmod +x CapsuleCraft_2.2.0_amd64.AppImage
-./CapsuleCraft_2.2.0_amd64.AppImage            # default vault...
-./CapsuleCraft_2.2.0_amd64.AppImage /path/to/vault   # ...or your folder
+chmod +x CapsuleCraft_2.2.1_amd64.AppImage
+./CapsuleCraft_2.2.1_amd64.AppImage            # default vault...
+./CapsuleCraft_2.2.1_amd64.AppImage /path/to/vault   # ...or your folder
 # or the deb:
-sudo apt install ./CapsuleCraft_2.2.0_amd64.deb
+sudo apt install ./CapsuleCraft_2.2.1_amd64.deb
 ```
 
 It needs only glibc, an X11 or Wayland desktop and (for audio playback) ALSA —
 no WebKitGTK, no WebView2, nothing else. Every GitHub release also carries
 `SHA256SUMS.txt`.
 
-The **native Windows installer** (x64) is `CapsuleCraft_2.2.0_x64-setup.exe`
+The **native Windows installer** (x64) is `CapsuleCraft_2.2.1_x64-setup.exe`
 (NSIS: Start-menu & desktop shortcuts, uninstaller). Prefer portable? Use
 `CapsuleCraft_native_2.2.0_x64.zip`: unzip it and run `CapsuleCraft.exe`.
 Standalone native egui shell, zero dependencies, no WebView2 required.
 
 The **native macOS app** (universal: Apple Silicon + Intel) ships as
-`CapsuleCraft_2.2.0_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
+`CapsuleCraft_2.2.1_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
 onto Applications. It is ad-hoc signed; if Gatekeeper blocks the first launch,
 run `xattr -d com.apple.quarantine /Applications/CapsuleCraft.app`.
 
@@ -306,7 +306,7 @@ native/src/
 ```bash
 # native shell
 cd native
-cargo test          # 230 unit tests
+cargo test          # 233 unit tests
 
 # legacy web engine
 npm ci
@@ -317,6 +317,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v2.2.1** | Editor promises kept: «Вставить ниже ▸» expands the full block palette in the grip menu; Notion-style «+» appears in the gutter on hover and inserts below the hovered block; slash menu — typing «/» opens a live-filtered floating palette and converts the paragraph; drag-and-drop block reorder with an accent insertion line; version manifests re-synced after the 2.1.0 stragglers | 2026-11-06 |
 | **v2.2.0** | Obsidian-style theming: 8 complete theme presets, personal accent colour, 80–140 % interface scale, appearance picker in ⌘K; interactive bilingual onboarding tour (12 steps, try-it buttons, first-run auto-open); OCR diagnostics (model preflight + engine log tail in the error); refreshed real-app screenshots incl. a themes gallery | 2026-11-06 |
 | **v2.1.0** | PDF pages render again (one pdfium binding per process); image block inserts a picture below any block with width/caption and viewer; OCR fixed (no invalid `-a`, real model id from `/v1/models`, 15-minute cold start, PDF page → OCR); English TTS voice Amy + STT language follows the locale; custom model folders for STT/TTS/OCR | 2026-11-05 |
 | **v2.0.0** | Project Knowledge Engine: index any source tree into a `.capsule/` vault of `.eml` pages (incremental FNV-1a scan, signature/docstring parsing for 8 languages, tech-debt registry, zero-loss re-sync) + generated agent skills; folder folding in the sidebar | 2026-11-03 |

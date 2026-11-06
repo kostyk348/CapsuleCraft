@@ -21,8 +21,8 @@ pub use opponent::draw_opponent_block;
 pub use todo::draw_todo_block;
 
 use egui::{
-    pos2, vec2, Align, FontFamily, FontId, Frame, Label, Layout, Margin, Rect, RichText, Sense,
-    TextEdit, Ui,
+    pos2, vec2, Align, Align2, Area, CursorIcon, FontFamily, FontId, Frame, Label, Layout, Margin,
+    Order, Rect, RichText, Sense, TextEdit, Ui,
 };
 use serde_json::{json, Value};
 
@@ -37,6 +37,9 @@ use crate::{ghost, hud, menu_header, menu_row, menu_separator, popover_frame, GU
 pub enum BlockOp {
     Up,
     Down,
+    /// Drag-and-drop reorder: the block at `from` moves to the gap `to`
+    /// (0..=len) of the *current* list. No-op when it lands where it was.
+    Reorder { from: usize, to: usize },
     Delete,
     SetLevel(u8),
     TransformTo(BlockKind),
@@ -235,6 +238,121 @@ impl BlockKind {
     }
 }
 
+/// The ordered palette of block kinds offered by the bottom "+" button, the
+/// grip menu's insert-below list, the gutter "+" button and the slash menu.
+pub fn block_kind_items() -> [(Icon, Key, BlockKind); 10] {
+    [
+        (Icon::Doc, Key::BlockParagraph, BlockKind::Text),
+        (Icon::Doc, Key::BlockHeading, BlockKind::Heading),
+        (Icon::Check, Key::BlockTodo, BlockKind::Tasks),
+        (Icon::Info, Key::BlockCallout, BlockKind::Callout),
+        (Icon::Code, Key::BlockCode, BlockKind::Code),
+        (Icon::Table, Key::BlockGrid, BlockKind::Grid),
+        (Icon::Audio, Key::BlockAudio, BlockKind::Audio),
+        (Icon::Image, Key::BlockImage, BlockKind::Image),
+        (Icon::Board, Key::BlockCanvas, BlockKind::Canvas),
+        (Icon::Command, Key::BlockAi, BlockKind::Opponent),
+    ]
+}
+
+/// Draws the block-kind rows inside an already-open popup menu. Returns the
+/// kind whose row was clicked this frame.
+fn block_kind_rows(ui: &mut Ui, locale: Locale) -> Option<BlockKind> {
+    let mut chosen = None;
+    for (icon, key, kind) in block_kind_items() {
+        let hint = if kind == BlockKind::Heading {
+            Some("H2")
+        } else {
+            None
+        };
+        if menu_row(ui, Some(icon), t(locale, key), hint, false, true, false).clicked() {
+            chosen = Some(kind);
+        }
+    }
+    chosen
+}
+
+/// Block kinds whose localized label (or the English one, so `/code` works
+/// in the Russian UI too) contains the query typed after the slash.
+pub fn slash_matches(query: &str, locale: Locale) -> Vec<BlockKind> {
+    let query = query.trim().to_lowercase();
+    block_kind_items()
+        .into_iter()
+        .filter(|(_, key, _)| {
+            t(locale, *key).to_lowercase().contains(&query)
+                || t(Locale::En, *key).to_lowercase().contains(&query)
+        })
+        .map(|(_, _, kind)| kind)
+        .collect()
+}
+
+/// Notion-style "/" menu: a floating palette under the editing paragraph.
+/// The caller shows it while the paragraph is focused and its text starts
+/// with `/`; the text after the slash filters the palette.
+pub fn slash_menu(
+    ui: &Ui,
+    anchor_id: egui::Id,
+    anchor_rect: Rect,
+    text: &str,
+    locale: Locale,
+) -> Option<BlockKind> {
+    let query = text.strip_prefix('/').unwrap_or("");
+    let matches = slash_matches(query, locale);
+    let mut chosen = None;
+    Area::new(anchor_id.with("slash-menu"))
+        .order(Order::Foreground)
+        .fixed_pos(pos2(anchor_rect.left() + 4.0, anchor_rect.bottom() + 6.0))
+        .show(ui.ctx(), |ui| {
+            ui.set_min_width(230.0);
+            ui.set_max_width(260.0);
+            popover_frame().show(ui, |ui| {
+                menu_header(ui, t(locale, Key::SlashMenuTitle));
+                if matches.is_empty() {
+                    let (rect, _) =
+                        ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::hover());
+                    ui.painter().text(
+                        pos2(rect.left() + 8.0, rect.center().y),
+                        Align2::LEFT_CENTER,
+                        t(locale, Key::SlashNoMatches),
+                        FontId::new(12.0, theme::medium()),
+                        theme::faint(),
+                    );
+                } else {
+                    for (icon, key, kind) in block_kind_items() {
+                        if !matches.contains(&kind) {
+                            continue;
+                        }
+                        if menu_row(ui, Some(icon), t(locale, key), None, false, true, false)
+                            .clicked()
+                        {
+                            chosen = Some(kind);
+                        }
+                    }
+                }
+            });
+        });
+    chosen
+}
+
+/// Pure math behind `BlockOp::Reorder`: the block at `from` moves to the gap
+/// `to` (0..=len). Returns the post-removal insert index, or None when the
+/// move would change nothing (same gap, one below itself, out of range).
+pub fn reorder_insert_index(from: usize, to: usize, len: usize) -> Option<usize> {
+    if from >= len || to > len || from == to || to == from + 1 {
+        return None;
+    }
+    Some(if to > from { to - 1 } else { to })
+}
+
+/// Live state of a block drag: which row grabbed the grip and where the
+/// insertion line currently sits. Kept in egui temp memory because rows are
+/// rebuilt from fresh clones every frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct BlockDrag {
+    from: usize,
+    to: usize,
+}
+
 pub fn add_block_menu(ui: &mut Ui, locale: Locale) -> Option<BlockKind> {
     let response = ghost(
         ui,
@@ -251,23 +369,7 @@ pub fn add_block_menu(ui: &mut Ui, locale: Locale) -> Option<BlockKind> {
         .show(|ui| {
             ui.set_min_width(200.0);
             menu_header(ui, t(locale, Key::AddBlock));
-            let items = [
-                (Icon::Doc, Key::BlockParagraph, BlockKind::Text, None),
-                (Icon::Doc, Key::BlockHeading, BlockKind::Heading, Some("H2")),
-                (Icon::Check, Key::BlockTodo, BlockKind::Tasks, None),
-                (Icon::Info, Key::BlockCallout, BlockKind::Callout, None),
-                (Icon::Code, Key::BlockCode, BlockKind::Code, None),
-                (Icon::Table, Key::BlockGrid, BlockKind::Grid, None),
-                (Icon::Audio, Key::BlockAudio, BlockKind::Audio, None),
-                (Icon::Image, Key::BlockImage, BlockKind::Image, None),
-                (Icon::Board, Key::BlockCanvas, BlockKind::Canvas, None),
-                (Icon::Command, Key::BlockAi, BlockKind::Opponent, None),
-            ];
-            for (icon, key, kind, hint) in items {
-                if menu_row(ui, Some(icon), t(locale, key), hint, false, true, false).clicked() {
-                    chosen = Some(kind);
-                }
-            }
+            chosen = block_kind_rows(ui, locale);
         });
     chosen
 }
@@ -304,18 +406,82 @@ pub fn draw_block_row(
 
     let row_rect = response.rect;
     let hovered = ui.rect_contains_pointer(row_rect);
-    let handle_rect = Rect::from_min_size(pos2(row_top.x + 1.0, row_top.y + 3.0), vec2(20.0, 18.0));
+
+    // Drag state shared by all rows: set by drag_started on the grip, the
+    // insertion gap is updated by whichever row the pointer is over.
+    let drag_id = egui::Id::new("capsule-block-drag");
+    if !ui.input(|i| i.pointer.any_down())
+        && ui
+            .data(|d| d.get_temp::<BlockDrag>(drag_id))
+            .is_some()
+    {
+        // Stale state (drag interrupted by a modal or lost): drop it.
+        ui.data_mut(|d| d.remove_temp::<BlockDrag>(drag_id));
+    }
+
+    let handle_rect = Rect::from_min_size(pos2(row_top.x, row_top.y + 3.0), vec2(14.0, 18.0));
     let handle = ui
         .interact(
             handle_rect,
             ui.scope_id().with(("block-menu", index)),
-            Sense::click(),
+            Sense::click_and_drag(),
         )
-        .on_hover_cursor(egui::CursorIcon::PointingHand)
-        .on_hover_text(t(locale, Key::AddBlockHint));
+        .on_hover_cursor(CursorIcon::Grab)
+        .on_hover_text(t(locale, Key::BlockGripHint));
+    if handle.drag_started() {
+        ui.data_mut(|d| d.insert_temp(drag_id, BlockDrag { from: index, to: index + 1 }));
+    }
+    let mut drag: Option<BlockDrag> = ui.data(|d| d.get_temp::<BlockDrag>(drag_id));
+    if let Some(d) = drag.as_mut() {
+        let pointer_y = ui.input(|i| i.pointer.hover_pos().map(|p| p.y));
+        if index != d.from && ui.rect_contains_pointer(row_rect) {
+            if let Some(y) = pointer_y {
+                d.to = if y < row_rect.center().y {
+                    index
+                } else {
+                    index + 1
+                };
+            }
+        }
+        ui.data_mut(|data| data.insert_temp(drag_id, *d));
+
+        // The insertion line at the current gap, drawn by the row it touches.
+        let line_y = if d.to == index && index != d.from {
+            Some(row_rect.top())
+        } else if d.to == index + 1
+            && index != d.from
+            && (index + 1 == block_count || pointer_y.map_or(false, |y| y >= row_rect.center().y))
+        {
+            Some(row_rect.bottom())
+        } else {
+            None
+        };
+        if let Some(y) = line_y {
+            ui.painter().rect_filled(
+                Rect::from_min_size(pos2(row_rect.left(), y - 1.5), vec2(row_rect.width(), 3.0)),
+                2.0,
+                theme::accent(),
+            );
+            ui.painter()
+                .circle_filled(pos2(row_rect.left() + 3.0, y), 3.5, theme::accent());
+        }
+        if index == d.from && (handle.drag_stopped() || ui.input(|i| i.pointer.any_released())) {
+            // The row that grabbed the grip lands the move on release.
+            if reorder_insert_index(d.from, d.to, block_count).is_some() {
+                op = Some(BlockOp::Reorder {
+                    from: d.from,
+                    to: d.to,
+                });
+            }
+            ui.data_mut(|data| data.remove_temp::<BlockDrag>(drag_id));
+            drag = None;
+        }
+        ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+    }
+
     icons::paint(
         ui.painter(),
-        Rect::from_center_size(handle_rect.center(), vec2(13.0, 13.0)),
+        Rect::from_center_size(handle_rect.center(), vec2(12.0, 12.0)),
         Icon::Grip,
         if hovered || handle.hovered() {
             theme::muted()
@@ -323,6 +489,37 @@ pub fn draw_block_row(
             theme::fade(theme::faint(), 0.45)
         },
     );
+
+    // Notion-style "+" in the gutter: appears on hover next to the grip and
+    // inserts any block kind directly below this row.
+    if hovered && drag.is_none() {
+        let plus_rect =
+            Rect::from_min_size(pos2(row_top.x + 13.0, row_top.y + 3.0), vec2(13.0, 18.0));
+        let plus = ui
+            .interact(plus_rect, egui::Id::new(("block-plus", index)), Sense::click())
+            .on_hover_cursor(CursorIcon::PointingHand)
+            .on_hover_text(t(locale, Key::InsertBelow));
+        icons::paint(
+            ui.painter(),
+            Rect::from_center_size(plus_rect.center(), vec2(12.0, 12.0)),
+            Icon::Plus,
+            if plus.hovered() {
+                theme::muted()
+            } else {
+                theme::faint()
+            },
+        );
+        egui::Popup::menu(&plus)
+            .frame(popover_frame())
+            .align(egui::RectAlign::BOTTOM_START)
+            .show(|ui| {
+                ui.set_min_width(200.0);
+                menu_header(ui, t(locale, Key::InsertBelow));
+                if let Some(kind) = block_kind_rows(ui, locale) {
+                    op = Some(BlockOp::InsertBelow(kind, String::new()));
+                }
+            });
+    }
 
     egui::Popup::menu(&handle)
         .frame(popover_frame())
@@ -426,21 +623,39 @@ pub fn draw_block_row(
             }
             menu_separator(ui);
 
-            // Any block can host an image directly below it — this is how a
-            // picture lands exactly where the user wants it in the page.
-            if menu_row(
+            // Insert below: the full block palette expands in place, hover
+            // driven like a native submenu (a click on the toggle itself
+            // would close the whole popup).
+            let toggle = menu_row(
                 ui,
-                Some(Icon::Image),
-                t(locale, Key::ImageInsertBelow),
-                None,
+                Some(Icon::Plus),
+                t(locale, Key::InsertBelow),
+                Some("▸"),
                 false,
                 true,
                 false,
-            )
-            .clicked()
-            {
-                op = Some(BlockOp::InsertBelow(BlockKind::Image, String::new()));
+            );
+            let submenu_id = egui::Id::new(("block-insert-below-open", index));
+            let mut submenu_open = ui.data(|d| d.get_temp::<bool>(submenu_id)).unwrap_or(false);
+            if toggle.hovered() {
+                submenu_open = true;
             }
+            if submenu_open {
+                let mut keep_open = toggle.hovered();
+                for (icon, key, kind) in block_kind_items() {
+                    let row = menu_row(ui, Some(icon), t(locale, key), None, false, true, false);
+                    if row.hovered() {
+                        keep_open = true;
+                    }
+                    if row.clicked() {
+                        op = Some(BlockOp::InsertBelow(kind, String::new()));
+                    }
+                }
+                if !keep_open {
+                    submenu_open = false;
+                }
+            }
+            ui.data_mut(|d| d.insert_temp(submenu_id, submenu_open));
             menu_separator(ui);
 
             if menu_row(
@@ -972,6 +1187,17 @@ pub fn draw_block_content(
                 }
             }
 
+            // Slash menu: "/" opens the block palette, filtered by whatever
+            // is typed after the slash — the hint under the page keeps its
+            // promise now.
+            if has_focus && text.starts_with('/') && !text.contains('\n') {
+                if let Some(kind) = slash_menu(ui, response.id, response.rect, &text, locale) {
+                    set_block_text(block, String::new());
+                    *op = Some(BlockOp::TransformTo(kind));
+                    return true;
+                }
+            }
+
             if response.changed() {
                 set_block_text(block, text);
                 true
@@ -1027,6 +1253,50 @@ pub fn draw_block_content(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_reorder_insert_index() {
+        // No-ops: same gap, the gap right below itself, out of range.
+        assert_eq!(reorder_insert_index(2, 2, 5), None);
+        assert_eq!(reorder_insert_index(2, 3, 5), None);
+        assert_eq!(reorder_insert_index(5, 1, 5), None);
+        assert_eq!(reorder_insert_index(0, 6, 5), None);
+        // Down: "a" to just before "e".
+        assert_eq!(reorder_insert_index(0, 4, 5), Some(3));
+        // To the very bottom.
+        assert_eq!(reorder_insert_index(0, 5, 5), Some(4));
+        // Up.
+        assert_eq!(reorder_insert_index(4, 1, 5), Some(1));
+        assert_eq!(reorder_insert_index(4, 0, 5), Some(0));
+    }
+
+    #[test]
+    fn test_reorder_applies_like_document_view() {
+        let move_block = |v: &mut Vec<&str>, from: usize, to: usize| {
+            if let Some(insert) = reorder_insert_index(from, to, v.len()) {
+                let moved = v.remove(from);
+                v.insert(insert, moved);
+            }
+        };
+        let mut v = vec!["a", "b", "c", "d", "e"];
+        move_block(&mut v, 0, 4); // a lands right before e
+        assert_eq!(v, vec!["b", "c", "d", "a", "e"]);
+        move_block(&mut v, 3, 0); // and back to the top
+        assert_eq!(v, vec!["a", "b", "c", "d", "e"]);
+        move_block(&mut v, 1, 2); // one below itself: untouched
+        assert_eq!(v, vec!["a", "b", "c", "d", "e"]);
+    }
+
+    #[test]
+    fn test_slash_matches() {
+        assert_eq!(slash_matches("", Locale::En).len(), 10);
+        let ru = slash_matches("загол", Locale::Ru);
+        assert_eq!(ru, vec![BlockKind::Heading]);
+        // The English label is a fallback inside the Russian locale too.
+        assert!(slash_matches("callout", Locale::Ru).contains(&BlockKind::Callout));
+        assert!(slash_matches("врезк", Locale::Ru).contains(&BlockKind::Callout));
+        assert!(slash_matches("zzz", Locale::En).is_empty());
+    }
 
     #[test]
     fn test_block_kind_generation() {

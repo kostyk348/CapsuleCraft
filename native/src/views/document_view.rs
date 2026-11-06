@@ -293,6 +293,15 @@ pub fn draw_document(
                                 capsule.blocks.swap(index, index + 1);
                                 action.changed = true;
                             }
+                            BlockOp::Reorder { from, to } => {
+                                if let Some(insert) =
+                                    crate::blocks::reorder_insert_index(from, to, capsule.blocks.len())
+                                {
+                                    let moved = capsule.blocks.remove(from);
+                                    capsule.blocks.insert(insert, moved);
+                                    action.changed = true;
+                                }
+                            }
                             BlockOp::SetLevel(level) => {
                                 if let Some(block) = capsule.blocks.get_mut(index) {
                                     block["data"]["level"] = json!(level);
