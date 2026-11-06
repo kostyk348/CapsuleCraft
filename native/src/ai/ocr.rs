@@ -43,13 +43,15 @@ pub fn serve_args_with(port: u16, model_dir: &Path, isq: Option<u8>) -> Vec<Stri
         "127.0.0.1".to_string(),
         "--no-ui".to_string(),
     ];
+    args.push("multimodal".to_string());
+    args.push("-m".to_string());
+    args.push(model_dir.display().to_string());
+    // ISQ belongs to the model-argument group (same struct as `-m`), which
+    // sits *after* the subcommand in mistralrs-cli.
     if let Some(q) = isq {
         args.push("--isq".to_string());
         args.push(q.to_string());
     }
-    args.push("multimodal".to_string());
-    args.push("-m".to_string());
-    args.push(model_dir.display().to_string());
     args
 }
 
@@ -59,6 +61,63 @@ fn isq_from_env() -> Option<u8> {
 
 fn isq_from_env_checked(raw: &str) -> Option<u8> {
     raw.trim().parse::<u8>().ok().filter(|q| (2..=8).contains(q))
+}
+
+/// Cheap pre-flight so a broken install fails in milliseconds with a
+/// sentence instead of a silent engine exit after a minute of loading.
+/// The vision preprocessor files are optional (mistral.rs falls back to
+/// defaults); the weights, tokenizer and a parsable config are not.
+pub fn preflight(model_dir: &Path) -> Result<(), String> {
+    if !model_dir.is_dir() {
+        return Err(format!(
+            "OCR model folder is missing: {} — reinstall the OCR model component",
+            model_dir.display()
+        ));
+    }
+    for name in ["model.safetensors", "tokenizer.json", "config.json"] {
+        let path = model_dir.join(name);
+        match std::fs::metadata(&path) {
+            Ok(meta) if meta.len() > 0 => {}
+            _ => {
+                return Err(format!(
+                    "OCR model folder is incomplete: {name} is missing or empty in {} — reinstall the OCR model component",
+                    model_dir.display()
+                ));
+            }
+        }
+    }
+    let config = std::fs::read_to_string(model_dir.join("config.json"))
+        .map_err(|e| format!("cannot read OCR config.json: {e}"))?;
+    let doc: serde_json::Value =
+        serde_json::from_str(&config).map_err(|e| format!("OCR config.json is not valid JSON: {e}"))?;
+    let model_type = doc["model_type"].as_str().unwrap_or("<none>").to_string();
+    let _ = writeln!(
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(engine_log_path(model_dir))
+            .unwrap_or_else(|_| std::fs::File::create(std::env::temp_dir().join("capsuleos-mistralrs.log")).expect("temp log")),
+        "==== preflight {} ====: model_type = {model_type}",
+        chrono::Utc::now().to_rfc3339()
+    );
+    Ok(())
+}
+
+/// Last `lines` non-empty lines of the engine log, formatted for an error message.
+fn read_log_tail(path: &Path, lines: usize) -> String {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return String::new();
+    };
+    let collected: Vec<&str> = content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+    if collected.is_empty() {
+        return String::new();
+    }
+    let start = collected.len().saturating_sub(lines);
+    let tail = collected[start..].join(" | ");
+    format!(" — last log lines: {tail}")
 }
 
 /// Stderr log lives beside the model dir (the components root) so it
@@ -99,6 +158,7 @@ impl OcrEngine {
     /// v1.12.3. mistralrs logs to the console; losing that log is fine, a
     /// deadlocked engine is not.
     pub fn spawn(engine_bin: &Path, model_dir: &Path, port: u16) -> Result<Self, String> {
+        preflight(model_dir)?;
         let args = serve_args(port, model_dir);
         let mut command = Command::new(engine_bin);
         command.args(&args).stdin(Stdio::null()).stdout(Stdio::null());
@@ -140,9 +200,11 @@ impl OcrEngine {
         while Instant::now() < deadline {
             match self.child.try_wait() {
                 Ok(Some(status)) => {
+                    let tail = read_log_tail(&self.log_path, 12);
                     return Err(format!(
-                        "engine exited ({status}) before readiness: {last_error} — stderr log: {}",
-                        self.log_path.display()
+                        "engine exited ({status}) before readiness: {last_error} — stderr log: {}{}",
+                        self.log_path.display(),
+                        tail
                     ));
                 }
                 Ok(None) => {}
@@ -382,9 +444,10 @@ mod tests {
         assert!(!plain.contains(&"--isq".to_string()));
         let quantized = serve_args_with(8_471, Path::new("/models/ocr"), Some(8));
         let isq = quantized.iter().position(|a| a == "--isq").unwrap();
+        let m = quantized.iter().position(|a| a == "-m").unwrap();
         let sub = quantized.iter().position(|a| a == "multimodal").unwrap();
         assert_eq!(quantized[isq + 1], "8");
-        assert!(isq < sub, "serve options must precede the subcommand");
+        assert!(sub < isq && isq > m, "isq belongs to the model arg group after the subcommand");
         // Out-of-range values are ignored at the env layer.
         assert_eq!(isq_from_env_checked("12"), None);
         assert_eq!(isq_from_env_checked("0"), None);
@@ -440,6 +503,45 @@ mod tests {
     fn rejects_malformed_completion() {
         assert!(parse_completion("{\"error\": true}").is_err());
         assert!(parse_completion("not json").is_err());
+    }
+
+    #[test]
+    fn preflight_rejects_incomplete_model_dirs() {
+        let tmp = std::env::temp_dir().join(format!("capsule-preflight-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        // Missing dir entirely.
+        assert!(preflight(&tmp.join("nope")).is_err());
+        // Empty dir.
+        assert!(preflight(&tmp).is_err());
+        // Stub files, broken JSON.
+        std::fs::write(tmp.join("model.safetensors"), b"stub").unwrap();
+        std::fs::write(tmp.join("tokenizer.json"), b"{}").unwrap();
+        std::fs::write(tmp.join("config.json"), b"{not json").unwrap();
+        assert!(preflight(&tmp).is_err());
+        // Valid config passes.
+        std::fs::write(
+            tmp.join("config.json"),
+            br#"{"model_type": "qwen3_5"}"#
+        )
+        .unwrap();
+        assert!(preflight(&tmp).is_ok());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn log_tail_joins_last_lines() {
+        let tmp = std::env::temp_dir().join(format!("capsule-logtail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let path = tmp.join("log.txt");
+        std::fs::write(&path, b"line one\n\nline two\nline three\n").unwrap();
+        let tail = read_log_tail(&path, 2);
+        assert!(tail.contains("line two"));
+        assert!(tail.contains("line three"));
+        assert!(!tail.contains("line one"));
+        assert_eq!(read_log_tail(&tmp.join("absent"), 3), "");
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

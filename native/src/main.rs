@@ -214,6 +214,7 @@ struct NativeApp {
     confirm_delete: bool,
     /// Block index pending confirmation (None = no block delete in flight).
     confirm_block: Option<usize>,
+    show_appearance: bool,
     show_mcp_modal: bool,
     mcp_tab: usize,
     show_imap_modal: bool,
@@ -374,6 +375,7 @@ impl NativeApp {
             toast: None,
             confirm_delete: false,
             confirm_block: None,
+            show_appearance: false,
             show_mcp_modal: false,
             mcp_tab: 0,
             show_imap_modal: false,
@@ -1958,6 +1960,7 @@ impl NativeApp {
         let modals_open = self.palette.open
             || self.confirm_delete
             || self.confirm_block.is_some()
+            || self.show_appearance
             || self.show_mcp_modal
             || self.show_imap_modal
             || self.show_cothink_modal
@@ -2418,6 +2421,11 @@ impl NativeApp {
             modals::ConfirmDeleteAction::None => {}
         }
 
+        match modals::draw_appearance(self.show_appearance, self.locale, &ctx) {
+            modals::AppearanceAction::Close => self.show_appearance = false,
+            modals::AppearanceAction::None => {}
+        }
+
         match modals::draw_mcp_modal(
             self.show_mcp_modal,
             &mut self.mcp_tab,
@@ -2609,6 +2617,7 @@ impl NativeApp {
                 theme::persist();
                 theme::apply(ctx);
             }
+            PaletteCommand::Appearance => self.show_appearance = true,
             PaletteCommand::SetView(view) => self.view = view,
             PaletteCommand::OpenPage(index) => {
                 self.select_page(index);
