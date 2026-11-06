@@ -126,12 +126,12 @@ pub fn draw_titlebar(
         action.connect_mcp = true;
     }
     let (imap_color, imap_hint) = if !imap_config.enabled {
-        (theme::MUTED, t(locale, Key::ImapDisabled))
+        (theme::muted(), t(locale, Key::ImapDisabled))
     } else {
         match imap_status {
-            sync_imap::SyncStatus::Syncing => (theme::BADGE_BETA, t(locale, Key::ImapSyncing)),
-            sync_imap::SyncStatus::Error(_) => (theme::BAD, t(locale, Key::ImapErrorToast)),
-            _ => (theme::ACCENT, t(locale, Key::ImapSynced)),
+            sync_imap::SyncStatus::Syncing => (theme::badge_beta(), t(locale, Key::ImapSyncing)),
+            sync_imap::SyncStatus::Error(_) => (theme::bad(), t(locale, Key::ImapErrorToast)),
+            _ => (theme::accent(), t(locale, Key::ImapSynced)),
         }
     };
     let imap_resp = icon_button(right_ui, Icon::Mail, imap_hint, true, false);
@@ -176,11 +176,11 @@ pub fn draw_titlebar(
 
     right_ui.add_space(6.0);
     let (dot_color, text) = if status_error {
-        (theme::BAD, t(locale, Key::SaveFailed))
+        (theme::bad(), t(locale, Key::SaveFailed))
     } else if dirty {
-        (theme::BADGE_BETA, t(locale, Key::Unsaved))
+        (theme::badge_beta(), t(locale, Key::Unsaved))
     } else {
-        (theme::ACCENT, status)
+        (theme::accent(), status)
     };
     right_ui.horizontal(|ui| {
         let (dot, _) = ui.allocate_exact_size(vec2(6.0, 6.0), Sense::hover());
@@ -188,11 +188,11 @@ pub fn draw_titlebar(
         if total_rect.width() >= 1150.0 || status_error || dirty {
             let label = ui.label(RichText::new(text).family(theme::mono()).size(9.5).color(
                 if status_error {
-                    theme::BAD
+                    theme::bad()
                 } else if dirty {
-                    theme::BADGE_BETA
+                    theme::badge_beta()
                 } else {
-                    theme::FAINT
+                    theme::faint()
                 },
             ));
             if status_error {
@@ -260,16 +260,16 @@ pub fn draw_titlebar(
         ui_left.painter().rect_stroke(
             mark_rect,
             egui::CornerRadius::same(6),
-            Stroke::new(1.5, theme::ACCENT),
+            Stroke::new(1.5, theme::accent()),
             egui::StrokeKind::Inside,
         );
         ui_left
             .painter()
-            .circle_filled(mark_rect.center() + vec2(-3.2, 0.0), 2.0, theme::ACCENT);
+            .circle_filled(mark_rect.center() + vec2(-3.2, 0.0), 2.0, theme::accent());
         ui_left.painter().circle_filled(
             mark_rect.center() + vec2(3.2, 0.0),
             2.0,
-            theme::fade(theme::ACCENT, 0.35),
+            theme::fade(theme::accent(), 0.35),
         );
     }
 
@@ -277,15 +277,15 @@ pub fn draw_titlebar(
         RichText::new(t(locale, Key::AppName))
             .family(theme::display())
             .size(15.0)
-            .color(theme::INK),
+            .color(theme::ink()),
     );
 
     let (badge_rect, _) = ui_left.allocate_exact_size(vec2(45.0, 16.0), Sense::hover());
     ui_left.painter().rect(
         badge_rect,
         theme::RADIUS,
-        theme::WASH,
-        Stroke::new(1.0, theme::LINE),
+        theme::wash(),
+        Stroke::new(1.0, theme::line()),
         egui::StrokeKind::Inside,
     );
     let badge = caps(
@@ -294,12 +294,12 @@ pub fn draw_titlebar(
         8.0,
         theme::mono_bold(),
         1.0,
-        theme::FAINT,
+        theme::faint(),
     );
     ui_left.painter().galley(
         badge_rect.center() - badge.size() / 2.0,
         badge,
-        theme::FAINT,
+        theme::faint(),
     );
 
     ui_left.add_space(8.0);
@@ -466,12 +466,12 @@ pub fn draw_breadcrumbs(
 ) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
-        let _ = hud(ui, t(locale, Key::Vault), theme::MUTED);
+        let _ = hud(ui, t(locale, Key::Vault), theme::muted());
 
         let skip = ancestors.len().saturating_sub(4);
         if skip > 0 {
-            ui.label(RichText::new("…").size(11.5).color(theme::FAINT));
-            let _ = chevron(ui, theme::FAINT);
+            ui.label(RichText::new("…").size(11.5).color(theme::faint()));
+            let _ = chevron(ui, theme::faint());
         }
         for (ancestor_idx, subject) in &ancestors[skip..] {
             let label = if subject.is_empty() {
@@ -482,7 +482,7 @@ pub fn draw_breadcrumbs(
             if crumb_button(ui, &truncate_chars(&label, 24)).clicked() {
                 action.select = Some(*ancestor_idx);
             }
-            let _ = chevron(ui, theme::FAINT);
+            let _ = chevron(ui, theme::faint());
         }
     });
 }

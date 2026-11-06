@@ -117,7 +117,7 @@ pub fn nav(ui: &mut Ui, current: View, locale: Locale) -> Option<View> {
                 let galley = ui.painter().layout_no_wrap(
                     label.to_string(),
                     FontId::new(11.5, theme::medium()),
-                    theme::MUTED,
+                    theme::muted(),
                 );
                 let w = 9.0 + 13.0 + 6.0 + galley.size().x + 9.0;
                 (w, Some(galley))
@@ -130,19 +130,19 @@ pub fn nav(ui: &mut Ui, current: View, locale: Locale) -> Option<View> {
                 ui.painter().rect(
                     rect,
                     theme::RADIUS,
-                    theme::WASH_HOVER,
+                    theme::wash_hover(),
                     theme::hairline(),
                     egui::StrokeKind::Inside,
                 );
             } else if response.hovered() {
-                ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+                ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
             }
             let ink = if active {
-                theme::INK
+                theme::ink()
             } else if response.hovered() {
-                theme::INK
+                theme::ink()
             } else {
-                theme::MUTED
+                theme::muted()
             };
 
             let icon_center = if show_text {
@@ -199,7 +199,7 @@ pub fn header(ui: &mut Ui, title: &str, subtitle: &str) -> egui::Rect {
                 RichText::new(title)
                     .family(theme::display())
                     .size(20.0)
-                    .color(theme::INK),
+                    .color(theme::ink()),
             );
             ui.add_space(10.0);
             if !subtitle.is_empty() {
@@ -207,7 +207,7 @@ pub fn header(ui: &mut Ui, title: &str, subtitle: &str) -> egui::Rect {
                     RichText::new(subtitle)
                         .family(theme::mono())
                         .size(9.5)
-                        .color(theme::FAINT),
+                        .color(theme::faint()),
                 );
             }
         });
@@ -239,7 +239,7 @@ pub fn segments(ui: &mut Ui, options: &[(&str, bool)]) -> Option<usize> {
     ui.painter().rect(
         rect,
         theme::RADIUS,
-        theme::SUNKEN,
+        theme::sunken(),
         theme::hairline(),
         egui::StrokeKind::Inside,
     );
@@ -250,16 +250,16 @@ pub fn segments(ui: &mut Ui, options: &[(&str, bool)]) -> Option<usize> {
         let response = ui.interact(item, ui.scope_id().with(("segment", index)), Sense::click());
         if *active {
             ui.painter()
-                .rect_filled(item, theme::RADIUS, theme::WASH_HOVER);
+                .rect_filled(item, theme::RADIUS, theme::wash_hover());
         } else if response.hovered() {
-            ui.painter().rect_filled(item, theme::RADIUS, theme::WASH);
+            ui.painter().rect_filled(item, theme::RADIUS, theme::wash());
         }
         ui.painter().text(
             item.center(),
             egui::Align2::CENTER_CENTER,
             label,
             FontId::new(11.0, theme::medium()),
-            if *active { theme::INK } else { theme::MUTED },
+            if *active { theme::ink() } else { theme::muted() },
         );
         if response.clicked() {
             clicked = Some(index);
@@ -283,7 +283,7 @@ pub fn stat(ui: &mut Ui, value: &str, label: &str, color: Color32) {
                 .size(20.0)
                 .color(color),
         );
-        let _ = crate::hud(ui, label, theme::FAINT);
+        let _ = crate::hud(ui, label, theme::faint());
     });
 }
 
@@ -295,7 +295,7 @@ pub fn empty_state(ui: &mut Ui, icon: Icon, title: &str, body: &str) {
         ui.painter().rect(
             rect,
             theme::RADIUS,
-            theme::WASH,
+            theme::wash(),
             theme::hairline(),
             egui::StrokeKind::Inside,
         );
@@ -303,17 +303,17 @@ pub fn empty_state(ui: &mut Ui, icon: Icon, title: &str, body: &str) {
             ui.painter(),
             egui::Rect::from_center_size(rect.center(), vec2(22.0, 22.0)),
             icon,
-            theme::FAINT,
+            theme::faint(),
         );
         ui.add_space(14.0);
         ui.label(
             RichText::new(title)
                 .family(theme::medium())
                 .size(15.0)
-                .color(theme::INK),
+                .color(theme::ink()),
         );
         ui.add_space(6.0);
-        ui.add(egui::Label::new(RichText::new(body).size(12.5).color(theme::MUTED)).wrap());
+        ui.add(egui::Label::new(RichText::new(body).size(12.5).color(theme::muted())).wrap());
         ui.add_space(4.0);
     });
 }
@@ -321,7 +321,7 @@ pub fn empty_state(ui: &mut Ui, icon: Icon, title: &str, body: &str) {
 /// Card surface used for lists and tiles inside a view.
 pub fn card(ui: &mut Ui, add: impl FnOnce(&mut Ui)) -> Response {
     Frame::new()
-        .fill(theme::WASH)
+        .fill(theme::wash())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin {
@@ -354,12 +354,12 @@ pub fn section(ui: &mut Ui, label: &str) {
         theme::HUD_SIZE,
         theme::mono_bold(),
         theme::LABEL_SPACING,
-        theme::FAINT,
+        theme::faint(),
     );
     ui.painter().galley(
         pos2(rect.left(), rect.center().y - galley.size().y / 2.0),
         galley,
-        theme::FAINT,
+        theme::faint(),
     );
     ui.painter()
         .hline(rect.x_range(), rect.bottom(), theme::hairline());

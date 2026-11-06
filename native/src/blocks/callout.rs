@@ -20,14 +20,14 @@ pub fn draw_callout_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> boo
         .unwrap_or("blue");
     let tone_color = match tone {
         "emerald" => Color32::from_rgb(52, 211, 153),
-        "amber" => theme::BADGE_BETA,
+        "amber" => theme::badge_beta(),
         "purple" => Color32::from_rgb(167, 139, 250),
         "rose" => Color32::from_rgb(251, 113, 133),
-        _ => theme::ACCENT,
+        _ => theme::accent(),
     };
 
     let inner = Frame::new()
-        .fill(theme::WASH)
+        .fill(theme::wash())
         .corner_radius(theme::RADIUS)
         .inner_margin(Margin {
             left: 16,
@@ -48,7 +48,7 @@ pub fn draw_callout_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> boo
                     let title_response = ui.add(
                         TextEdit::singleline(&mut title)
                             .font(FontId::new(13.5, theme::semibold()))
-                            .text_color(theme::INK)
+                            .text_color(theme::ink())
                             .frame(Frame::NONE)
                             .margin(Margin::same(0))
                             .desired_width(ui.available_width() - 30.0)
@@ -60,7 +60,7 @@ pub fn draw_callout_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> boo
                     }
                     if ui
                         .add(
-                            egui::Button::new(RichText::new("✓").size(12.0).color(theme::ACCENT))
+                            egui::Button::new(RichText::new("✓").size(12.0).color(theme::accent()))
                                 .fill(Color32::TRANSPARENT),
                         )
                         .clicked()
@@ -99,7 +99,7 @@ pub fn draw_callout_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> boo
                 let content_response = ui.add(
                     TextEdit::multiline(&mut content)
                         .font(FontId::new(13.5, FontFamily::Proportional))
-                        .text_color(theme::MUTED)
+                        .text_color(theme::muted())
                         .frame(Frame::NONE)
                         .margin(Margin::same(0))
                         .desired_width(f32::INFINITY)
@@ -119,7 +119,7 @@ pub fn draw_callout_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> boo
                             ui.label(
                                 RichText::new("Empty note (double click to edit)…")
                                     .size(12.0)
-                                    .color(theme::FAINT),
+                                    .color(theme::faint()),
                             );
                         }
                         for line in content.lines() {
@@ -134,21 +134,21 @@ pub fn draw_callout_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> boo
                                 ui.label(
                                     RichText::new(&trimmed[4..])
                                         .font(FontId::new(13.5, theme::semibold()))
-                                        .color(theme::INK),
+                                        .color(theme::ink()),
                                 );
                             } else if trimmed.starts_with("## ") {
                                 ui.add_space(7.0);
                                 ui.label(
                                     RichText::new(&trimmed[3..])
                                         .font(FontId::new(15.0, theme::semibold()))
-                                        .color(theme::INK),
+                                        .color(theme::ink()),
                                 );
                             } else if trimmed.starts_with("# ") {
                                 ui.add_space(9.0);
                                 ui.label(
                                     RichText::new(&trimmed[2..])
                                         .font(FontId::new(17.0, theme::semibold()))
-                                        .color(theme::INK),
+                                        .color(theme::ink()),
                                 );
                             } else if let Some(dot_pos) = trimmed.find(". ") {
                                 if trimmed[..dot_pos].chars().all(|c| c.is_ascii_digit())

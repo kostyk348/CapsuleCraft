@@ -212,7 +212,7 @@ pub fn draw_bubble_toolbar(
         .fixed_pos(bubble_pos)
         .show(ui.ctx(), |ui| {
             Frame::new()
-                .fill(theme::CONTROLS)
+                .fill(theme::controls())
                 .corner_radius(CornerRadius::same(6))
                 .stroke(Stroke::new(1.0, Color32::from_rgb(60, 66, 75)))
                 .shadow(theme::shadow())
@@ -228,7 +228,7 @@ pub fn draw_bubble_toolbar(
                             egui::Button::new(
                                 RichText::new("B")
                                     .font(egui::FontId::new(13.0, theme::semibold()))
-                                    .color(theme::INK),
+                                    .color(theme::ink()),
                             )
                             .min_size(vec2(26.0, 24.0))
                             .fill(Color32::TRANSPARENT),
@@ -243,7 +243,7 @@ pub fn draw_bubble_toolbar(
                                 RichText::new("I")
                                     .italics()
                                     .font(egui::FontId::new(13.0, egui::FontFamily::Proportional))
-                                    .color(theme::INK),
+                                    .color(theme::ink()),
                             )
                             .min_size(vec2(26.0, 24.0))
                             .fill(Color32::TRANSPARENT),
@@ -257,7 +257,7 @@ pub fn draw_bubble_toolbar(
                             egui::Button::new(
                                 RichText::new("[[ ]]")
                                     .font(egui::FontId::new(11.0, theme::mono()))
-                                    .color(theme::ACCENT_INK),
+                                    .color(theme::accent_ink()),
                             )
                             .min_size(vec2(32.0, 24.0))
                             .fill(Color32::TRANSPARENT),
@@ -289,7 +289,7 @@ pub fn draw_bubble_toolbar(
                                     "Type ▼"
                                 })
                                 .font(egui::FontId::new(11.5, theme::medium()))
-                                .color(theme::MUTED),
+                                .color(theme::muted()),
                             )
                             .min_size(vec2(52.0, 24.0))
                             .fill(Color32::TRANSPARENT),
@@ -358,7 +358,7 @@ fn menu_item(ui: &mut Ui, badge: &str, label: &str) -> bool {
         egui::Button::new(
             RichText::new(format!("{badge:<4} {label}"))
                 .font(egui::FontId::new(11.5, theme::medium()))
-                .color(theme::INK),
+                .color(theme::ink()),
         )
         .fill(Color32::TRANSPARENT)
         .min_size(vec2(160.0, 20.0)),

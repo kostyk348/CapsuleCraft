@@ -5,7 +5,8 @@
 //! Progress is streamed back as [`OcrEvent`]s so the UI can show "starting →
 //! ready → done" instead of a single toast and minutes of silence (v1.12.4).
 
-use std::io::Read;
+use std::fs;
+use std::io::{Read, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -27,23 +28,54 @@ pub const DEFAULT_PORT: u16 = 8_471;
 /// absent, which is both version-proof and correct for the OCR checkpoint.
 /// `--no-ui` keeps the bundled web chat out of the local port.
 pub fn serve_args(port: u16, model_dir: &Path) -> Vec<String> {
-    vec![
+    serve_args_with(port, model_dir, isq_from_env())
+}
+
+/// Optional in-situ quantization, e.g. `CAPSULEOS_OCR_ISQ=8`. The CPU path
+/// loads the 1.75 GB bf16 weights raw; ISQ 4/8 cuts RAM and load time at a
+/// small quality cost. `None` keeps the stock full-precision behaviour.
+pub fn serve_args_with(port: u16, model_dir: &Path, isq: Option<u8>) -> Vec<String> {
+    let mut args = vec![
         "serve".to_string(),
         "--port".to_string(),
         port.to_string(),
         "--host".to_string(),
         "127.0.0.1".to_string(),
         "--no-ui".to_string(),
-        "multimodal".to_string(),
-        "-m".to_string(),
-        model_dir.display().to_string(),
-    ]
+    ];
+    if let Some(q) = isq {
+        args.push("--isq".to_string());
+        args.push(q.to_string());
+    }
+    args.push("multimodal".to_string());
+    args.push("-m".to_string());
+    args.push(model_dir.display().to_string());
+    args
+}
+
+fn isq_from_env() -> Option<u8> {
+    isq_from_env_checked(&std::env::var("CAPSULEOS_OCR_ISQ").unwrap_or_default())
+}
+
+fn isq_from_env_checked(raw: &str) -> Option<u8> {
+    raw.trim().parse::<u8>().ok().filter(|q| (2..=8).contains(q))
+}
+
+/// Stderr log lives beside the model dir (the components root) so it
+/// survives across runs and is easy to find next to the model itself.
+pub fn engine_log_path(model_dir: &Path) -> PathBuf {
+    model_dir
+        .parent()
+        .map(|p| p.join("mistralrs.log"))
+        .unwrap_or_else(|| std::env::temp_dir().join("capsuleos-mistralrs.log"))
 }
 
 /// A running local engine process.
 pub struct OcrEngine {
     child: Child,
     pub port: u16,
+    /// Where the engine's stderr is being written.
+    pub log_path: PathBuf,
     /// Model id advertised by `/v1/models`; the chat endpoint rejects an
     /// invented name ("model \"ocr\" not found"), which is how a perfectly
     /// healthy engine looked broken.
@@ -69,16 +101,21 @@ impl OcrEngine {
     pub fn spawn(engine_bin: &Path, model_dir: &Path, port: u16) -> Result<Self, String> {
         let args = serve_args(port, model_dir);
         let mut command = Command::new(engine_bin);
-        command
-            .args(&args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
+        command.args(&args).stdin(Stdio::null()).stdout(Stdio::null());
+        // The engine log lands next to the model dir (the components root).
+        // v2.1.0 discarded stderr entirely, so an engine that died during the
+        // cold load left only "exited before readiness" with no reason.
+        let log_path = engine_log_path(model_dir);
+        if let Ok(mut log) = fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+            let _ = writeln!(log, "==== spawn {} ====", chrono::Utc::now().to_rfc3339());
+            command.stderr(Stdio::from(log));
+        }
         let child = command.spawn().map_err(|e| format!("spawn engine: {e}"))?;
         let mut engine = Self {
             child,
             port,
             model: String::new(),
+            log_path,
         };
         // v2.1.0: 15 minutes. A cold start on a laptop loads 1.75 GB of
         // weights plus the vision tower; the old 5-minute ceiling expired
@@ -104,7 +141,8 @@ impl OcrEngine {
             match self.child.try_wait() {
                 Ok(Some(status)) => {
                     return Err(format!(
-                        "engine exited ({status}) before readiness: {last_error}"
+                        "engine exited ({status}) before readiness: {last_error} — stderr log: {}",
+                        self.log_path.display()
                     ));
                 }
                 Ok(None) => {}
@@ -337,6 +375,21 @@ pub fn sniff_image_mime(bytes: &[u8]) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn isq_flag_optional_and_ordered() {
+        let plain = serve_args_with(8_471, Path::new("/models/ocr"), None);
+        assert!(!plain.contains(&"--isq".to_string()));
+        let quantized = serve_args_with(8_471, Path::new("/models/ocr"), Some(8));
+        let isq = quantized.iter().position(|a| a == "--isq").unwrap();
+        let sub = quantized.iter().position(|a| a == "multimodal").unwrap();
+        assert_eq!(quantized[isq + 1], "8");
+        assert!(isq < sub, "serve options must precede the subcommand");
+        // Out-of-range values are ignored at the env layer.
+        assert_eq!(isq_from_env_checked("12"), None);
+        assert_eq!(isq_from_env_checked("0"), None);
+        assert_eq!(isq_from_env_checked("4"), Some(4));
+    }
 
     #[test]
     fn serve_args_shape() {

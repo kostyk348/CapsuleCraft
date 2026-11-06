@@ -51,7 +51,7 @@ pub fn draw_image_block(
         .find(|attachment| attachment.cid == cid && is_image(attachment));
 
     Frame::new()
-        .fill(theme::SUNKEN)
+        .fill(theme::sunken())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin {
@@ -67,16 +67,16 @@ pub fn draw_image_block(
                     ui.painter(),
                     Rect::from_min_size(ui.cursor().min + vec2(0.0, 2.0), vec2(14.0, 14.0)),
                     Icon::Image,
-                    theme::ACCENT_INK,
+                    theme::accent_ink(),
                 );
                 ui.add_space(20.0);
                 let name = file
                     .map(|attachment| attachment.name.clone())
                     .unwrap_or_else(|| t(locale, Key::ImageNoFile).to_string());
-                ui.label(RichText::new(name).size(12.0).color(theme::INK));
+                ui.label(RichText::new(name).size(12.0).color(theme::ink()));
                 if let Some(attachment) = file {
                     ui.add_space(6.0);
-                    let _ = hud(ui, &crate::human_bytes(attachment.size_bytes), theme::FAINT);
+                    let _ = hud(ui, &crate::human_bytes(attachment.size_bytes), theme::faint());
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if text_button(ui, Some(Icon::Plus), t(locale, Key::ImageChoose), false)
@@ -182,13 +182,13 @@ pub fn draw_image_block(
                         }
                     }
                     None => {
-                        let _ = hud(ui, t(locale, Key::ImageDecodeFailed), theme::BAD);
+                        let _ = hud(ui, t(locale, Key::ImageDecodeFailed), theme::bad());
                     }
                 }
                 ui.add_space(8.0);
                 // Width presets + replace.
                 ui.horizontal(|ui| {
-                    let _ = hud(ui, t(locale, Key::ImageWidth), theme::FAINT);
+                    let _ = hud(ui, t(locale, Key::ImageWidth), theme::faint());
                     for width in WIDTHS {
                         if text_button(ui, None, &format!("{width}%"), width == percent).clicked() {
                             block["data"]["width"] = json!(width);
@@ -229,7 +229,7 @@ pub fn draw_image_block(
                         .max_rect(rect.shrink(10.0))
                         .layout(Layout::left_to_right(Align::Center)),
                 );
-                let _ = hud(&mut child, t(locale, Key::ImageNoFile), theme::FAINT);
+                let _ = hud(&mut child, t(locale, Key::ImageNoFile), theme::faint());
                 child.add_space(8.0);
                 if text_button(
                     &mut child,
@@ -265,7 +265,7 @@ pub fn draw_image_block(
             let response = ui.add(
                 TextEdit::singleline(&mut caption)
                     .font(egui::FontId::new(12.0, egui::FontFamily::Proportional))
-                    .text_color(theme::MUTED)
+                    .text_color(theme::muted())
                     .frame(Frame::NONE)
                     .margin(Margin::same(0))
                     .desired_width(f32::INFINITY)

@@ -22,7 +22,7 @@ pub fn draw_todo_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
     let title_response = ui.add(
         TextEdit::singleline(&mut title)
             .font(FontId::new(15.0, theme::semibold()))
-            .text_color(theme::INK)
+            .text_color(theme::ink())
             .frame(Frame::NONE)
             .margin(Margin::same(0))
             .desired_width(f32::INFINITY)
@@ -47,7 +47,7 @@ pub fn draw_todo_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
         ui.label(
             RichText::new(t(locale, Key::NoTasks))
                 .size(11.5)
-                .color(theme::FAINT),
+                .color(theme::faint()),
         );
     }
 
@@ -88,7 +88,7 @@ pub fn draw_todo_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
                     .frame(Frame::NONE)
                     .margin(Margin::same(0))
                     .font(FontId::new(13.5, FontFamily::Proportional))
-                    .text_color(if done { theme::MUTED } else { theme::INK }),
+                    .text_color(if done { theme::muted() } else { theme::ink() }),
             );
             if text_response.changed() {
                 item["text"] = json!(text);
@@ -100,7 +100,7 @@ pub fn draw_todo_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
                     RichText::new(due)
                         .family(theme::mono())
                         .size(9.0)
-                        .color(theme::FAINT),
+                        .color(theme::faint()),
                 );
             }
 

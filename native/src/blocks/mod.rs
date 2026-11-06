@@ -318,9 +318,9 @@ pub fn draw_block_row(
         Rect::from_center_size(handle_rect.center(), vec2(13.0, 13.0)),
         Icon::Grip,
         if hovered || handle.hovered() {
-            theme::MUTED
+            theme::muted()
         } else {
-            theme::fade(theme::FAINT, 0.45)
+            theme::fade(theme::faint(), 0.45)
         },
     );
 
@@ -515,7 +515,7 @@ pub fn draw_block_content(
             };
             let output = TextEdit::multiline(&mut text)
                 .font(FontId::new(size, theme::display()))
-                .text_color(theme::INK)
+                .text_color(theme::ink())
                 .frame(Frame::NONE)
                 .margin(Margin::same(0))
                 .desired_width(f32::INFINITY)
@@ -731,7 +731,7 @@ pub fn draw_block_content(
             };
             let output = TextEdit::multiline(&mut text)
                 .font(FontId::new(15.5, FontFamily::Proportional))
-                .text_color(theme::INK)
+                .text_color(theme::ink())
                 .frame(Frame::NONE)
                 .margin(Margin::same(0))
                 .desired_width(f32::INFINITY)
@@ -989,7 +989,7 @@ pub fn draw_block_content(
         "ai_opponent_block" => draw_opponent_block(ui, block, locale),
         _ => {
             let inner = Frame::new()
-                .fill(theme::SUNKEN)
+                .fill(theme::sunken())
                 .corner_radius(theme::RADIUS)
                 .stroke(theme::hairline())
                 .inner_margin(Margin {
@@ -1006,14 +1006,14 @@ pub fn draw_block_content(
                             t(locale, Key::BlockPreserved),
                             kind.replace('_', " ")
                         ),
-                        theme::FAINT,
+                        theme::faint(),
                     );
                     ui.add_space(6.0);
                     ui.add(
                         Label::new(
                             RichText::new(t(locale, Key::BlockPreservedHint))
                                 .size(11.5)
-                                .color(theme::MUTED),
+                                .color(theme::muted()),
                         )
                         .wrap(),
                     );

@@ -99,13 +99,13 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
         .unwrap_or_default();
 
     Frame::new()
-        .fill(theme::SUNKEN)
+        .fill(theme::sunken())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin::same(10))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                let _ = hud(ui, t(locale, Key::BlockCanvas), theme::FAINT);
+                let _ = hud(ui, t(locale, Key::BlockCanvas), theme::faint());
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if text_button(ui, None, t(locale, Key::CanvasReset), false).clicked() {
                         push_undo(ui, &block_id, &elements);
@@ -144,7 +144,7 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
             let (canvas_rect, canvas_resp) =
                 ui.allocate_exact_size(vec2(ui.available_width(), 300.0), Sense::click_and_drag());
             let painter = ui.painter_at(canvas_rect);
-            painter.rect_filled(canvas_rect, theme::RADIUS, theme::BG);
+            painter.rect_filled(canvas_rect, theme::RADIUS, theme::bg());
             painter.rect_stroke(
                 canvas_rect,
                 theme::RADIUS,
@@ -203,12 +203,12 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                 painter.rect_filled(
                     screen.intersect(canvas_rect),
                     0.0,
-                    theme::fade(theme::ACCENT, 0.08),
+                    theme::fade(theme::accent(), 0.08),
                 );
                 painter.rect_stroke(
                     screen.intersect(canvas_rect),
                     0.0,
-                    Stroke::new(1.0, theme::fade(theme::ACCENT_INK, 0.7)),
+                    Stroke::new(1.0, theme::fade(theme::accent_ink(), 0.7)),
                     egui::StrokeKind::Inside,
                 );
             }
@@ -258,11 +258,11 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
 
                 let is_selected = selection.contains(&id);
                 let (fill, stroke) = match kind.as_str() {
-                    "rectangle" => (theme::WASH, theme::LINE_STRONG),
-                    "text" => (Color32::TRANSPARENT, theme::fade(theme::LINE, 0.0)),
+                    "rectangle" => (theme::wash(), theme::line_strong()),
+                    "text" => (Color32::TRANSPARENT, theme::fade(theme::line(), 0.0)),
                     _ => (
                         Color32::from_rgb(45, 129, 255),
-                        theme::fade(theme::ACCENT_INK, 0.4),
+                        theme::fade(theme::accent_ink(), 0.4),
                     ),
                 };
                 if kind != "text" {
@@ -277,7 +277,7 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                         Stroke::new(
                             if is_selected { 1.6 } else { 1.0 },
                             if is_selected {
-                                theme::ACCENT_INK
+                                theme::accent_ink()
                             } else {
                                 stroke
                             },
@@ -288,7 +288,7 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                     painter.rect_stroke(
                         rect,
                         theme::RADIUS,
-                        Stroke::new(1.0, theme::ACCENT_INK),
+                        Stroke::new(1.0, theme::accent_ink()),
                         egui::StrokeKind::Inside,
                     );
                 }
@@ -303,9 +303,9 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                     text,
                     FontId::new(11.5, FontFamily::Proportional),
                     if kind == "sticky" {
-                        theme::ACCENT_INK
+                        theme::accent_ink()
                     } else {
-                        theme::INK
+                        theme::ink()
                     },
                 );
             }
@@ -327,7 +327,7 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                     egui::Align2::CENTER_CENTER,
                     t(locale, Key::CanvasEmpty),
                     FontId::new(11.5, FontFamily::Proportional),
-                    theme::FAINT,
+                    theme::faint(),
                 );
             }
 
@@ -343,11 +343,11 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                         next_selection.clear();
                         changed = true;
                     }
-                    let _ = hud(ui, t(locale, Key::CanvasHint), theme::FAINT);
+                    let _ = hud(ui, t(locale, Key::CanvasHint), theme::faint());
                 });
             } else {
                 ui.add_space(4.0);
-                let _ = hud(ui, t(locale, Key::CanvasHint), theme::FAINT);
+                let _ = hud(ui, t(locale, Key::CanvasHint), theme::faint());
             }
 
             ui.data_mut(|data| {

@@ -10,7 +10,7 @@ use crate::theme;
 pub fn draw_opponent_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
     let mut changed = false;
     Frame::new()
-        .fill(theme::WASH)
+        .fill(theme::wash())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin {
@@ -21,7 +21,7 @@ pub fn draw_opponent_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bo
         })
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                let _ = hud(ui, t(locale, Key::CounterArg), theme::BADGE_BETA);
+                let _ = hud(ui, t(locale, Key::CounterArg), theme::badge_beta());
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let confidence = block
                         .get("data")
@@ -35,7 +35,7 @@ pub fn draw_opponent_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bo
                             t(locale, Key::Confidence),
                             (confidence * 100.0).round() as i64
                         ),
-                        theme::FAINT,
+                        theme::faint(),
                     );
                 });
             });
@@ -54,7 +54,7 @@ pub fn draw_opponent_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bo
             let response = ui.add(
                 TextEdit::multiline(&mut criticism)
                     .font(FontId::new(13.5, FontFamily::Proportional))
-                    .text_color(theme::INK)
+                    .text_color(theme::ink())
                     .frame(Frame::NONE)
                     .margin(Margin::same(0))
                     .desired_width(f32::INFINITY)
@@ -77,7 +77,7 @@ pub fn draw_opponent_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bo
             let response = ui.add(
                 TextEdit::singleline(&mut claim)
                     .font(FontId::new(11.5, FontFamily::Proportional))
-                    .text_color(theme::MUTED)
+                    .text_color(theme::muted())
                     .frame(Frame::NONE)
                     .margin(Margin::same(0))
                     .desired_width(f32::INFINITY)
@@ -106,7 +106,7 @@ pub fn draw_opponent_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bo
                 changed = true;
             }
             ui.add_space(4.0);
-            let _ = hud(ui, t(locale, Key::HeuristicNotice), theme::FAINT);
+            let _ = hud(ui, t(locale, Key::HeuristicNotice), theme::faint());
         });
     changed
 }

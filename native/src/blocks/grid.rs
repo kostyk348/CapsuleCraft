@@ -88,7 +88,7 @@ pub fn draw_grid_block(
 
     let mut changed = false;
     Frame::new()
-        .fill(theme::SUNKEN)
+        .fill(theme::sunken())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin {
@@ -102,7 +102,7 @@ pub fn draw_grid_block(
                 let name = found
                     .map(|index| attachments[index].name.clone())
                     .unwrap_or_else(|| t(locale, Key::BlockGrid).to_string());
-                let _ = hud(ui, &name, theme::FAINT);
+                let _ = hud(ui, &name, theme::faint());
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if found.is_some() {
                         if text_button(ui, None, t(locale, Key::AddRow), false).clicked() {
@@ -117,7 +117,7 @@ pub fn draw_grid_block(
             ui.add_space(8.0);
 
             let Some(index) = found else {
-                let _ = hud(ui, t(locale, Key::DataGridMissing), theme::MUTED);
+                let _ = hud(ui, t(locale, Key::DataGridMissing), theme::muted());
                 return;
             };
 
@@ -195,14 +195,14 @@ pub fn draw_grid_block(
                                     let failed = computed.is_none();
                                     let font = FontId::new(11.5, theme::mono());
                                     let color = if failed {
-                                        theme::BAD
+                                        theme::bad()
                                     } else {
-                                        theme::ACCENT_INK
+                                        theme::accent_ink()
                                     };
                                     let response = ui.add_sized(
                                         vec2(cell_width, 22.0),
                                         Button::new(RichText::new(text).font(font).color(color))
-                                            .fill(theme::WASH)
+                                            .fill(theme::wash())
                                             .corner_radius(theme::RADIUS),
                                     );
                                     let response = if failed {
@@ -232,9 +232,9 @@ pub fn draw_grid_block(
                                     TextEdit::singleline(&mut cell)
                                         .font(font)
                                         .text_color(if row_index == 0 {
-                                            theme::MUTED
+                                            theme::muted()
                                         } else {
-                                            theme::INK
+                                            theme::ink()
                                         })
                                         .frame(Frame::NONE)
                                         .margin(Margin::symmetric(4, 2))
@@ -262,14 +262,14 @@ pub fn draw_grid_block(
                         ui.painter().hline(
                             egui::Rangef::new(line_x, line_x + cell_width * columns as f32),
                             line_y,
-                            Stroke::new(1.0, theme::fade(theme::LINE, 0.55)),
+                            Stroke::new(1.0, theme::fade(theme::line(), 0.55)),
                         );
                         ui.add_space(2.0);
                     }
                 });
 
             ui.add_space(8.0);
-            let _ = hud(ui, t(locale, Key::FormulaHint), theme::FAINT);
+            let _ = hud(ui, t(locale, Key::FormulaHint), theme::faint());
 
             if table_changed || add_row || add_col {
                 attachments[index].content = to_csv(&table);

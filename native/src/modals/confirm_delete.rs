@@ -12,7 +12,14 @@ pub enum ConfirmDeleteAction {
     Cancel,
 }
 
-pub fn draw_confirm_delete(show: bool, locale: Locale, ctx: &egui::Context) -> ConfirmDeleteAction {
+/// `title`/`body` select between the page and the block confirmation.
+pub fn draw_confirm_delete(
+    show: bool,
+    title: String,
+    body_text: String,
+    locale: Locale,
+    ctx: &egui::Context,
+) -> ConfirmDeleteAction {
     if !show {
         return ConfirmDeleteAction::None;
     }
@@ -30,8 +37,8 @@ pub fn draw_confirm_delete(show: bool, locale: Locale, ctx: &egui::Context) -> C
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
-                theme::PANEL,
-                Stroke::new(1.0, theme::LINE_STRONG),
+                theme::panel(),
+                Stroke::new(1.0, theme::line_strong()),
                 egui::StrokeKind::Inside,
             );
             let mut body = ui.new_child(
@@ -39,18 +46,19 @@ pub fn draw_confirm_delete(show: bool, locale: Locale, ctx: &egui::Context) -> C
                     .max_rect(panel.shrink(20.0))
                     .layout(Layout::top_down(Align::Min)),
             );
+            let _ = locale;
             body.label(
-                RichText::new(t(locale, Key::DeletePage))
+                RichText::new(title)
                     .family(theme::medium())
                     .size(14.0)
-                    .color(theme::INK),
+                    .color(theme::ink()),
             );
             body.add_space(6.0);
             body.add(
                 Label::new(
-                    RichText::new(t(locale, Key::DeletePageConfirm))
+                    RichText::new(body_text)
                         .size(12.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 )
                 .wrap(),
             );
