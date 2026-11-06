@@ -71,7 +71,7 @@ fn run_code(block: &mut Value, code: &str) {
 pub fn draw_code_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
     let mut changed = false;
     Frame::new()
-        .fill(theme::SUNKEN)
+        .fill(theme::sunken())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin {
@@ -143,7 +143,7 @@ pub fn draw_code_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
                                 }
                                 _ => t(locale, Key::CodeUnsupported).to_string(),
                             };
-                            let _ = hud(ui, &note, theme::FAINT);
+                            let _ = hud(ui, &note, theme::faint());
                         }
                     }
                 });
@@ -154,7 +154,7 @@ pub fn draw_code_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
             let response = ui.add(
                 TextEdit::multiline(&mut code)
                     .font(FontId::new(12.5, theme::mono()))
-                    .text_color(theme::INK)
+                    .text_color(theme::ink())
                     .frame(Frame::NONE)
                     .margin(Margin::same(0))
                     .desired_width(f32::INFINITY)
@@ -188,7 +188,7 @@ pub fn draw_code_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
                     } else {
                         t(locale, Key::CodeOutput)
                     },
-                    if is_error { theme::BAD } else { theme::FAINT },
+                    if is_error { theme::bad() } else { theme::faint() },
                 );
                 ui.add_space(3.0);
                 ui.add(
@@ -196,7 +196,7 @@ pub fn draw_code_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
                         RichText::new(output)
                             .family(theme::mono())
                             .size(11.5)
-                            .color(if is_error { theme::BAD } else { theme::MUTED }),
+                            .color(if is_error { theme::bad() } else { theme::muted() }),
                     )
                     .wrap(),
                 );

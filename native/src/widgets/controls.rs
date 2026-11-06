@@ -62,13 +62,13 @@ pub fn crumb_button(ui: &mut Ui, text: &str) -> Response {
     let galley = ui.painter().layout_no_wrap(
         text.to_string(),
         FontId::new(12.0, FontFamily::Proportional),
-        theme::MUTED,
+        theme::muted(),
     );
     let (rect, response) = ui.allocate_exact_size(galley.size() + vec2(4.0, 2.0), Sense::click());
     let ink = if response.hovered() {
-        theme::INK
+        theme::ink()
     } else {
-        theme::MUTED
+        theme::muted()
     };
     ui.painter().galley_with_override_text_color(
         pos2(rect.left() + 2.0, rect.top() + 1.0),
@@ -81,7 +81,7 @@ pub fn crumb_button(ui: &mut Ui, text: &str) -> Response {
 pub fn dot_sep(ui: &mut Ui) {
     let (rect, _) = ui.allocate_exact_size(vec2(4.0, 10.0), Sense::hover());
     ui.painter()
-        .circle_filled(rect.center(), 1.2, theme::fade(theme::FAINT, 0.8));
+        .circle_filled(rect.center(), 1.2, theme::fade(theme::faint(), 0.8));
 }
 
 pub fn tag_chip(ui: &mut Ui, text: &str, color: Color32) -> Response {
@@ -113,14 +113,14 @@ pub fn icon_button(ui: &mut Ui, icon: Icon, tip: &str, enabled: bool, active: bo
     );
     let hovered = response.hovered() && enabled;
     if hovered || active {
-        ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+        ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
     }
     let ink = if !enabled {
-        theme::fade(theme::DIM, 0.4)
+        theme::fade(theme::dim(), 0.4)
     } else if hovered || active {
-        theme::INK
+        theme::ink()
     } else {
-        theme::DIM
+        theme::dim()
     };
     icons::paint(
         ui.painter(),
@@ -148,7 +148,7 @@ pub fn ghost(
         ui.painter().layout_no_wrap(
             label.to_string(),
             FontId::new(12.0, theme::medium()),
-            theme::INK,
+            theme::ink(),
         )
     });
     let width = match &galley {
@@ -165,12 +165,12 @@ pub fn ghost(
     );
     let hovered = response.hovered() && enabled;
     if hovered {
-        ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+        ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
     }
     let ink = match (enabled, hovered) {
-        (false, _) => theme::fade(theme::DIM, 0.4),
-        (true, true) => theme::INK,
-        (true, false) => theme::DIM,
+        (false, _) => theme::fade(theme::dim(), 0.4),
+        (true, true) => theme::ink(),
+        (true, false) => theme::dim(),
     };
     match galley {
         Some(galley) => {
@@ -209,15 +209,15 @@ pub fn text_button(ui: &mut Ui, icon: Option<Icon>, label: &str, active: bool) -
     let galley = ui.painter().layout_no_wrap(
         label.to_string(),
         FontId::new(11.5, theme::medium()),
-        theme::MUTED,
+        theme::muted(),
     );
     let width = 8.0 + if icon.is_some() { 14.0 + 6.0 } else { 0.0 } + galley.size().x + 8.0;
     let (rect, response) = ui.allocate_exact_size(vec2(width, 24.0), Sense::click());
     let hovered = response.hovered();
     if hovered || active {
-        ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+        ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
     }
-    let ink = if hovered { theme::INK } else { theme::MUTED };
+    let ink = if hovered { theme::ink() } else { theme::muted() };
     let mut x = rect.left() + 8.0;
     if let Some(icon) = icon {
         icons::paint(
@@ -237,7 +237,7 @@ pub fn text_button(ui: &mut Ui, icon: Option<Icon>, label: &str, active: bool) -
 }
 
 pub fn primary_button(ui: &mut Ui, label: &str, height: f32) -> Response {
-    let galley = caps(ui, label, 10.0, theme::mono_bold(), 1.2, theme::INVERT_FG);
+    let galley = caps(ui, label, 10.0, theme::mono_bold(), 1.2, theme::invert_fg());
     let width = galley.size().x + 36.0;
     let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click());
     let hovered = response.hovered();
@@ -245,32 +245,32 @@ pub fn primary_button(ui: &mut Ui, label: &str, height: f32) -> Response {
         rect,
         theme::RADIUS,
         if hovered {
-            theme::fade(theme::INVERT_BG, 0.9)
+            theme::fade(theme::invert_bg(), 0.9)
         } else {
-            theme::INVERT_BG
+            theme::invert_bg()
         },
     );
     ui.painter().galley(
         rect.center() - galley.size() / 2.0,
         galley,
-        theme::INVERT_FG,
+        theme::invert_fg(),
     );
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 pub fn secondary_button(ui: &mut Ui, icon: Option<Icon>, label: &str, height: f32) -> Response {
-    let galley = caps(ui, label, 10.0, theme::mono_bold(), 1.2, theme::INK);
+    let galley = caps(ui, label, 10.0, theme::mono_bold(), 1.2, theme::ink());
     let icon_w = if icon.is_some() { 13.0 + 8.0 } else { 0.0 };
     let width = galley.size().x + icon_w + 36.0;
     let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click());
     let hovered = response.hovered();
     let (fill, stroke, ink) = if hovered {
-        (theme::INVERT_BG, Stroke::NONE, theme::INVERT_FG)
+        (theme::invert_bg(), Stroke::NONE, theme::invert_fg())
     } else {
         (
             Color32::TRANSPARENT,
-            Stroke::new(1.0, theme::LINE_STRONG),
-            theme::INK,
+            Stroke::new(1.0, theme::line_strong()),
+            theme::ink(),
         )
     };
     ui.painter()
@@ -298,9 +298,9 @@ pub fn checkbox(ui: &mut Ui, done: &mut bool) -> Response {
     let (rect, response) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::click());
     let hovered = response.hovered();
     let fill = if *done {
-        theme::ACCENT
+        theme::accent()
     } else if hovered {
-        theme::WASH_HOVER
+        theme::wash_hover()
     } else {
         Color32::TRANSPARENT
     };
@@ -310,9 +310,9 @@ pub fn checkbox(ui: &mut Ui, done: &mut bool) -> Response {
         Stroke::new(
             1.0,
             if hovered {
-                theme::INK
+                theme::ink()
             } else {
-                theme::LINE_STRONG
+                theme::line_strong()
             },
         )
     };
@@ -334,9 +334,9 @@ pub fn checkbox(ui: &mut Ui, done: &mut bool) -> Response {
 
 pub fn status_pill(ui: &mut Ui, status: &str) -> Response {
     let (label, color) = match status {
-        "doing" => ("DOING", theme::ACCENT_INK),
-        "done" => ("DONE", theme::FAINT),
-        _ => ("TO DO", theme::MUTED),
+        "doing" => ("DOING", theme::accent_ink()),
+        "done" => ("DONE", theme::faint()),
+        _ => ("TO DO", theme::muted()),
     };
     let galley = caps(ui, label, 8.0, theme::mono_bold(), 0.9, color);
     let width = 8.0 + 5.0 + 5.0 + galley.size().x + 8.0;
@@ -346,9 +346,9 @@ pub fn status_pill(ui: &mut Ui, status: &str) -> Response {
         rect,
         theme::RADIUS,
         if hovered {
-            theme::WASH_HOVER
+            theme::wash_hover()
         } else {
-            theme::WASH
+            theme::wash()
         },
         Stroke::new(1.0, theme::fade(color, if hovered { 0.5 } else { 0.25 })),
         egui::StrokeKind::Inside,
@@ -367,7 +367,7 @@ pub fn status_pill(ui: &mut Ui, status: &str) -> Response {
 
 pub fn popover_frame() -> Frame {
     Frame::new()
-        .fill(theme::CONTROLS)
+        .fill(theme::controls())
         .stroke(theme::hairline())
         .corner_radius(theme::RADIUS)
         .shadow(theme::shadow())
@@ -381,13 +381,13 @@ pub fn menu_header(ui: &mut Ui, text: &str) {
         theme::HUD_SIZE,
         theme::mono_bold(),
         theme::LABEL_SPACING,
-        theme::fade(theme::INK, 0.5),
+        theme::fade(theme::ink(), 0.5),
     );
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::hover());
     ui.painter().galley(
         pos2(rect.left() + 7.0, rect.center().y - galley.size().y / 2.0),
         galley,
-        theme::INK,
+        theme::ink(),
     );
 }
 
@@ -417,14 +417,14 @@ pub fn menu_row(
     );
     if response.hovered() && enabled {
         ui.painter()
-            .rect_filled(rect, theme::RADIUS, theme::WASH_HOVER);
+            .rect_filled(rect, theme::RADIUS, theme::wash_hover());
     }
     let ink = if !enabled {
-        theme::FAINT
+        theme::faint()
     } else if danger {
-        theme::BAD
+        theme::bad()
     } else {
-        theme::INK
+        theme::ink()
     };
     let mut x = rect.left() + 8.0;
     if let Some(icon) = icon {
@@ -449,7 +449,7 @@ pub fn menu_row(
             Align2::RIGHT_CENTER,
             shortcut,
             FontId::new(9.0, theme::mono()),
-            theme::FAINT,
+            theme::faint(),
         );
     }
     if selected {
@@ -457,7 +457,7 @@ pub fn menu_row(
             ui.painter(),
             Rect::from_center_size(pos2(rect.right() - 14.0, rect.center().y), vec2(12.0, 12.0)),
             Icon::Check,
-            theme::INK,
+            theme::ink(),
         );
     }
     if enabled {
@@ -507,7 +507,7 @@ pub fn info_popover(ui: &mut Ui, capsule: &Capsule) {
                 ))
                 .family(theme::mono())
                 .size(9.5)
-                .color(theme::MUTED),
+                .color(theme::muted()),
             );
         }
     }
@@ -516,15 +516,15 @@ pub fn info_popover(ui: &mut Ui, capsule: &Capsule) {
 
 pub fn info_row(ui: &mut Ui, label: &str, value: &str, mono: bool) {
     ui.add_space(8.0);
-    let _ = hud(ui, label, theme::FAINT);
+    let _ = hud(ui, label, theme::faint());
     ui.add_space(3.0);
     let rich = if mono {
         RichText::new(value)
             .family(theme::mono())
             .size(10.5)
-            .color(theme::INK)
+            .color(theme::ink())
     } else {
-        RichText::new(value).size(11.5).color(theme::INK)
+        RichText::new(value).size(11.5).color(theme::ink())
     };
     ui.add(Label::new(rich).wrap().selectable(true));
 }

@@ -26,14 +26,14 @@ pub fn truncate_chars(text: &str, max_chars: usize) -> String {
 pub fn truncate_to_width(ui: &Ui, text: &str, font: FontId, max_width: f32) -> String {
     let galley = ui
         .painter()
-        .layout_no_wrap(text.to_string(), font.clone(), theme::INK);
+        .layout_no_wrap(text.to_string(), font.clone(), theme::ink());
     if galley.size().x <= max_width {
         return text.to_string();
     }
     let ellipsis = "…";
     let ellipsis_w = ui
         .painter()
-        .layout_no_wrap(ellipsis.to_string(), font.clone(), theme::INK)
+        .layout_no_wrap(ellipsis.to_string(), font.clone(), theme::ink())
         .size()
         .x;
     let target_w = (max_width - ellipsis_w).max(0.0);
@@ -42,7 +42,7 @@ pub fn truncate_to_width(ui: &Ui, text: &str, font: FontId, max_width: f32) -> S
     for ch in text.chars() {
         let mut test = result.clone();
         test.push(ch);
-        let test_g = ui.painter().layout_no_wrap(test, font.clone(), theme::INK);
+        let test_g = ui.painter().layout_no_wrap(test, font.clone(), theme::ink());
         if test_g.size().x > target_w {
             break;
         }

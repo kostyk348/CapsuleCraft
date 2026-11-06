@@ -22,7 +22,7 @@ pub fn draw_toast(toast: &mut Option<(String, Instant)>, ctx: &egui::Context) {
     };
     let screen = ctx.content_rect();
     let galley = ctx.fonts_mut(|fonts| {
-        fonts.layout_no_wrap(text, egui::FontId::new(12.0, theme::medium()), theme::INK)
+        fonts.layout_no_wrap(text, egui::FontId::new(12.0, theme::medium()), theme::ink())
     });
     let size = galley.size() + vec2(28.0, 18.0);
     let rect = Rect::from_min_size(
@@ -39,14 +39,14 @@ pub fn draw_toast(toast: &mut Option<(String, Instant)>, ctx: &egui::Context) {
     painter.rect(
         rect,
         theme::RADIUS,
-        theme::fade(theme::PANEL, alpha),
-        Stroke::new(1.0, theme::fade(theme::LINE_STRONG, alpha)),
+        theme::fade(theme::panel(), alpha),
+        Stroke::new(1.0, theme::fade(theme::line_strong(), alpha)),
         egui::StrokeKind::Inside,
     );
     painter.galley(
         rect.min + vec2(14.0, 9.0),
         galley,
-        theme::fade(theme::INK, alpha),
+        theme::fade(theme::ink(), alpha),
     );
     ctx.request_repaint();
 }

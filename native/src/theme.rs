@@ -24,49 +24,256 @@ const fn alpha(rgb: u32, a: u8) -> Color32 {
 }
 
 /// The page behind everything.
-pub const BG: Color32 = hex(0x121316);
+/// Colour mode of the whole interface.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode {
+    Dark,
+    Light,
+}
+
+static MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+pub fn mode() -> Mode {
+    if MODE.load(std::sync::atomic::Ordering::Relaxed) == 1 {
+        Mode::Light
+    } else {
+        Mode::Dark
+    }
+}
+
+pub fn set_mode(m: Mode) {
+    MODE.store(
+        if m == Mode::Light { 1 } else { 0 },
+        std::sync::atomic::Ordering::Relaxed,
+    );
+}
+
+/// Flips the mode and returns the new one.
+pub fn toggle() -> Mode {
+    let next = match mode() {
+        Mode::Dark => Mode::Light,
+        Mode::Light => Mode::Dark,
+    };
+    set_mode(next);
+    next
+}
+
+fn pick(dark: Color32, light: Color32) -> Color32 {
+    match mode() {
+        Mode::Dark => dark,
+        Mode::Light => light,
+    }
+}
+
+/// Remembers the mode beside the locale setting; a plain file so the
+/// existing `native-settings.json` locale format stays untouched.
+pub fn persist() {
+    let Some(dir) = crate::i18n::settings_dir() else {
+        return;
+    };
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::write(
+        dir.join("native-theme.txt"),
+        match mode() {
+            Mode::Dark => "dark\n",
+            Mode::Light => "light\n",
+        },
+    );
+}
+
+/// Restores the persisted mode (called once at startup).
+pub fn load() {
+    let Some(dir) = crate::i18n::settings_dir() else {
+        return;
+    };
+    if let Ok(text) = std::fs::read_to_string(dir.join("native-theme.txt")) {
+        if text.trim() == "light" {
+            set_mode(Mode::Light);
+        }
+    }
+}
+
+const DARK_BG: Color32 = hex(0x121316);
+const LIGHT_BG: Color32 = hex(0xf7f6f3);
+/// bg() in the active colour mode.
+pub fn bg() -> Color32 {
+    pick(DARK_BG, LIGHT_BG)
+}
+
 /// Menus, modals and the lightbox.
-pub const PANEL: Color32 = hex(0x101014);
+const DARK_PANEL: Color32 = hex(0x101014);
+const LIGHT_PANEL: Color32 = hex(0xffffff);
+/// panel() in the active colour mode.
+pub fn panel() -> Color32 {
+    pick(DARK_PANEL, LIGHT_PANEL)
+}
+
 /// Toolbar buttons, menus and popovers.
-pub const CONTROLS: Color32 = hex(0x1e1f22);
+const DARK_CONTROLS: Color32 = hex(0x1e1f22);
+const LIGHT_CONTROLS: Color32 = hex(0xefece7);
+/// controls() in the active colour mode.
+pub fn controls() -> Color32 {
+    pick(DARK_CONTROLS, LIGHT_CONTROLS)
+}
+
 /// The title bar and the sidebar.
-pub const CHROME: Color32 = hex(0x0a0a0c);
-/// Wells and sunken inputs.
-pub const SUNKEN: Color32 = hex(0x060607);
+const DARK_CHROME: Color32 = hex(0x0a0a0c);
+const LIGHT_CHROME: Color32 = hex(0xeae7e1);
+/// chrome() in the active colour mode.
+pub fn chrome() -> Color32 {
+    pick(DARK_CHROME, LIGHT_CHROME)
+}
+
+/// Wells and sunken() inputs.
+const DARK_SUNKEN: Color32 = hex(0x060607);
+const LIGHT_SUNKEN: Color32 = hex(0xe3e0da);
+/// sunken() in the active colour mode.
+pub fn sunken() -> Color32 {
+    pick(DARK_SUNKEN, LIGHT_SUNKEN)
+}
+
 
 /// Body text.
-pub const INK: Color32 = hex(0xf2f1ee);
-pub const INK_STRONG: Color32 = Color32::WHITE;
+const DARK_INK: Color32 = hex(0xf2f1ee);
+const LIGHT_INK: Color32 = hex(0x1c1c1e);
+/// ink() in the active colour mode.
+pub fn ink() -> Color32 {
+    pick(DARK_INK, LIGHT_INK)
+}
+
+const DARK_INK_STRONG: Color32 = Color32::WHITE;
+const LIGHT_INK_STRONG: Color32 = hex(0x000000);
+/// ink_strong() in the active colour mode.
+pub fn ink_strong() -> Color32 {
+    pick(DARK_INK_STRONG, LIGHT_INK_STRONG)
+}
+
 /// Secondary text and placeholders.
-pub const MUTED: Color32 = alpha(0xf2f1ee, 153);
+const DARK_MUTED: Color32 = alpha(0xf2f1ee, 153);
+const LIGHT_MUTED: Color32 = alpha(0x1c1c1e, 153);
+/// muted() in the active colour mode.
+pub fn muted() -> Color32 {
+    pick(DARK_MUTED, LIGHT_MUTED)
+}
+
 /// Idle toolbar icons.
-pub const DIM: Color32 = alpha(0xf2f1ee, 128);
+const DARK_DIM: Color32 = alpha(0xf2f1ee, 128);
+const LIGHT_DIM: Color32 = alpha(0x1c1c1e, 128);
+/// dim() in the active colour mode.
+pub fn dim() -> Color32 {
+    pick(DARK_DIM, LIGHT_DIM)
+}
+
 /// Counters and captions.
-pub const FAINT: Color32 = alpha(0xf2f1ee, 102);
+const DARK_FAINT: Color32 = alpha(0xf2f1ee, 102);
+const LIGHT_FAINT: Color32 = alpha(0x1c1c1e, 102);
+/// faint() in the active colour mode.
+pub fn faint() -> Color32 {
+    pick(DARK_FAINT, LIGHT_FAINT)
+}
+
 /// Sidebar links.
-pub const SIDEBAR_INK: Color32 = alpha(0xffffff, 184);
+const DARK_SIDEBAR_INK: Color32 = alpha(0xffffff, 184);
+const LIGHT_SIDEBAR_INK: Color32 = alpha(0x141414, 196);
+/// sidebar_ink() in the active colour mode.
+pub fn sidebar_ink() -> Color32 {
+    pick(DARK_SIDEBAR_INK, LIGHT_SIDEBAR_INK)
+}
+
 
 /// Every hairline.
-pub const LINE: Color32 = alpha(0xffffff, 38);
-pub const LINE_STRONG: Color32 = alpha(0xf2f1ee, 102);
+const DARK_LINE: Color32 = alpha(0xffffff, 38);
+const LIGHT_LINE: Color32 = alpha(0x000000, 38);
+/// line() in the active colour mode.
+pub fn line() -> Color32 {
+    pick(DARK_LINE, LIGHT_LINE)
+}
+
+const DARK_LINE_STRONG: Color32 = alpha(0xf2f1ee, 102);
+const LIGHT_LINE_STRONG: Color32 = alpha(0x1c1c1e, 102);
+/// line_strong() in the active colour mode.
+pub fn line_strong() -> Color32 {
+    pick(DARK_LINE_STRONG, LIGHT_LINE_STRONG)
+}
+
 /// Quiet fills.
-pub const WASH: Color32 = alpha(0xffffff, 13);
+const DARK_WASH: Color32 = alpha(0xffffff, 13);
+const LIGHT_WASH: Color32 = alpha(0x000000, 8);
+/// wash() in the active colour mode.
+pub fn wash() -> Color32 {
+    pick(DARK_WASH, LIGHT_WASH)
+}
+
 /// The selected sidebar row.
-pub const WASH_SELECTED: Color32 = alpha(0xffffff, 20);
+const DARK_WASH_SELECTED: Color32 = alpha(0xffffff, 20);
+const LIGHT_WASH_SELECTED: Color32 = alpha(0x000000, 12);
+/// wash_selected() in the active colour mode.
+pub fn wash_selected() -> Color32 {
+    pick(DARK_WASH_SELECTED, LIGHT_WASH_SELECTED)
+}
+
 /// Hovered menu rows.
-pub const WASH_HOVER: Color32 = alpha(0xffffff, 26);
+const DARK_WASH_HOVER: Color32 = alpha(0xffffff, 26);
+const LIGHT_WASH_HOVER: Color32 = alpha(0x000000, 16);
+/// wash_hover() in the active colour mode.
+pub fn wash_hover() -> Color32 {
+    pick(DARK_WASH_HOVER, LIGHT_WASH_HOVER)
+}
+
 
 /// Brand blue.
-pub const ACCENT: Color32 = hex(0x2d81ff);
-pub const ACCENT_INK: Color32 = hex(0x74aaff);
+const DARK_ACCENT: Color32 = hex(0x2d81ff);
+const LIGHT_ACCENT: Color32 = hex(0x2d81ff);
+/// accent() in the active colour mode.
+pub fn accent() -> Color32 {
+    pick(DARK_ACCENT, LIGHT_ACCENT)
+}
 
-pub const INVERT_BG: Color32 = Color32::WHITE;
-pub const INVERT_FG: Color32 = hex(0x0b0b0c);
+const DARK_ACCENT_INK: Color32 = hex(0x74aaff);
+const LIGHT_ACCENT_INK: Color32 = hex(0x1c62d6);
+/// accent_ink() in the active colour mode.
+pub fn accent_ink() -> Color32 {
+    pick(DARK_ACCENT_INK, LIGHT_ACCENT_INK)
+}
 
-pub const BAD: Color32 = hex(0xf87171);
-pub const BADGE_BETA: Color32 = hex(0xffc14d);
+
+const DARK_INVERT_BG: Color32 = Color32::WHITE;
+const LIGHT_INVERT_BG: Color32 = hex(0x0b0b0c);
+/// invert_bg() in the active colour mode.
+pub fn invert_bg() -> Color32 {
+    pick(DARK_INVERT_BG, LIGHT_INVERT_BG)
+}
+
+const DARK_INVERT_FG: Color32 = hex(0x0b0b0c);
+const LIGHT_INVERT_FG: Color32 = hex(0xffffff);
+/// invert_fg() in the active colour mode.
+pub fn invert_fg() -> Color32 {
+    pick(DARK_INVERT_FG, LIGHT_INVERT_FG)
+}
+
+
+const DARK_BAD: Color32 = hex(0xf87171);
+const LIGHT_BAD: Color32 = hex(0xd9534f);
+/// bad() in the active colour mode.
+pub fn bad() -> Color32 {
+    pick(DARK_BAD, LIGHT_BAD)
+}
+
+const DARK_BADGE_BETA: Color32 = hex(0xffc14d);
+const LIGHT_BADGE_BETA: Color32 = hex(0xb45309);
+/// badge_beta in the active colour mode.
+pub fn badge_beta() -> Color32 {
+    pick(DARK_BADGE_BETA, LIGHT_BADGE_BETA)
+}
+
 /// Success state (installed components, finished syncs).
-pub const OK: Color32 = hex(0x4ade80);
+const DARK_OK: Color32 = hex(0x4ade80);
+const LIGHT_OK: Color32 = hex(0x15803d);
+/// ok() in the active colour mode.
+pub fn ok() -> Color32 {
+    pick(DARK_OK, LIGHT_OK)
+}
+
 
 /// 3 px: buttons, inputs, menus.
 pub const RADIUS: CornerRadius = CornerRadius::same(3);
@@ -79,7 +286,7 @@ pub const HUD_SPACING: f32 = HUD_SIZE * 0.15;
 pub const LABEL_SPACING: f32 = HUD_SIZE * 0.12;
 
 pub fn hairline() -> Stroke {
-    Stroke::new(1.0, LINE)
+    Stroke::new(1.0, line())
 }
 
 /// `c` at `a` (0..1) opacity.
@@ -122,32 +329,35 @@ pub fn mono_bold() -> FontFamily {
 }
 
 fn visuals() -> Visuals {
-    let mut v = Visuals::dark();
-    v.panel_fill = BG;
-    v.window_fill = PANEL;
-    v.extreme_bg_color = SUNKEN;
+    let mut v = match mode() {
+        Mode::Dark => Visuals::dark(),
+        Mode::Light => Visuals::light(),
+    };
+    v.panel_fill = bg();
+    v.window_fill = panel();
+    v.extreme_bg_color = sunken();
     v.text_edit_bg_color = Some(Color32::TRANSPARENT);
-    v.faint_bg_color = CONTROLS;
-    v.code_bg_color = SUNKEN;
+    v.faint_bg_color = controls();
+    v.code_bg_color = sunken();
     v.window_stroke = hairline();
     v.window_corner_radius = RADIUS;
     v.menu_corner_radius = RADIUS;
     v.window_shadow = shadow();
     v.popup_shadow = shadow();
-    v.override_text_color = Some(INK);
-    v.hyperlink_color = ACCENT_INK;
-    v.selection.bg_fill = ACCENT;
+    v.override_text_color = Some(ink());
+    v.hyperlink_color = accent_ink();
+    v.selection.bg_fill = accent();
     v.selection.stroke = Stroke::new(1.0, Color32::WHITE);
     v.text_cursor.stroke = Stroke::new(1.5, Color32::WHITE);
-    v.warn_fg_color = BADGE_BETA;
-    v.error_fg_color = BAD;
+    v.warn_fg_color = badge_beta();
+    v.error_fg_color = bad();
     v.striped = false;
     for (w, fill, stroke, fg) in [
-        (&mut v.widgets.noninteractive, CONTROLS, LINE, MUTED),
-        (&mut v.widgets.inactive, CONTROLS, LINE, INK),
-        (&mut v.widgets.hovered, WASH_HOVER, LINE_STRONG, INK_STRONG),
-        (&mut v.widgets.active, WASH_HOVER, LINE_STRONG, INK_STRONG),
-        (&mut v.widgets.open, WASH_HOVER, LINE_STRONG, INK_STRONG),
+        (&mut v.widgets.noninteractive, controls(), line(), muted()),
+        (&mut v.widgets.inactive, controls(), line(), ink()),
+        (&mut v.widgets.hovered, wash_hover(), line_strong(), ink_strong()),
+        (&mut v.widgets.active, wash_hover(), line_strong(), ink_strong()),
+        (&mut v.widgets.open, wash_hover(), line_strong(), ink_strong()),
     ] {
         w.bg_fill = fill;
         w.weak_bg_fill = fill;
@@ -159,11 +369,14 @@ fn visuals() -> Visuals {
     v
 }
 
-/// Installs fonts, colours and spacing. The app is dark only.
+/// Installs fonts, colours and spacing for the active colour mode.
 pub fn apply(ctx: &egui::Context) {
     install_fonts(ctx);
+    let dark = mode() == Mode::Dark;
     ctx.set_visuals_of(egui::Theme::Dark, visuals());
+    ctx.set_visuals_of(egui::Theme::Light, visuals());
     ctx.set_theme(egui::ThemePreference::Dark);
+    let _ = dark;
     ctx.all_styles_mut(|style| {
         style.spacing.item_spacing = egui::vec2(8.0, 6.0);
         style.spacing.button_padding = egui::vec2(12.0, 6.0);
@@ -299,4 +512,34 @@ fn install_fonts(ctx: &egui::Context) {
     fonts.families.insert(mono_bold(), mono_b_stack);
 
     ctx.set_fonts(fonts);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dark_is_the_default_mode() {
+        set_mode(Mode::Dark);
+        assert_eq!(mode(), Mode::Dark);
+        assert_eq!(bg(), DARK_BG);
+    }
+
+    #[test]
+    fn light_mode_swaps_the_surfaces() {
+        set_mode(Mode::Light);
+        assert_eq!(mode(), Mode::Light);
+        assert_eq!(bg(), LIGHT_BG);
+        // Paper is light, ink is dark — the two palettes must not collide.
+        assert!(LIGHT_BG.r() > 200 && DARK_BG.r() < 40);
+        assert!(LIGHT_INK.r() < 60 && DARK_INK.r() > 200);
+        set_mode(Mode::Dark);
+    }
+
+    #[test]
+    fn toggle_round_trips() {
+        set_mode(Mode::Dark);
+        assert_eq!(toggle(), Mode::Light);
+        assert_eq!(toggle(), Mode::Dark);
+    }
 }

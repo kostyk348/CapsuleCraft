@@ -40,7 +40,7 @@ pub fn draw_audio_block(
         .find(|attachment| attachment.cid == audio_cid);
 
     Frame::new()
-        .fill(theme::SUNKEN)
+        .fill(theme::sunken())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin {
@@ -55,20 +55,20 @@ pub fn draw_audio_block(
                     ui.painter(),
                     Rect::from_min_size(ui.cursor().min + vec2(0.0, 2.0), vec2(14.0, 14.0)),
                     Icon::Audio,
-                    theme::ACCENT_INK,
+                    theme::accent_ink(),
                 );
                 ui.add_space(20.0);
                 let name = file
                     .map(|attachment| attachment.name.clone())
                     .unwrap_or_else(|| t(locale, Key::AudioNoFile).to_string());
-                ui.label(RichText::new(name).size(12.0).color(theme::INK));
+                ui.label(RichText::new(name).size(12.0).color(theme::ink()));
                 ui.add_space(6.0);
                 let duration = block
                     .get("data")
                     .and_then(|data| data.get("duration"))
                     .and_then(Value::as_str)
                     .unwrap_or("0:00");
-                let _ = hud(ui, duration, theme::FAINT);
+                let _ = hud(ui, duration, theme::faint());
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if text_button(ui, Some(Icon::Plus), t(locale, Key::AttachAudio), false).clicked()
                     {
@@ -153,7 +153,7 @@ pub fn draw_audio_block(
                     ui.painter().rect_filled(
                         Rect::from_min_size(meter.min, vec2(meter.width(), 8.0)),
                         4.0,
-                        theme::WASH,
+                        theme::wash(),
                     );
                     if level > 0.001 {
                         ui.painter().rect_filled(
@@ -229,7 +229,7 @@ pub fn draw_audio_block(
                         rect.center().y - height / 2.0,
                         rect.center().y + height / 2.0,
                     ),
-                    Stroke::new(1.0, theme::fade(theme::ACCENT_INK, 0.55)),
+                    Stroke::new(1.0, theme::fade(theme::accent_ink(), 0.55)),
                 );
             }
             }
@@ -293,7 +293,7 @@ pub fn draw_audio_block(
                         ui.painter().rect_filled(
                             vol_rect.shrink2(vec2(0.0, 4.0)),
                             2.0,
-                            theme::WASH,
+                            theme::wash(),
                         );
                         ui.painter().rect_filled(
                             Rect::from_min_size(
@@ -301,12 +301,12 @@ pub fn draw_audio_block(
                                 vec2(vol_rect.width() * volume, 4.0),
                             ),
                             2.0,
-                            theme::ACCENT_INK,
+                            theme::accent_ink(),
                         );
                         ui.painter().circle_filled(
                             pos2(vol_rect.min.x + vol_rect.width() * volume, vol_rect.center().y),
                             4.0,
-                            theme::INK,
+                            theme::ink(),
                         );
                         if let Some(pos) = vol_resp
                             .interact_pointer_pos()
@@ -325,7 +325,7 @@ pub fn draw_audio_block(
                     if total_secs > 0.0 {
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
-                            let _ = hud(ui, &audio_recorder::format_clock(pos_secs), theme::FAINT);
+                            let _ = hud(ui, &audio_recorder::format_clock(pos_secs), theme::faint());
                             let bar_width = (ui.available_width() - 88.0).max(60.0);
                             let (bar, resp) = ui
                                 .allocate_exact_size(vec2(bar_width, 12.0), Sense::click_and_drag());
@@ -333,7 +333,7 @@ pub fn draw_audio_block(
                             ui.painter().rect_filled(
                                 bar.shrink2(vec2(0.0, 4.0)),
                                 2.0,
-                                theme::WASH,
+                                theme::wash(),
                             );
                             ui.painter().rect_filled(
                                 Rect::from_min_size(
@@ -341,12 +341,12 @@ pub fn draw_audio_block(
                                     vec2(bar.width() * frac as f32, 4.0),
                                 ),
                                 2.0,
-                                theme::ACCENT_INK,
+                                theme::accent_ink(),
                             );
                             ui.painter().circle_filled(
                                 pos2(bar.min.x + bar.width() * frac as f32, bar.center().y),
                                 4.0,
-                                theme::INK,
+                                theme::ink(),
                             );
                             if let Some(pos) = resp
                                 .interact_pointer_pos()
@@ -358,7 +358,7 @@ pub fn draw_audio_block(
                                 audio_player::seek(&audio_cid, Duration::from_secs_f64(target));
                             }
                             let _ =
-                                hud(ui, &audio_recorder::format_clock(total_secs), theme::FAINT);
+                                hud(ui, &audio_recorder::format_clock(total_secs), theme::faint());
                         });
                     }
                 }
@@ -373,12 +373,12 @@ pub fn draw_audio_block(
                     _ => None,
                 };
                 if let Some(status) = status {
-                    let _ = hud(ui, &status, theme::ACCENT_INK);
+                    let _ = hud(ui, &status, theme::accent_ink());
                 } else if !playable {
                     if decodable {
                         // Real bytes, but webm/opus from the MediaRecorder —
                         // say so instead of a dead button.
-                        let _ = hud(ui, t(locale, Key::AudioUnsupportedFmt), theme::FAINT);
+                        let _ = hud(ui, t(locale, Key::AudioUnsupportedFmt), theme::faint());
                     }
                 }
                 ui.add_space(4.0);
@@ -420,7 +420,7 @@ pub fn draw_audio_block(
             let response = ui.add(
                 TextEdit::multiline(&mut transcript)
                     .font(FontId::new(13.0, FontFamily::Proportional))
-                    .text_color(theme::MUTED)
+                    .text_color(theme::muted())
                     .frame(Frame::NONE)
                     .margin(Margin::same(0))
                     .desired_width(f32::INFINITY)
@@ -437,10 +437,10 @@ pub fn draw_audio_block(
                     audio_player::PlayError::Device => t(locale, Key::AudioDeviceFail),
                     audio_player::PlayError::Unsupported => t(locale, Key::AudioUnsupportedFmt),
                 };
-                let _ = hud(ui, message, theme::FAINT);
+                let _ = hud(ui, message, theme::faint());
             }
             if audio_recorder::last_error().is_some() {
-                let _ = hud(ui, t(locale, Key::AudioNoMic), theme::FAINT);
+                let _ = hud(ui, t(locale, Key::AudioNoMic), theme::faint());
             }
         });
     changed

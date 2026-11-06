@@ -36,7 +36,7 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> ViewAction {
             .max_rect(bar_rect.shrink2(vec2(super::VIEW_PAD, 0.0)))
             .layout(Layout::left_to_right(Align::Center)),
     );
-    let _ = hud(&mut bar, t(locale, Key::MimeHint), theme::FAINT);
+    let _ = hud(&mut bar, t(locale, Key::MimeHint), theme::faint());
 
     bar.with_layout(Layout::right_to_left(Align::Center), |ui| {
         if ghost(
@@ -97,7 +97,7 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> ViewAction {
                         RichText::new(t(locale, Key::Headers))
                             .family(theme::semibold())
                             .size(11.5)
-                            .color(theme::MUTED),
+                            .color(theme::muted()),
                     );
                     ui.add_space(6.0);
                     for (name, value) in &headers {
@@ -108,7 +108,7 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> ViewAction {
                                     RichText::new(name)
                                         .family(theme::mono_bold())
                                         .size(9.5)
-                                        .color(theme::FAINT),
+                                        .color(theme::faint()),
                                 )
                                 .truncate(),
                             );
@@ -117,7 +117,7 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> ViewAction {
                                     RichText::new(value)
                                         .family(theme::mono())
                                         .size(10.5)
-                                        .color(theme::INK),
+                                        .color(theme::ink()),
                                 )
                                 .wrap_mode(egui::TextWrapMode::Extend)
                                 .selectable(true),
@@ -129,11 +129,11 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> ViewAction {
                         RichText::new(t(locale, Key::Body))
                             .family(theme::semibold())
                             .size(11.5)
-                            .color(theme::MUTED),
+                            .color(theme::muted()),
                     );
                     ui.add_space(6.0);
                     Frame::new()
-                        .fill(theme::SUNKEN)
+                        .fill(theme::sunken())
                         .corner_radius(theme::RADIUS)
                         .stroke(theme::hairline())
                         .inner_margin(egui::Margin::same(12))
@@ -143,7 +143,7 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> ViewAction {
                                     RichText::new(body.trim_start_matches(['\r', '\n']))
                                         .family(FontId::new(10.5, theme::mono()).family)
                                         .size(10.5)
-                                        .color(theme::MUTED),
+                                        .color(theme::muted()),
                                 )
                                 .wrap_mode(egui::TextWrapMode::Extend)
                                 .selectable(true),

@@ -48,8 +48,8 @@ pub fn draw_cothink_modal(
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
-                theme::PANEL,
-                Stroke::new(1.0, theme::LINE_STRONG),
+                theme::panel(),
+                Stroke::new(1.0, theme::line_strong()),
                 egui::StrokeKind::Inside,
             );
 
@@ -64,7 +64,7 @@ pub fn draw_cothink_modal(
                     RichText::new(t(locale, Key::CoThinkTitle))
                         .family(theme::medium())
                         .size(15.0)
-                        .color(theme::INK),
+                        .color(theme::ink()),
                 );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if ghost(ui, Icon::Close, None, t(locale, Key::Close), true, 26.0).clicked() {
@@ -77,7 +77,7 @@ pub fn draw_cothink_modal(
                 Label::new(
                     RichText::new(t(locale, Key::CoThinkSubtitle))
                         .size(12.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 )
                 .wrap(),
             );
@@ -101,9 +101,9 @@ pub fn draw_cothink_modal(
             for (candidate, title_key, desc_key) in modes {
                 let active = *mode == candidate;
                 let (fill, stroke_color, text_color) = if active {
-                    (theme::WASH_SELECTED, theme::ACCENT, theme::ACCENT_INK)
+                    (theme::wash_selected(), theme::accent(), theme::accent_ink())
                 } else {
-                    (theme::SUNKEN, theme::hairline().color, theme::INK)
+                    (theme::sunken(), theme::hairline().color, theme::ink())
                 };
 
                 let frame = Frame::new()
@@ -130,7 +130,7 @@ pub fn draw_cothink_modal(
                             ui.label(
                                 RichText::new(format!("— {}", t(locale, desc_key)))
                                     .size(11.5)
-                                    .color(theme::MUTED),
+                                    .color(theme::muted()),
                             );
                         });
                     })
@@ -146,7 +146,7 @@ pub fn draw_cothink_modal(
             body.label(
                 RichText::new(t(locale, Key::CoThinkFocus))
                     .size(12.0)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
             );
             body.add_space(4.0);
             let text_edit = TextEdit::singleline(focus)

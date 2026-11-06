@@ -22,6 +22,30 @@ pub struct GraphState {
     pub pan: egui::Vec2,
     pub zoom: f32,
     pub edges: bool,
+    /// Layout is far too expensive to redo every frame: keep the last graph
+    /// plus the vault signature it was built from. Rebuild only when either
+    /// changes (edits, imports, tag filter).
+    cached: Option<(u64, Option<String>, std::sync::Arc<graph::Graph>)>,
+}
+
+/// Cheap vault fingerprint: page count plus the shape of every page's links
+/// and tags. O(n) per frame, enough to catch any edit that could change the
+/// graph; the expensive layout runs only when this value moves.
+fn vault_signature(capsules: &[Capsule]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    capsules.len().hash(&mut hasher);
+    for capsule in capsules {
+        capsule.message_id.hash(&mut hasher);
+        capsule.parent_id.hash(&mut hasher);
+        capsule.in_reply_to.hash(&mut hasher);
+        capsule.references.len().hash(&mut hasher);
+        capsule.tags.len().hash(&mut hasher);
+        for r in &capsule.references {
+            r.hash(&mut hasher);
+        }
+    }
+    hasher.finish()
 }
 
 impl GraphState {
@@ -31,6 +55,7 @@ impl GraphState {
             pan: egui::Vec2::ZERO,
             zoom: 1.0,
             edges: true,
+            cached: None,
         }
     }
 }
@@ -43,7 +68,17 @@ pub fn draw(
     selected: Option<usize>,
 ) -> ViewAction {
     let mut action = ViewAction::default();
-    let graph = graph::build(capsules, state.tag.as_deref());
+    let signature = vault_signature(capsules);
+    let tag = state.tag.clone();
+    let rebuild = !matches!(&state.cached, Some((sig, cached_tag, _)) if *sig == signature && *cached_tag == tag);
+    if rebuild {
+        let built = std::sync::Arc::new(graph::build(capsules, state.tag.as_deref()));
+        state.cached = Some((signature, tag, built));
+    }
+    let graph = match &state.cached {
+        Some((_, _, graph)) => graph.clone(),
+        None => std::sync::Arc::new(graph::build(capsules, state.tag.as_deref())),
+    };
 
     header(
         ui,
@@ -142,7 +177,7 @@ pub fn draw(
             state.zoom = 1.0;
         }
         ui.add_space(8.0);
-        let _ = hud(ui, t(locale, Key::GraphHint), theme::FAINT);
+        let _ = hud(ui, t(locale, Key::GraphHint), theme::faint());
     });
 
     if graph.nodes.is_empty() {
@@ -187,7 +222,7 @@ pub fn draw(
         .map(|node| (node.capsule, to_screen(node.pos)))
         .collect();
 
-    painter.rect_filled(rect, 0.0, theme::BG);
+    painter.rect_filled(rect, 0.0, theme::bg());
 
     if state.edges {
         for edge in &graph.edges {
@@ -196,10 +231,10 @@ pub fn draw(
                 continue;
             };
             let color = match edge.kind {
-                EdgeKind::PageParent => theme::fade(theme::ACCENT, 0.55),
-                EdgeKind::Reply => theme::fade(theme::INK, 0.3),
-                EdgeKind::Reference => theme::fade(theme::INK, 0.18),
-                EdgeKind::TagCluster => theme::fade(theme::ACCENT_INK, 0.12),
+                EdgeKind::PageParent => theme::fade(theme::accent(), 0.55),
+                EdgeKind::Reply => theme::fade(theme::ink(), 0.3),
+                EdgeKind::Reference => theme::fade(theme::ink(), 0.18),
+                EdgeKind::TagCluster => theme::fade(theme::accent_ink(), 0.12),
             };
             let width = if graph.nodes.len() > 40 { 1.0 } else { 1.2 };
             painter.line_segment([*a, *b], Stroke::new(width, color));
@@ -220,14 +255,14 @@ pub fn draw(
         let is_selected = selected == Some(node.capsule);
         let color = if capsule.native {
             if is_selected {
-                theme::ACCENT_INK
+                theme::accent_ink()
             } else {
-                theme::ACCENT
+                theme::accent()
             }
         } else if is_selected {
-            theme::BADGE_BETA
+            theme::badge_beta()
         } else {
-            theme::MUTED
+            theme::muted()
         };
         if is_selected || hovered == Some(node.capsule) {
             painter.circle_filled(pos, node_radius + 4.0, theme::fade(color, 0.18));
@@ -236,7 +271,7 @@ pub fn draw(
         painter.circle_stroke(
             pos,
             node_radius,
-            Stroke::new(1.0, theme::fade(theme::BG, 0.8)),
+            Stroke::new(1.0, theme::fade(theme::bg(), 0.8)),
         );
     }
 
@@ -263,9 +298,9 @@ pub fn draw(
                 label,
                 FontId::new(size, egui::FontFamily::Proportional),
                 if selected == Some(node.capsule) {
-                    theme::INK
+                    theme::ink()
                 } else {
-                    theme::fade(theme::MUTED, 0.9)
+                    theme::fade(theme::muted(), 0.9)
                 },
             );
         }
@@ -275,7 +310,7 @@ pub fn draw(
         let capsule = &capsules[index];
         let anchor = positions[&index];
         let label = truncate_chars(&capsule.subject, 40);
-        let galley = painter.layout_no_wrap(label, FontId::new(11.5, theme::medium()), theme::INK);
+        let galley = painter.layout_no_wrap(label, FontId::new(11.5, theme::medium()), theme::ink());
         let box_rect = Rect::from_min_size(
             pos2(anchor.x + 12.0, anchor.y - galley.size().y / 2.0 - 6.0),
             galley.size() + vec2(16.0, 12.0),
@@ -283,11 +318,11 @@ pub fn draw(
         painter.rect(
             box_rect,
             theme::RADIUS,
-            theme::PANEL,
+            theme::panel(),
             theme::hairline(),
             egui::StrokeKind::Inside,
         );
-        painter.galley(box_rect.min + vec2(8.0, 6.0), galley, theme::INK);
+        painter.galley(box_rect.min + vec2(8.0, 6.0), galley, theme::ink());
         if response.clicked() {
             action.select = Some(index);
         }
@@ -308,10 +343,10 @@ pub fn draw(
     let y = rect.bottom() - 26.0;
     for (kind, label) in legend {
         let color = match kind {
-            EdgeKind::PageParent => theme::fade(theme::ACCENT, 0.8),
-            EdgeKind::Reply => theme::fade(theme::INK, 0.5),
-            EdgeKind::Reference => theme::fade(theme::INK, 0.35),
-            EdgeKind::TagCluster => theme::fade(theme::ACCENT_INK, 0.3),
+            EdgeKind::PageParent => theme::fade(theme::accent(), 0.8),
+            EdgeKind::Reply => theme::fade(theme::ink(), 0.5),
+            EdgeKind::Reference => theme::fade(theme::ink(), 0.35),
+            EdgeKind::TagCluster => theme::fade(theme::accent_ink(), 0.3),
         };
         painter.line_segment([pos2(x, y), pos2(x + 16.0, y)], Stroke::new(1.5, color));
         painter.text(
@@ -319,7 +354,7 @@ pub fn draw(
             egui::Align2::LEFT_CENTER,
             label,
             FontId::new(9.5, theme::mono()),
-            theme::FAINT,
+            theme::faint(),
         );
         x += 30.0 + label.chars().count() as f32 * 6.0;
     }
@@ -335,7 +370,7 @@ pub fn draw(
                 painter.rect(
                     summary_rect,
                     theme::RADIUS,
-                    theme::PANEL,
+                    theme::panel(),
                     theme::hairline(),
                     egui::StrokeKind::Inside,
                 );
@@ -347,7 +382,7 @@ pub fn draw(
                 let _ = hud(
                     &mut card,
                     if capsule.native { "PAGE" } else { "IMPORTED" },
-                    theme::FAINT,
+                    theme::faint(),
                 );
                 card.add_space(5.0);
                 card.add(
@@ -355,7 +390,7 @@ pub fn draw(
                         RichText::new(truncate_chars(&capsule.subject, 34))
                             .family(theme::medium())
                             .size(12.5)
-                            .color(theme::INK),
+                            .color(theme::ink()),
                     )
                     .wrap(),
                 );
@@ -364,7 +399,7 @@ pub fn draw(
                     egui::Label::new(
                         RichText::new(truncate_chars(&capsule.from, 32))
                             .size(10.5)
-                            .color(theme::MUTED),
+                            .color(theme::muted()),
                     )
                     .truncate(),
                 );
@@ -372,7 +407,7 @@ pub fn draw(
                     card.add_space(5.0);
                     card.horizontal_wrapped(|ui| {
                         for tag in capsule.tags.iter().take(3) {
-                            let _ = tag_chip(ui, tag, theme::MUTED);
+                            let _ = tag_chip(ui, tag, theme::muted());
                         }
                     });
                 }

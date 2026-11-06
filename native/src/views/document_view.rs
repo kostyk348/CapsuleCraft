@@ -48,6 +48,8 @@ pub enum AttachmentAction {
 #[derive(Default)]
 pub struct EditorAction {
     pub changed: bool,
+    /// Block index the user asked to delete — the shell confirms first.
+    pub delete_block: Option<usize>,
     pub select: Option<usize>,
     pub new_subpage: bool,
     pub new_page: bool,
@@ -145,7 +147,7 @@ pub fn draw_document(
                     let response = ui.add(
                         TextEdit::multiline(&mut capsule.subject)
                             .font(FontId::new(34.0, theme::display()))
-                            .text_color(theme::INK)
+                            .text_color(theme::ink())
                             .frame(Frame::NONE)
                             .margin(Margin::same(0))
                             .desired_width(content_w)
@@ -189,7 +191,7 @@ pub fn draw_document(
                             })
                             .family(theme::display())
                             .size(34.0)
-                            .color(theme::INK),
+                            .color(theme::ink()),
                         )
                         .wrap(),
                     );
@@ -256,7 +258,7 @@ pub fn draw_document(
                             ui.painter().rect_stroke(
                                 rect.expand(5.0),
                                 6.0,
-                                Stroke::new(1.5, theme::ACCENT),
+                                Stroke::new(1.5, theme::accent()),
                                 egui::StrokeKind::Inside,
                             );
                         }
@@ -279,10 +281,9 @@ pub fn draw_document(
                     if let Some((index, op)) = block_op {
                         match op {
                             BlockOp::Delete => {
-                                if index < capsule.blocks.len() {
-                                    capsule.blocks.remove(index);
-                                    action.changed = true;
-                                }
+                                // One stray click must not vaporise content:
+                                // the shell shows the confirm modal first.
+                                action.delete_block = Some(index);
                             }
                             BlockOp::Up if index > 0 => {
                                 capsule.blocks.swap(index, index - 1);
@@ -416,7 +417,7 @@ pub fn draw_document(
                             action.changed = true;
                         }
                         ui.add_space(4.0);
-                        let _ = hud(ui, t(locale, Key::SlashHint), theme::FAINT);
+                        let _ = hud(ui, t(locale, Key::SlashHint), theme::faint());
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if icon_button(
                                 ui,
@@ -461,7 +462,7 @@ pub fn links_panel(ui: &mut Ui, context: &LinkContext, locale: Locale, action: &
         ui.set_max_width(ui.available_width());
         super::section(ui, t(locale, Key::LinksTitle));
         if context.outgoing.is_empty() {
-            let _ = hud(ui, t(locale, Key::NoLinks), theme::FAINT);
+            let _ = hud(ui, t(locale, Key::NoLinks), theme::faint());
         } else {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
@@ -492,14 +493,14 @@ pub fn links_panel(ui: &mut Ui, context: &LinkContext, locale: Locale, action: &
                     theme::HUD_SIZE,
                     theme::mono_bold(),
                     theme::LABEL_SPACING,
-                    theme::FAINT,
+                    theme::faint(),
                 );
                 let (rect, _) = ui.allocate_exact_size(
                     vec2(label.size().x, label.size().y + 4.0),
                     Sense::hover(),
                 );
                 ui.painter()
-                    .galley(rect.min + vec2(0.0, 2.0), label, theme::FAINT);
+                    .galley(rect.min + vec2(0.0, 2.0), label, theme::faint());
             });
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
@@ -527,12 +528,12 @@ pub fn links_panel(ui: &mut Ui, context: &LinkContext, locale: Locale, action: &
                 theme::HUD_SIZE,
                 theme::mono_bold(),
                 theme::LABEL_SPACING,
-                theme::FAINT,
+                theme::faint(),
             );
             let (rect, _) =
                 ui.allocate_exact_size(vec2(label.size().x, label.size().y + 4.0), Sense::hover());
             ui.painter()
-                .galley(rect.min + vec2(0.0, 2.0), label, theme::FAINT);
+                .galley(rect.min + vec2(0.0, 2.0), label, theme::faint());
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
@@ -566,17 +567,17 @@ pub fn link_chip(ui: &mut Ui, label: &str, missing: bool) -> Response {
         text,
         FontId::new(11.5, theme::medium()),
         if missing {
-            theme::MUTED
+            theme::muted()
         } else {
-            theme::ACCENT_INK
+            theme::accent_ink()
         },
     );
     let size = galley.size() + vec2(18.0, 10.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let fill = if response.hovered() {
-        theme::WASH_HOVER
+        theme::wash_hover()
     } else {
-        theme::WASH
+        theme::wash()
     };
     ui.painter().rect(
         rect,
@@ -589,9 +590,9 @@ pub fn link_chip(ui: &mut Ui, label: &str, missing: bool) -> Response {
         rect.min + vec2(9.0, 5.0),
         galley,
         if missing {
-            theme::MUTED
+            theme::muted()
         } else {
-            theme::ACCENT_INK
+            theme::accent_ink()
         },
     );
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -605,7 +606,7 @@ pub fn document_meta(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool
             RichText::new(format_date(capsule))
                 .family(theme::mono())
                 .size(9.5)
-                .color(theme::FAINT),
+                .color(theme::faint()),
         );
         dot_sep(ui);
         if capsule.native {
@@ -619,14 +620,14 @@ pub fn document_meta(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool
                 ))
                 .family(theme::mono())
                 .size(9.5)
-                .color(theme::FAINT),
+                .color(theme::faint()),
             );
         } else {
             ui.label(
                 RichText::new(t(locale, Key::ImportedEmail))
                     .family(theme::mono())
                     .size(9.5)
-                    .color(theme::BADGE_BETA),
+                    .color(theme::badge_beta()),
             );
         }
 
@@ -670,7 +671,7 @@ pub fn document_meta(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool
         let mut remove_tag: Option<usize> = None;
         for (index, tag) in capsule.tags.iter().enumerate() {
             ui.add_space(2.0);
-            let chip = tag_chip(ui, tag, theme::MUTED);
+            let chip = tag_chip(ui, tag, theme::muted());
             egui::Popup::menu(&chip)
                 .frame(popover_frame())
                 .align(egui::RectAlign::BOTTOM_START)
@@ -747,7 +748,7 @@ pub fn document_meta(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool
                 ))
                 .family(theme::mono())
                 .size(9.5)
-                .color(theme::FAINT),
+                .color(theme::faint()),
             );
         }
     });
@@ -756,7 +757,7 @@ pub fn document_meta(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool
 
 pub fn read_only_notice(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
     let inner = Frame::new()
-        .fill(theme::WASH)
+        .fill(theme::wash())
         .corner_radius(theme::RADIUS)
         .inner_margin(Margin {
             left: 16,
@@ -768,7 +769,7 @@ pub fn read_only_notice(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
             let _ = hud(
                 ui,
                 t(locale, Key::ExternalReadOnlyNotice),
-                theme::BADGE_BETA,
+                theme::badge_beta(),
             );
             ui.add_space(7.0);
             ui.add(
@@ -780,7 +781,7 @@ pub fn read_only_notice(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                             .unwrap_or(t(locale, Key::ImportedEmail)),
                     )
                     .size(13.0)
-                    .color(theme::INK),
+                    .color(theme::ink()),
                 )
                 .wrap(),
             );
@@ -789,7 +790,7 @@ pub fn read_only_notice(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                 Label::new(
                     RichText::new(t(locale, Key::HtmlRenderingNotice))
                         .size(11.5)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 )
                 .wrap(),
             );
@@ -800,7 +801,7 @@ pub fn read_only_notice(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
             vec2(2.0, inner.response.rect.height()),
         ),
         0.0,
-        theme::BADGE_BETA,
+        theme::badge_beta(),
     );
 }
 
@@ -815,13 +816,13 @@ pub fn draw_empty_state(ui: &mut Ui, action: &mut EditorAction, locale: Locale) 
                     RichText::new(t(locale, Key::EmptyVaultTitle))
                         .family(theme::display())
                         .size(32.0)
-                        .color(theme::INK),
+                        .color(theme::ink()),
                 );
                 ui.add_space(8.0);
                 ui.label(
                     RichText::new(t(locale, Key::EmptyVaultBody))
                         .size(13.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 );
                 ui.add_space(22.0);
                 ui.horizontal(|ui| {
@@ -846,7 +847,7 @@ pub fn draw_empty_state(ui: &mut Ui, action: &mut EditorAction, locale: Locale) 
                     RichText::new(t(locale, Key::ZeroDb))
                         .family(theme::mono())
                         .size(9.0)
-                        .color(theme::FAINT),
+                        .color(theme::faint()),
                 );
             });
         });
@@ -864,7 +865,7 @@ pub fn attachments_editor(
     let mut changed = false;
     let mut actions: Vec<AttachmentAction> = Vec::new();
     ui.horizontal(|ui| {
-        let _ = hud(ui, t(locale, Key::AttachmentsTitle), theme::FAINT);
+        let _ = hud(ui, t(locale, Key::AttachmentsTitle), theme::faint());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if text_button(ui, Some(Icon::Plus), t(locale, Key::AddAttachment), false).clicked() {
                 if let Some(paths) = rfd::FileDialog::new()
@@ -897,7 +898,7 @@ pub fn attachments_editor(
     ui.add_space(6.0);
 
     if capsule.attachments.is_empty() {
-        let _ = hud(ui, t(locale, Key::EmptyAttachments), theme::FAINT);
+        let _ = hud(ui, t(locale, Key::EmptyAttachments), theme::faint());
         return (changed, actions);
     }
 
@@ -912,16 +913,16 @@ pub fn attachments_editor(
                 ui.painter(),
                 Rect::from_min_size(ui.cursor().min + vec2(0.0, 3.0), vec2(12.0, 12.0)),
                 Icon::Doc,
-                theme::FAINT,
+                theme::faint(),
             );
             ui.add_space(18.0);
             ui.label(
                 RichText::new(truncate_chars(&attachment.name, 48))
                     .size(12.0)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
             );
             ui.add_space(6.0);
-            let _ = hud(ui, &human_bytes(attachment.size_bytes), theme::FAINT);
+            let _ = hud(ui, &human_bytes(attachment.size_bytes), theme::faint());
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if icon_button(
                     ui,
@@ -1113,16 +1114,16 @@ fn draw_preview_card(
                     ui.painter(),
                     Rect::from_min_size(ui.cursor().min + vec2(0.0, 1.0), vec2(12.0, 12.0)),
                     Icon::Doc,
-                    theme::MUTED,
+                    theme::muted(),
                 );
                 ui.add_space(18.0);
                 ui.label(
                     RichText::new(truncate_chars(&attachment.name, 48))
                         .size(12.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 );
                 ui.add_space(6.0);
-                let _ = hud(ui, t(locale, Key::PdfEngineMissing), theme::FAINT);
+                let _ = hud(ui, t(locale, Key::PdfEngineMissing), theme::faint());
             });
             return response.response;
         }
@@ -1132,16 +1133,16 @@ fn draw_preview_card(
                     ui.painter(),
                     Rect::from_min_size(ui.cursor().min + vec2(0.0, 1.0), vec2(12.0, 12.0)),
                     Icon::Doc,
-                    theme::MUTED,
+                    theme::muted(),
                 );
                 ui.add_space(18.0);
                 ui.label(
                     RichText::new(truncate_chars(&attachment.name, 48))
                         .size(12.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 );
                 ui.add_space(6.0);
-                let _ = hud(ui, message, theme::BAD);
+                let _ = hud(ui, message, theme::bad());
             });
             return response.response;
         }
@@ -1169,7 +1170,7 @@ fn draw_preview_card(
                 RichText::new(caption)
                     .family(theme::mono())
                     .size(9.0)
-                    .color(theme::FAINT),
+                    .color(theme::faint()),
             );
         }
         inner.on_hover_cursor(CursorIcon::PointingHand)
@@ -1192,13 +1193,13 @@ fn attachments_readonly(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> Vec<A
                 ui.painter(),
                 Rect::from_min_size(ui.cursor().min + vec2(0.0, 3.0), vec2(12.0, 12.0)),
                 Icon::Doc,
-                theme::FAINT,
+                theme::faint(),
             );
             ui.add_space(18.0);
             ui.label(
                 RichText::new(truncate_chars(&attachment.name, 48))
                     .size(12.0)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
             );
             ui.add_space(6.0);
             let _ = hud(
@@ -1208,7 +1209,7 @@ fn attachments_readonly(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> Vec<A
                     attachment.mime_type,
                     human_bytes(attachment.size_bytes)
                 ),
-                theme::FAINT,
+                theme::faint(),
             );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if icon_button(ui, Icon::Download, t(locale, Key::SaveAs), true, false).clicked() {

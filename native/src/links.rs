@@ -358,7 +358,7 @@ pub fn layout_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJob {
     let font = egui::FontId::new(size, egui::FontFamily::Proportional);
     let bold_font = egui::FontId::new(size, theme::semibold());
     let ghost_delim_font = egui::FontId::new(size * 0.9, theme::mono());
-    let ghost_color = theme::fade(theme::FAINT, 0.45);
+    let ghost_color = theme::fade(theme::faint(), 0.45);
 
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = wrap;
@@ -376,7 +376,7 @@ pub fn layout_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJob {
                     0.0,
                     egui::TextFormat {
                         font_id: ghost_delim_font.clone(),
-                        color: theme::fade(theme::ACCENT, 0.4),
+                        color: theme::fade(theme::accent(), 0.4),
                         ..Default::default()
                     },
                 );
@@ -385,8 +385,8 @@ pub fn layout_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJob {
                     0.0,
                     egui::TextFormat {
                         font_id: font.clone(),
-                        color: theme::ACCENT_INK,
-                        underline: egui::Stroke::new(1.0, theme::ACCENT),
+                        color: theme::accent_ink(),
+                        underline: egui::Stroke::new(1.0, theme::accent()),
                         ..Default::default()
                     },
                 );
@@ -395,7 +395,7 @@ pub fn layout_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJob {
                     0.0,
                     egui::TextFormat {
                         font_id: ghost_delim_font.clone(),
-                        color: theme::fade(theme::ACCENT, 0.4),
+                        color: theme::fade(theme::accent(), 0.4),
                         ..Default::default()
                     },
                 );
@@ -415,7 +415,7 @@ pub fn layout_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJob {
                     0.0,
                     egui::TextFormat {
                         font_id: bold_font.clone(),
-                        color: theme::INK,
+                        color: theme::ink(),
                         ..Default::default()
                     },
                 );
@@ -445,7 +445,7 @@ pub fn layout_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJob {
                     egui::TextFormat {
                         font_id: font.clone(),
                         italics: true,
-                        color: theme::INK,
+                        color: theme::ink(),
                         ..Default::default()
                     },
                 );
@@ -475,7 +475,7 @@ pub fn layout_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJob {
                     egui::TextFormat {
                         font_id: bold_font.clone(),
                         italics: true,
-                        color: theme::INK,
+                        color: theme::ink(),
                         ..Default::default()
                     },
                 );
@@ -504,8 +504,8 @@ pub fn layout_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJob {
                     0.0,
                     egui::TextFormat {
                         font_id: egui::FontId::new(size * 0.9, theme::mono()),
-                        color: theme::ACCENT_INK,
-                        background: theme::SUNKEN,
+                        color: theme::accent_ink(),
+                        background: theme::sunken(),
                         ..Default::default()
                     },
                 );
@@ -534,8 +534,8 @@ pub fn layout_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJob {
                     0.0,
                     egui::TextFormat {
                         font_id: font.clone(),
-                        color: theme::ACCENT_INK,
-                        underline: egui::Stroke::new(1.0, theme::ACCENT),
+                        color: theme::accent_ink(),
+                        underline: egui::Stroke::new(1.0, theme::accent()),
                         ..Default::default()
                     },
                 );
@@ -554,7 +554,7 @@ pub fn layout_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJob {
                     0.0,
                     egui::TextFormat {
                         font_id: egui::FontId::new(size * 0.85, theme::mono()),
-                        color: theme::fade(theme::FAINT, 0.5),
+                        color: theme::fade(theme::faint(), 0.5),
                         ..Default::default()
                     },
                 );
@@ -609,8 +609,8 @@ pub fn layout_clean_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJ
                     0.0,
                     egui::TextFormat {
                         font_id: font.clone(),
-                        color: theme::ACCENT_INK,
-                        underline: egui::Stroke::new(1.0, theme::ACCENT),
+                        color: theme::accent_ink(),
+                        underline: egui::Stroke::new(1.0, theme::accent()),
                         ..Default::default()
                     },
                 );
@@ -622,7 +622,7 @@ pub fn layout_clean_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJ
                     0.0,
                     egui::TextFormat {
                         font_id: bold_font.clone(),
-                        color: theme::INK,
+                        color: theme::ink(),
                         ..Default::default()
                     },
                 );
@@ -635,7 +635,7 @@ pub fn layout_clean_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJ
                     egui::TextFormat {
                         font_id: font.clone(),
                         italics: true,
-                        color: theme::INK,
+                        color: theme::ink(),
                         ..Default::default()
                     },
                 );
@@ -648,7 +648,7 @@ pub fn layout_clean_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJ
                     egui::TextFormat {
                         font_id: bold_font.clone(),
                         italics: true,
-                        color: theme::INK,
+                        color: theme::ink(),
                         ..Default::default()
                     },
                 );
@@ -660,8 +660,8 @@ pub fn layout_clean_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJ
                     0.0,
                     egui::TextFormat {
                         font_id: egui::FontId::new(size * 0.9, theme::mono()),
-                        color: theme::ACCENT_INK,
-                        background: theme::SUNKEN,
+                        color: theme::accent_ink(),
+                        background: theme::sunken(),
                         ..Default::default()
                     },
                 );
@@ -673,8 +673,8 @@ pub fn layout_clean_job(text: &str, size: f32, wrap: f32) -> egui::text::LayoutJ
                     0.0,
                     egui::TextFormat {
                         font_id: font.clone(),
-                        color: theme::ACCENT_INK,
-                        underline: egui::Stroke::new(1.0, theme::ACCENT),
+                        color: theme::accent_ink(),
+                        underline: egui::Stroke::new(1.0, theme::accent()),
                         ..Default::default()
                     },
                 );
@@ -703,7 +703,7 @@ pub fn layout_clean(
 fn plain(font: &egui::FontId) -> egui::TextFormat {
     egui::TextFormat {
         font_id: font.clone(),
-        color: theme::INK,
+        color: theme::ink(),
         ..Default::default()
     }
 }

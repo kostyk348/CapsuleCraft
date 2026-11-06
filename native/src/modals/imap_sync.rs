@@ -48,8 +48,8 @@ pub fn draw_imap_modal(
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
-                theme::PANEL,
-                Stroke::new(1.0, theme::LINE_STRONG),
+                theme::panel(),
+                Stroke::new(1.0, theme::line_strong()),
                 egui::StrokeKind::Inside,
             );
 
@@ -63,14 +63,14 @@ pub fn draw_imap_modal(
                 RichText::new(t(locale, Key::ImapSyncTitle))
                     .family(theme::medium())
                     .size(15.0)
-                    .color(theme::INK),
+                    .color(theme::ink()),
             );
             body.add_space(4.0);
             body.add(
                 Label::new(
                     RichText::new(t(locale, Key::ImapSyncDesc))
                         .size(12.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 )
                 .wrap(),
             );
@@ -84,7 +84,7 @@ pub fn draw_imap_modal(
             body.label(
                 RichText::new(t(locale, Key::ImapHost))
                     .size(11.0)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
             );
             body.add(
                 TextEdit::singleline(&mut config.host)
@@ -98,7 +98,7 @@ pub fn draw_imap_modal(
                     ui.label(
                         RichText::new(t(locale, Key::ImapPort))
                             .size(11.0)
-                            .color(theme::MUTED),
+                            .color(theme::muted()),
                     );
                     let mut port_str = config.port.to_string();
                     if ui
@@ -115,7 +115,7 @@ pub fn draw_imap_modal(
                     ui.label(
                         RichText::new(t(locale, Key::ImapFolder))
                             .size(11.0)
-                            .color(theme::MUTED),
+                            .color(theme::muted()),
                     );
                     ui.add(
                         TextEdit::singleline(&mut config.folder)
@@ -129,7 +129,7 @@ pub fn draw_imap_modal(
             body.label(
                 RichText::new(t(locale, Key::ImapUsername))
                     .size(11.0)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
             );
             body.add(
                 TextEdit::singleline(&mut config.username)
@@ -141,7 +141,7 @@ pub fn draw_imap_modal(
             body.label(
                 RichText::new(t(locale, Key::ImapPassword))
                     .size(11.0)
-                    .color(theme::MUTED),
+                    .color(theme::muted()),
             );
             body.add(
                 TextEdit::singleline(&mut config.password)
@@ -159,9 +159,9 @@ pub fn draw_imap_modal(
             };
             if !status_text.is_empty() {
                 let color = match status {
-                    SyncStatus::Error(_) => theme::BAD,
-                    SyncStatus::Syncing => theme::BADGE_BETA,
-                    _ => theme::ACCENT,
+                    SyncStatus::Error(_) => theme::bad(),
+                    SyncStatus::Syncing => theme::badge_beta(),
+                    _ => theme::accent(),
                 };
                 body.label(RichText::new(status_text).size(11.5).color(color));
                 body.add_space(8.0);

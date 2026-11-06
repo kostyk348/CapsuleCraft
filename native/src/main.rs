@@ -148,6 +148,7 @@ fn main() -> eframe::Result<()> {
         "CapsuleCraft",
         options,
         Box::new(move |cc| {
+            theme::load();
             theme::apply(&cc.egui_ctx);
             Ok(Box::new(NativeApp::new(launch)))
         }),
@@ -211,6 +212,8 @@ struct NativeApp {
     snapshot: Option<(String, PageSnapshot)>,
     toast: Option<(String, Instant)>,
     confirm_delete: bool,
+    /// Block index pending confirmation (None = no block delete in flight).
+    confirm_block: Option<usize>,
     show_mcp_modal: bool,
     mcp_tab: usize,
     show_imap_modal: bool,
@@ -370,6 +373,7 @@ impl NativeApp {
             snapshot: None,
             toast: None,
             confirm_delete: false,
+            confirm_block: None,
             show_mcp_modal: false,
             mcp_tab: 0,
             show_imap_modal: false,
@@ -671,8 +675,8 @@ impl NativeApp {
                         t(self.locale, Key::OcrPhaseStarting)
                     };
                     egui::Frame::new()
-                        .fill(theme::PANEL)
-                        .stroke(egui::Stroke::new(1.0, theme::ACCENT))
+                        .fill(theme::panel())
+                        .stroke(egui::Stroke::new(1.0, theme::accent()))
                         .corner_radius(theme::RADIUS)
                         .inner_margin(Margin::same(12))
                         .show(ui, |ui| {
@@ -684,23 +688,23 @@ impl NativeApp {
                                     egui::RichText::new("OCR")
                                         .family(theme::mono_bold())
                                         .size(10.5)
-                                        .color(theme::ACCENT),
+                                        .color(theme::accent()),
                                 );
                                 ui.label(
                                     egui::RichText::new(truncate_chars(&job.file, 26))
                                         .family(theme::medium())
                                         .size(12.0)
-                                        .color(theme::INK),
+                                        .color(theme::ink()),
                                 );
                             });
                             ui.add_space(7.0);
-                            ui.label(egui::RichText::new(phase).size(11.5).color(theme::INK));
+                            ui.label(egui::RichText::new(phase).size(11.5).color(theme::ink()));
                             if !job.engine_ready {
                                 ui.add_space(2.0);
                                 ui.label(
                                     egui::RichText::new(t(self.locale, Key::OcrFirstRunHint))
                                         .size(10.5)
-                                        .color(theme::FAINT),
+                                        .color(theme::faint()),
                                 );
                             }
                             ui.add_space(5.0);
@@ -711,15 +715,15 @@ impl NativeApp {
                                 ))
                                 .family(theme::mono())
                                 .size(10.5)
-                                .color(theme::FAINT),
+                                .color(theme::faint()),
                             );
                         });
                     ui.add_space(8.0);
                 }
                 if let Some(result) = self.ocr_result.as_mut() {
                     egui::Frame::new()
-                        .fill(theme::PANEL)
-                        .stroke(egui::Stroke::new(1.0, theme::LINE_STRONG))
+                        .fill(theme::panel())
+                        .stroke(egui::Stroke::new(1.0, theme::line_strong()))
                         .corner_radius(theme::RADIUS)
                         .inner_margin(Margin::same(12))
                         .show(ui, |ui| {
@@ -729,12 +733,12 @@ impl NativeApp {
                                     egui::RichText::new(t(self.locale, Key::OcrResultTitle))
                                         .family(theme::medium())
                                         .size(12.0)
-                                        .color(theme::INK),
+                                        .color(theme::ink()),
                                 );
                                 ui.label(
                                     egui::RichText::new(truncate_chars(&result.file, 20))
                                         .size(11.0)
-                                        .color(theme::FAINT),
+                                        .color(theme::faint()),
                                 );
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
@@ -751,7 +755,7 @@ impl NativeApp {
                             ui.label(
                                 egui::RichText::new(&result.destination)
                                     .size(11.0)
-                                    .color(theme::ACCENT),
+                                    .color(theme::accent()),
                             );
                             ui.add_space(7.0);
                             let max_h = (ctx.content_rect().height() * 0.35).max(90.0);
@@ -763,7 +767,7 @@ impl NativeApp {
                                         egui::Label::new(
                                             egui::RichText::new(&result.text)
                                                 .size(11.5)
-                                                .color(theme::INK),
+                                                .color(theme::ink()),
                                         )
                                         .wrap()
                                         .selectable(true),
@@ -1068,7 +1072,7 @@ impl NativeApp {
         painter.rect_stroke(
             rect.shrink(48.0),
             theme::RADIUS,
-            Stroke::new(1.5, theme::ACCENT),
+            Stroke::new(1.5, theme::accent()),
             egui::StrokeKind::Inside,
         );
         painter.text(
@@ -1076,7 +1080,7 @@ impl NativeApp {
             Align2::CENTER_CENTER,
             t(self.locale, Key::DropHint),
             FontId::new(17.0, theme::display()),
-            theme::INK,
+            theme::ink(),
         );
         ctx.request_repaint();
     }
@@ -1717,9 +1721,18 @@ impl NativeApp {
             return;
         };
         let path = self.vault.dir.join(&capsule.file_name);
-        let removed = std::fs::remove_file(&path);
-        if let Err(err) = removed {
-            self.status = err.to_string();
+        // Straight rm is a one-way door: send the page file to the OS trash
+        // first (recoverable), and only fall back to a hard delete when the
+        // trash is unavailable (e.g. network mounts).
+        let trashed = match trash::delete(&path) {
+            Ok(()) => true,
+            Err(err) => {
+                eprintln!("trash::delete failed, falling back to rm: {err}");
+                std::fs::remove_file(&path).is_ok()
+            }
+        };
+        if !trashed {
+            self.status = "delete failed".to_string();
             self.status_error = true;
             return;
         }
@@ -1730,7 +1743,28 @@ impl NativeApp {
         self.confirm_delete = false;
         self.last_write = Instant::now();
         self.refresh_links();
-        self.toast(t(self.locale, Key::PageDeleted));
+        if trashed {
+            self.toast(t(self.locale, Key::PageTrashed));
+        } else {
+            self.toast(t(self.locale, Key::PageDeleted));
+        }
+    }
+
+    /// Confirmed block removal (the modal has already asked).
+    fn delete_block_now(&mut self, block_index: usize) {
+        let Some(index) = self.selected else {
+            return;
+        };
+        let Some(capsule) = self.vault.capsules.get_mut(index) else {
+            return;
+        };
+        if block_index < capsule.blocks.len() {
+            capsule.blocks.remove(block_index);
+            self.dirty = true;
+            self.last_write = Instant::now();
+            self.toast(t(self.locale, Key::BlockDeleted));
+        }
+        self.confirm_block = None;
     }
 
     fn set_locale(&mut self, locale: Locale) {
@@ -1923,6 +1957,7 @@ impl NativeApp {
 
         let modals_open = self.palette.open
             || self.confirm_delete
+            || self.confirm_block.is_some()
             || self.show_mcp_modal
             || self.show_imap_modal
             || self.show_cothink_modal
@@ -2011,7 +2046,7 @@ impl NativeApp {
                 .exact_size(chrome::TITLEBAR_HEIGHT)
                 .frame(
                     Frame::new()
-                        .fill(theme::CHROME)
+                        .fill(theme::chrome())
                         .inner_margin(Margin::same(0)),
                 )
                 .show(ui, |ui| {
@@ -2038,7 +2073,7 @@ impl NativeApp {
                 .exact_size(chrome::WORKSPACE_STRIP_HEIGHT)
                 .frame(
                     Frame::new()
-                        .fill(theme::CHROME)
+                        .fill(theme::chrome())
                         .inner_margin(Margin::same(0)),
                 )
                 .show(ui, |ui| {
@@ -2064,7 +2099,7 @@ impl NativeApp {
                 .resizable(true)
                 .frame(
                     Frame::new()
-                        .fill(theme::CHROME)
+                        .fill(theme::chrome())
                         .inner_margin(Margin::same(0)),
                 )
                 .show(ui, |ui| {
@@ -2097,12 +2132,12 @@ impl NativeApp {
         egui::CentralPanel::default()
             .frame(
                 Frame::new()
-                    .fill(theme::CHROME)
+                    .fill(theme::chrome())
                     .inner_margin(Margin::same(8)),
             )
             .show(ui, |ui| {
                 Frame::new()
-                    .fill(theme::BG)
+                    .fill(theme::bg())
                     .corner_radius(8)
                     .stroke(theme::hairline())
                     .inner_margin(Margin::same(0))
@@ -2303,6 +2338,9 @@ impl NativeApp {
         if shell.delete_page {
             self.confirm_delete = true;
         }
+        if let Some(block_index) = editor.delete_block {
+            self.confirm_block = Some(block_index);
+        }
         if shell.connect_mcp {
             self.show_mcp_modal = true;
         }
@@ -2347,13 +2385,35 @@ impl NativeApp {
             self.run_command(&ctx, command);
         }
 
-        match modals::draw_confirm_delete(self.confirm_delete, self.locale, &ctx) {
+        let (del_title, del_body) = if self.confirm_block.is_some() {
+            (
+                t(self.locale, Key::DeleteBlock).to_string(),
+                t(self.locale, Key::DeleteBlockConfirm).to_string(),
+            )
+        } else {
+            (
+                t(self.locale, Key::DeletePage).to_string(),
+                t(self.locale, Key::DeletePageConfirm).to_string(),
+            )
+        };
+        match modals::draw_confirm_delete(
+            self.confirm_delete || self.confirm_block.is_some(),
+            del_title,
+            del_body,
+            self.locale,
+            &ctx,
+        ) {
             modals::ConfirmDeleteAction::Confirm => {
-                self.delete_selected_page();
+                if let Some(block_index) = self.confirm_block.take() {
+                    self.delete_block_now(block_index);
+                } else {
+                    self.delete_selected_page();
+                }
                 self.confirm_delete = false;
             }
             modals::ConfirmDeleteAction::Cancel => {
                 self.confirm_delete = false;
+                self.confirm_block = None;
             }
             modals::ConfirmDeleteAction::None => {}
         }
@@ -2543,6 +2603,11 @@ impl NativeApp {
             PaletteCommand::ToggleLocale => {
                 let locale = self.locale.other();
                 self.set_locale(locale);
+            }
+            PaletteCommand::ToggleTheme => {
+                theme::toggle();
+                theme::persist();
+                theme::apply(ctx);
             }
             PaletteCommand::SetView(view) => self.view = view,
             PaletteCommand::OpenPage(index) => {

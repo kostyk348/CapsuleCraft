@@ -39,6 +39,7 @@ pub enum Command {
     ImportEml,
     ImportObsidian,
     ToggleLocale,
+    ToggleTheme,
     SetView(View),
     OpenPage(usize),
     DeletePage,
@@ -199,6 +200,36 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                 hint: String::new(),
                 group: t(locale, Key::PaletteActions).into(),
                 keywords: vec!["delete".into(), "remove".into(), "page".into()],
+                shortcut: None,
+            },
+        ),
+        (
+            Command::ToggleTheme,
+            PaletteCommand {
+                id: "theme",
+                title: t(locale, Key::CommandTheme).into(),
+                hint: if theme::mode() == theme::Mode::Light {
+                    t(locale, Key::ThemeDark).into()
+                } else {
+                    t(locale, Key::ThemeLight).into()
+                },
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: match locale {
+                    Locale::Ru => vec![
+                        "тема".into(),
+                        "светлая".into(),
+                        "тёмная".into(),
+                        "theme".into(),
+                        "light".into(),
+                        "dark".into(),
+                    ],
+                    Locale::En => vec![
+                        "theme".into(),
+                        "light".into(),
+                        "dark".into(),
+                        "colour".into(),
+                    ],
+                },
                 shortcut: None,
             },
         ),
@@ -623,9 +654,9 @@ pub fn draw(
         .show(ctx, |ui| {
             ui.set_width(width);
             Frame::new()
-                .fill(theme::PANEL)
+                .fill(theme::panel())
                 .corner_radius(theme::RADIUS)
-                .stroke(Stroke::new(1.0, theme::LINE_STRONG))
+                .stroke(Stroke::new(1.0, theme::line_strong()))
                 .shadow(egui::epaint::Shadow {
                     offset: [0, 18],
                     blur: 44,
@@ -649,7 +680,7 @@ pub fn draw(
                             vec2(14.0, 14.0),
                         ),
                         Icon::Search,
-                        theme::FAINT,
+                        theme::faint(),
                     );
                     let mut input = ui.new_child(
                         egui::UiBuilder::new()
@@ -670,7 +701,7 @@ pub fn draw(
                         state.just_opened = false;
                     }
                     input.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let _ = hud(ui, "ESC", theme::FAINT);
+                        let _ = hud(ui, "ESC", theme::faint());
                     });
 
                     // Rank commands and pages.
@@ -724,7 +755,7 @@ pub fn draw(
                             ui.label(
                                 RichText::new(t(locale, Key::PaletteEmpty))
                                     .size(12.0)
-                                    .color(theme::FAINT),
+                                    .color(theme::faint()),
                             );
                         });
                         ui.add_space(18.0);
@@ -777,7 +808,7 @@ pub fn draw(
                                         ))
                                         .layout(Layout::left_to_right(Align::Center)),
                                 );
-                                let _ = hud(&mut header, group, theme::FAINT);
+                                let _ = hud(&mut header, group, theme::faint());
                                 ui.add_space(20.0);
                             }
                             last_group = group;
@@ -789,13 +820,13 @@ pub fn draw(
                             ui.painter().rect_filled(
                                 rect.shrink2(vec2(6.0, 0.0)),
                                 theme::RADIUS,
-                                theme::WASH_HOVER,
+                                theme::wash_hover(),
                             );
                         } else if response.hovered() {
                             ui.painter().rect_filled(
                                 rect.shrink2(vec2(6.0, 0.0)),
                                 theme::RADIUS,
-                                theme::WASH,
+                                theme::wash(),
                             );
                             state.cursor = position;
                         }
@@ -858,12 +889,12 @@ fn command_row(
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         ui.label(RichText::new(title).size(12.5).color(if active {
-            theme::INK
+            theme::ink()
         } else {
-            theme::MUTED
+            theme::muted()
         }));
         if !hint.is_empty() {
-            let _ = hud(ui, &truncate_chars(hint, 64), theme::FAINT);
+            let _ = hud(ui, &truncate_chars(hint, 64), theme::faint());
         }
     });
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -875,7 +906,7 @@ fn command_row(
             ui.painter().rect(
                 rect,
                 theme::RADIUS,
-                theme::SUNKEN,
+                theme::sunken(),
                 theme::hairline(),
                 egui::StrokeKind::Inside,
             );
@@ -884,7 +915,7 @@ fn command_row(
                 egui::Align2::CENTER_CENTER,
                 shortcut,
                 FontId::new(9.0, theme::mono()),
-                theme::FAINT,
+                theme::faint(),
             );
         }
     });
@@ -906,9 +937,9 @@ fn page_row(ui: &mut Ui, rect: Rect, capsule: &Capsule, query: &str, active: boo
         ),
         Icon::Doc,
         if active {
-            theme::ACCENT_INK
+            theme::accent_ink()
         } else {
-            theme::FAINT
+            theme::faint()
         },
     );
     ui.add_space(18.0);
@@ -922,7 +953,7 @@ fn page_row(ui: &mut Ui, rect: Rect, capsule: &Capsule, query: &str, active: boo
                     capsule.subject.clone()
                 })
                 .size(12.5)
-                .color(if active { theme::INK } else { theme::MUTED }),
+                .color(if active { theme::ink() } else { theme::muted() }),
             )
             .truncate(),
         );
@@ -931,18 +962,18 @@ fn page_row(ui: &mut Ui, rect: Rect, capsule: &Capsule, query: &str, active: boo
             ui.spacing_mut().item_spacing.x = 0.0;
             for (text, hit) in snippet {
                 ui.label(RichText::new(text).size(10.0).color(if hit {
-                    theme::ACCENT_INK
+                    theme::accent_ink()
                 } else {
-                    theme::FAINT
+                    theme::faint()
                 }));
             }
         });
     });
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
         if !capsule.native {
-            let _ = hud(ui, t(Locale::En, Key::ReadOnly), theme::BADGE_BETA);
+            let _ = hud(ui, t(Locale::En, Key::ReadOnly), theme::badge_beta());
         }
-        let _ = hud(ui, &capsule.date, theme::FAINT);
+        let _ = hud(ui, &capsule.date, theme::faint());
     });
 }
 

@@ -96,7 +96,7 @@ pub fn draw(
                 t(locale, Key::ThreadsOnly)
             },
         ),
-        theme::FAINT,
+        theme::faint(),
     );
     bar.with_layout(
         Layout::right_to_left(Align::Center),
@@ -143,9 +143,9 @@ pub fn draw(
                                 rect,
                                 theme::RADIUS,
                                 if is_selected {
-                                    theme::WASH_HOVER
+                                    theme::wash_hover()
                                 } else {
-                                    theme::WASH
+                                    theme::wash()
                                 },
                             );
                         }
@@ -159,7 +159,7 @@ pub fn draw(
                         {
                             let row_ui = &mut row;
                             row_ui.spacing_mut().item_spacing.x = 8.0;
-                            let arrow = crate::chevron(row_ui, theme::FAINT);
+                            let arrow = crate::chevron(row_ui, theme::faint());
                             if arrow.clicked() {
                                 if collapsed {
                                     state.collapsed.remove(&root.message_id);
@@ -174,7 +174,7 @@ pub fn draw(
                                     vec2(13.0, 13.0),
                                 ),
                                 Icon::Mail,
-                                theme::MUTED,
+                                theme::muted(),
                             );
                             row_ui.add_space(19.0);
                             row_ui.vertical(|ui| {
@@ -192,7 +192,7 @@ pub fn draw(
                                         ))
                                         .family(theme::medium())
                                         .size(12.5)
-                                        .color(theme::INK),
+                                        .color(theme::ink()),
                                     )
                                     .truncate(),
                                 );
@@ -210,16 +210,16 @@ pub fn draw(
                                             Key::ReplyMany
                                         )
                                     ),
-                                    theme::FAINT,
+                                    theme::faint(),
                                 );
                             });
                             row_ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 for tag in root.tags.iter().take(2) {
-                                    let _ = tag_chip(ui, tag, theme::MUTED);
+                                    let _ = tag_chip(ui, tag, theme::muted());
                                 }
                                 if !root.native {
                                     let _ =
-                                        tag_chip(ui, t(locale, Key::ReadOnly), theme::BADGE_BETA);
+                                        tag_chip(ui, t(locale, Key::ReadOnly), theme::badge_beta());
                                 }
                             });
                         }
@@ -229,7 +229,7 @@ pub fn draw(
                         ui.painter().hline(
                             rect.x_range(),
                             rect.bottom(),
-                            Stroke::new(1.0, theme::fade(theme::LINE, 0.5)),
+                            Stroke::new(1.0, theme::fade(theme::line(), 0.5)),
                         );
 
                         if !collapsed {
@@ -258,7 +258,7 @@ fn reply_row(
     let indent = 26.0 + (depth as f32) * 18.0;
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
     if response.hovered() {
-        ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+        ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
     }
     let mut row = ui.new_child(
         egui::UiBuilder::new()
@@ -270,7 +270,7 @@ fn reply_row(
     ui.label(
         RichText::new("↳")
             .size(11.0)
-            .color(theme::fade(theme::FAINT, 0.8)),
+            .color(theme::fade(theme::faint(), 0.8)),
     );
     ui.add(
         egui::Label::new(
@@ -284,17 +284,17 @@ fn reply_row(
             ))
             .size(12.0)
             .color(if response.hovered() {
-                theme::INK
+                theme::ink()
             } else {
-                theme::MUTED
+                theme::muted()
             }),
         )
         .truncate(),
     );
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-        let _ = hud(ui, &capsule.date, theme::FAINT);
+        let _ = hud(ui, &capsule.date, theme::faint());
         ui.add_space(8.0);
-        let _ = hud(ui, &truncate_chars(&capsule.from, 24), theme::FAINT);
+        let _ = hud(ui, &truncate_chars(&capsule.from, 24), theme::faint());
     });
     if response.clicked() {
         action.select_id = Some(capsule.message_id.clone());

@@ -74,8 +74,8 @@ pub fn draw_integrations_modal(
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
-                theme::PANEL,
-                Stroke::new(1.0, theme::LINE_STRONG),
+                theme::panel(),
+                Stroke::new(1.0, theme::line_strong()),
                 egui::StrokeKind::Inside,
             );
             // The painted dialog is not enough: without a click-sensing widget
@@ -104,7 +104,7 @@ pub fn draw_integrations_modal(
                     RichText::new(t(locale, Key::IntegrationsTitle))
                         .family(theme::medium())
                         .size(15.0)
-                        .color(theme::INK),
+                        .color(theme::ink()),
                 );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if secondary_button(ui, Some(Icon::Close), "", 26.0).clicked() {
@@ -116,11 +116,11 @@ pub fn draw_integrations_modal(
                 Label::new(
                     RichText::new(t(locale, Key::IntegrationsSubtitle))
                         .size(12.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 )
                 .wrap(),
             );
-            let _ = hud(&mut body, t(locale, Key::IntegrationsHint), theme::FAINT);
+            let _ = hud(&mut body, t(locale, Key::IntegrationsHint), theme::faint());
             body.add_space(10.0);
 
             ScrollArea::vertical()
@@ -138,7 +138,7 @@ pub fn draw_integrations_modal(
                     // users who already keep models on disk.
                     ui.add_space(4.0);
                     crate::views::section(ui, t(locale, Key::CustomModel));
-                    let _ = hud(ui, t(locale, Key::CustomModelHint), theme::FAINT);
+                    let _ = hud(ui, t(locale, Key::CustomModelHint), theme::faint());
                     ui.add_space(6.0);
                     for kind in CustomModelKind::ALL {
                         if custom_model_row(ui, custom_models, kind, locale) {
@@ -180,7 +180,7 @@ fn custom_model_row(
         .unwrap_or(false);
 
     Frame::new()
-        .fill(theme::WASH)
+        .fill(theme::wash())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin::same(10))
@@ -190,14 +190,14 @@ fn custom_model_row(
                     ui.painter(),
                     Rect::from_min_size(ui.cursor().min + vec2(0.0, 2.0), vec2(14.0, 14.0)),
                     Icon::Folder,
-                    theme::ACCENT_INK,
+                    theme::accent_ink(),
                 );
                 ui.add_space(20.0);
                 ui.label(
                     RichText::new(t(locale, kind.key()))
                         .family(theme::medium())
                         .size(13.0)
-                        .color(theme::INK),
+                        .color(theme::ink()),
                 );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if current.is_some()
@@ -227,14 +227,14 @@ fn custom_model_row(
             });
             match &current {
                 Some(path) if valid => {
-                    let _ = hud(ui, path, theme::OK);
+                    let _ = hud(ui, path, theme::ok());
                 }
                 Some(path) => {
-                    let _ = hud(ui, path, theme::BAD);
-                    let _ = hud(ui, t(locale, Key::CustomModelBad), theme::BAD);
+                    let _ = hud(ui, path, theme::bad());
+                    let _ = hud(ui, t(locale, Key::CustomModelBad), theme::bad());
                 }
                 None => {
-                    let _ = hud(ui, t(locale, Key::CustomModelHint), theme::FAINT);
+                    let _ = hud(ui, t(locale, Key::CustomModelHint), theme::faint());
                 }
             }
         });
@@ -248,7 +248,7 @@ fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale:
     let ready = manager.ready(id);
 
     Frame::new()
-        .fill(theme::WASH)
+        .fill(theme::wash())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin::same(10))
@@ -258,7 +258,7 @@ fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale:
                     ui.painter(),
                     Rect::from_min_size(ui.cursor().min + vec2(0.0, 2.0), vec2(14.0, 14.0)),
                     group_icon(id),
-                    theme::ACCENT_INK,
+                    theme::accent_ink(),
                 );
                 ui.add_space(20.0);
                 ui.vertical(|ui| {
@@ -267,7 +267,7 @@ fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale:
                             RichText::new(id.title(locale))
                                 .family(theme::medium())
                                 .size(13.0)
-                                .color(theme::INK),
+                                .color(theme::ink()),
                         );
                         let version = manager
                             .installed_version(id)
@@ -275,19 +275,19 @@ fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale:
                         let _ = hud(
                             ui,
                             &format!("{} {}", t(locale, Key::CompVersion), version),
-                            theme::FAINT,
+                            theme::faint(),
                         );
                         let _ = hud(
                             ui,
                             &crate::human_bytes(spec.size_hint as usize),
-                            theme::FAINT,
+                            theme::faint(),
                         );
                     });
                     ui.add(
                         Label::new(
                             RichText::new(t(locale, desc_key(id)))
                                 .size(11.5)
-                                .color(theme::MUTED),
+                                .color(theme::muted()),
                         )
                         .wrap(),
                     );
@@ -298,20 +298,20 @@ fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale:
             ui.horizontal(|ui| {
                 // Status pill.
                 let (label, color) = match (&job, installed) {
-                    (Some(JobPhase::Done), _) => (t(locale, Key::CompInstalled), theme::OK),
-                    (Some(JobPhase::Failed(_)), _) => (t(locale, Key::CompFailed), theme::BAD),
+                    (Some(JobPhase::Done), _) => (t(locale, Key::CompInstalled), theme::ok()),
+                    (Some(JobPhase::Failed(_)), _) => (t(locale, Key::CompFailed), theme::bad()),
                     (Some(phase), _) if phase.is_active() => (
                         match phase {
                             JobPhase::Extracting => t(locale, Key::CompExtracting),
                             JobPhase::Queued => t(locale, Key::CompDownloading),
                             _ => t(locale, Key::CompDownloading),
                         },
-                        theme::ACCENT_INK,
+                        theme::accent_ink(),
                     ),
-                    (None, true) if ready => (t(locale, Key::CompReady), theme::OK),
-                    (None, true) => (t(locale, Key::CompNotReady), theme::BADGE_BETA),
-                    (None, false) => (t(locale, Key::CompDownload), theme::MUTED),
-                    _ => (t(locale, Key::CompDownload), theme::MUTED),
+                    (None, true) if ready => (t(locale, Key::CompReady), theme::ok()),
+                    (None, true) => (t(locale, Key::CompNotReady), theme::badge_beta()),
+                    (None, false) => (t(locale, Key::CompDownload), theme::muted()),
+                    _ => (t(locale, Key::CompDownload), theme::muted()),
                 };
                 pill(ui, label, color);
 
@@ -321,7 +321,7 @@ fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale:
                     let _ = hud(
                         ui,
                         &format!("{} {}", t(locale, Key::CompRequires), names.join(", ")),
-                        theme::FAINT,
+                        theme::faint(),
                     );
                 }
 
@@ -333,7 +333,7 @@ fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale:
                         ui.label(
                             RichText::new(t(locale, Key::CompDownloading))
                                 .size(11.0)
-                                .color(theme::FAINT),
+                                .color(theme::faint()),
                         );
                     } else if installed {
                         if text_button(ui, Some(Icon::Trash), "", false).clicked() {
@@ -372,7 +372,7 @@ fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale:
                             .map(|total| crate::human_bytes(total as usize))
                             .unwrap_or_else(|| "?".to_string())
                     ),
-                    theme::FAINT,
+                    theme::faint(),
                 );
             }
             if let Some(JobPhase::Failed(message)) = &job {
@@ -381,7 +381,7 @@ fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale:
                         RichText::new(message.clone())
                             .family(theme::mono())
                             .size(9.5)
-                            .color(theme::BAD),
+                            .color(theme::bad()),
                     )
                     .wrap(),
                 );

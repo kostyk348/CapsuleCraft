@@ -245,7 +245,7 @@ pub fn draw(
 
             // Top toolbar.
             let bar = Rect::from_min_size(full.min + vec2(0.0, 0.0), vec2(full.width(), 46.0));
-            ui.painter().rect_filled(bar, 0.0, theme::PANEL);
+            ui.painter().rect_filled(bar, 0.0, theme::panel());
             ui.painter()
                 .hline(bar.x_range(), bar.bottom(), theme::hairline());
 
@@ -261,14 +261,14 @@ pub fn draw(
                     vec2(15.0, 15.0),
                 ),
                 if state.is_pdf() { Icon::Doc } else { Icon::Eye },
-                theme::ACCENT_INK,
+                theme::accent_ink(),
             );
             bar_ui.add_space(26.0);
             bar_ui.label(
                 RichText::new(crate::util::truncate_chars(&state.name, 52))
                     .family(theme::medium())
                     .size(12.5)
-                    .color(theme::INK),
+                    .color(theme::ink()),
             );
             bar_ui.add_space(10.0);
             let pages_label = if state.is_pdf() {
@@ -284,7 +284,7 @@ pub fn draw(
                     None => String::new(),
                 }
             };
-            let _ = hud(&mut bar_ui, &pages_label, theme::FAINT);
+            let _ = hud(&mut bar_ui, &pages_label, theme::faint());
 
             bar_ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if secondary_button(ui, Some(Icon::Close), t(locale, Key::ViewerClose), 30.0)
@@ -329,7 +329,7 @@ pub fn draw(
                 let _ = hud(
                     ui,
                     &format!("{}%", (state.zoom * 100.0) as i32),
-                    theme::FAINT,
+                    theme::faint(),
                 );
                 if secondary_button(ui, Some(Icon::Minus), t(locale, Key::ViewerZoom), 30.0)
                     .on_hover_text(t(locale, Key::ViewerZoom))
@@ -366,7 +366,7 @@ pub fn draw(
                         RichText::new(error)
                             .family(theme::medium())
                             .size(13.0)
-                            .color(theme::BAD),
+                            .color(theme::bad()),
                     )
                     .wrap(),
                 );

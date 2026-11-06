@@ -73,8 +73,8 @@ pub fn draw_encrypt_modal(
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
-                theme::PANEL,
-                Stroke::new(1.0, theme::LINE_STRONG),
+                theme::panel(),
+                Stroke::new(1.0, theme::line_strong()),
                 egui::StrokeKind::Inside,
             );
             let mut body = ui.new_child(
@@ -92,7 +92,7 @@ pub fn draw_encrypt_modal(
                 RichText::new(title)
                     .family(theme::medium())
                     .size(14.0)
-                    .color(theme::INK),
+                    .color(theme::ink()),
             );
             if let Some(mode) = &state.mode {
                 let file_name = match mode {
@@ -104,14 +104,14 @@ pub fn draw_encrypt_modal(
                 body.label(
                     RichText::new(format!("{}: {file_name}", t(locale, Key::EncryptSource)))
                         .size(11.5)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 );
             }
             body.add_space(4.0);
             body.label(
                 RichText::new(t(locale, Key::EncryptHint))
                     .size(10.5)
-                    .color(theme::FAINT),
+                    .color(theme::faint()),
             );
             body.add_space(10.0);
 
@@ -120,7 +120,7 @@ pub fn draw_encrypt_modal(
             } else {
                 t(locale, Key::Passphrase)
             };
-            body.label(RichText::new(pass_label).size(11.0).color(theme::MUTED));
+            body.label(RichText::new(pass_label).size(11.0).color(theme::muted()));
             let pass_response = body.add(
                 egui::TextEdit::singleline(&mut state.password)
                     .password(true)
@@ -132,7 +132,7 @@ pub fn draw_encrypt_modal(
                 body.label(
                     RichText::new(t(locale, Key::RepeatPassphrase))
                         .size(11.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 );
                 body.add(
                     egui::TextEdit::singleline(&mut state.confirm)
@@ -144,7 +144,7 @@ pub fn draw_encrypt_modal(
 
             if let Some(error) = &state.error {
                 body.add_space(6.0);
-                body.label(RichText::new(error).size(11.5).color(theme::BAD));
+                body.label(RichText::new(error).size(11.5).color(theme::bad()));
             }
 
             body.add_space(12.0);

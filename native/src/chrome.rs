@@ -117,8 +117,8 @@ fn caption_button(ui: &mut Ui, button: Caption, height: f32) -> Response {
         .on_hover_cursor(egui::CursorIcon::Default);
     let (fill, ink) = match (button, resp.hovered()) {
         (Caption::Close, true) => (CLOSE_RED, Color32::WHITE),
-        (_, true) => (theme::WASH_HOVER, theme::INK_STRONG),
-        (_, false) => (Color32::TRANSPARENT, theme::MUTED),
+        (_, true) => (theme::wash_hover(), theme::ink_strong()),
+        (_, false) => (Color32::TRANSPARENT, theme::muted()),
     };
     let p = ui.painter();
     p.rect_filled(rect, 0.0, fill);

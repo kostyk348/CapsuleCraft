@@ -60,8 +60,8 @@ pub fn draw_mcp_modal(
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
-                theme::PANEL,
-                Stroke::new(1.0, theme::LINE_STRONG),
+                theme::panel(),
+                Stroke::new(1.0, theme::line_strong()),
                 egui::StrokeKind::Inside,
             );
 
@@ -75,14 +75,14 @@ pub fn draw_mcp_modal(
                 RichText::new(t(locale, Key::McpTitle))
                     .family(theme::medium())
                     .size(15.0)
-                    .color(theme::INK),
+                    .color(theme::ink()),
             );
             body.add_space(4.0);
             body.add(
                 Label::new(
                     RichText::new(t(locale, Key::McpSubtitle))
                         .size(12.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 )
                 .wrap(),
             );
@@ -100,7 +100,7 @@ pub fn draw_mcp_modal(
                 for (idx, label) in tabs {
                     let active = *mcp_tab == idx;
                     let bg = if active {
-                        theme::CONTROLS
+                        theme::controls()
                     } else {
                         Color32::TRANSPARENT
                     };
@@ -110,7 +110,7 @@ pub fn draw_mcp_modal(
                         .inner_margin(Margin::symmetric(10, 5));
                     let resp = frame
                         .show(ui, |ui| {
-                            let text_color = if active { theme::INK } else { theme::MUTED };
+                            let text_color = if active { theme::ink() } else { theme::muted() };
                             ui.label(
                                 RichText::new(label)
                                     .family(theme::medium())
@@ -143,13 +143,13 @@ pub fn draw_mcp_modal(
                 _ => ("Config location: .cursor/mcp.json", cfg_str.clone()),
             };
 
-            body.label(RichText::new(desc).size(11.0).color(theme::FAINT));
+            body.label(RichText::new(desc).size(11.0).color(theme::faint()));
             body.add_space(6.0);
 
             let text_frame = Frame::new()
-                .fill(theme::SUNKEN)
+                .fill(theme::sunken())
                 .corner_radius(theme::RADIUS)
-                .stroke(Stroke::new(1.0, theme::LINE))
+                .stroke(Stroke::new(1.0, theme::line()))
                 .inner_margin(Margin::same(10));
 
             text_frame.show(&mut body, |ui| {
@@ -159,7 +159,7 @@ pub fn draw_mcp_modal(
                             RichText::new(&content_to_copy)
                                 .family(FontFamily::Monospace)
                                 .size(11.0)
-                                .color(theme::INK),
+                                .color(theme::ink()),
                         )
                         .wrap(),
                     );

@@ -108,7 +108,7 @@ pub fn preview_frame<R>(
     add: impl FnOnce(&mut egui::Ui) -> R,
 ) -> egui::InnerResponse<R> {
     egui::Frame::new()
-        .fill(theme::WASH)
+        .fill(theme::wash())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(egui::Margin::same(6))
@@ -121,7 +121,7 @@ pub fn hover_outline(ui: &egui::Ui, rect: egui::Rect, hovered: bool) {
         ui.painter().rect_stroke(
             rect,
             theme::RADIUS,
-            egui::Stroke::new(1.0, theme::ACCENT),
+            egui::Stroke::new(1.0, theme::accent()),
             egui::StrokeKind::Inside,
         );
     }

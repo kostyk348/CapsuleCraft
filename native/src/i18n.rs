@@ -70,7 +70,7 @@ impl Locale {
     }
 }
 
-fn settings_dir() -> Option<PathBuf> {
+pub fn settings_dir() -> Option<PathBuf> {
     if let Ok(appdata) = std::env::var("APPDATA") {
         return Some(PathBuf::from(appdata).join("com.capsuleos.app"));
     }
@@ -426,6 +426,12 @@ strings! {
     Delete => ("Удалить", "Delete"),
     Cancel => ("Отмена", "Cancel"),
     PageDeleted => ("Страница удалена", "Page deleted"),
+    PageTrashed => ("Страница перемещена в корзину", "Page moved to the trash"),
+    CommandTheme => ("Переключить тему", "Toggle theme"),
+    ThemeLight => ("Переключить на светлую", "Switch to light"),
+    ThemeDark => ("Переключить на тёмную", "Switch to dark"),
+    DeleteBlockConfirm => ("Блок будет удалён со страницы. Восстановить его будет нельзя.", "The block will be removed from the page. This cannot be undone."),
+    BlockDeleted => ("Блок удалён", "Block deleted"),
     Tags => ("Теги", "Tags"),
     AddTag => ("Добавить тег", "Add tag"),
     Parent => ("Родитель", "Parent"),

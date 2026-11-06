@@ -31,8 +31,8 @@ pub fn draw_faq_modal(show: bool, locale: Locale, ctx: &egui::Context) -> bool {
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
-                theme::PANEL,
-                Stroke::new(1.0, theme::LINE_STRONG),
+                theme::panel(),
+                Stroke::new(1.0, theme::line_strong()),
                 egui::StrokeKind::Inside,
             );
 
@@ -46,14 +46,14 @@ pub fn draw_faq_modal(show: bool, locale: Locale, ctx: &egui::Context) -> bool {
                 RichText::new(t(locale, Key::FaqTitle))
                     .family(theme::medium())
                     .size(19.0)
-                    .color(theme::INK),
+                    .color(theme::ink()),
             );
             body.add_space(2.0);
             body.add(
                 Label::new(
                     RichText::new(t(locale, Key::FaqSubtitle))
                         .size(12.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                 )
                 .wrap(),
             );
@@ -78,14 +78,14 @@ pub fn draw_faq_modal(show: bool, locale: Locale, ctx: &egui::Context) -> bool {
                             RichText::new(t(locale, question))
                                 .family(theme::medium())
                                 .size(13.5)
-                                .color(theme::INK),
+                                .color(theme::ink()),
                         );
                         ui.add_space(3.0);
                         ui.add(
                             Label::new(
                                 RichText::new(t(locale, answer))
                                     .size(12.5)
-                                    .color(theme::MUTED),
+                                    .color(theme::muted()),
                             )
                             .wrap(),
                         );

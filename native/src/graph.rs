@@ -248,24 +248,71 @@ impl Graph {
         let mut velocities = vec![[0.0f32, 0.0f32]; n];
         let ideal = (1.0 / n as f32).sqrt().clamp(0.06, 0.35);
 
+        // Repulsion by brute force is O(n^2) per iteration; a spatial hash
+        // turns it into O(n * neighbours) once the vault grows past the
+        // crossover. Both paths visit pairs in index order, so the layout
+        // stays deterministic.
+        let use_grid = n >= 512;
+        let cell = ideal.max(1e-3);
+
+        let mut settled = 0u32;
         for step in 0..iterations {
             let cooling = 1.0 - step as f32 / iterations as f32;
             let mut forces = vec![[0.0f32, 0.0f32]; n];
 
             // Repulsion (n is a vault page count, not a social graph).
-            for a in 0..n {
-                for b in (a + 1)..n {
-                    let dx = positions[a][0] - positions[b][0];
-                    let dy = positions[a][1] - positions[b][1];
-                    let dist2 = (dx * dx + dy * dy).max(1e-4);
-                    let force = (ideal * ideal) / dist2;
-                    let inv = 1.0 / dist2.sqrt();
-                    let fx = dx * inv * force;
-                    let fy = dy * inv * force;
-                    forces[a][0] += fx;
-                    forces[a][1] += fy;
-                    forces[b][0] -= fx;
-                    forces[b][1] -= fy;
+            if use_grid {
+                let mut grid: HashMap<(i32, i32), Vec<usize>> = HashMap::new();
+                for (i, pos) in positions.iter().enumerate() {
+                    let cx = (pos[0] / cell).floor() as i32;
+                    let cy = (pos[1] / cell).floor() as i32;
+                    grid.entry((cx, cy)).or_default().push(i);
+                }
+                for a in 0..n {
+                    let cx = (positions[a][0] / cell).floor() as i32;
+                    let cy = (positions[a][1] / cell).floor() as i32;
+                    for oy in -1..=1 {
+                        for ox in -1..=1 {
+                            let Some(bucket) = grid.get(&(cx + ox, cy + oy)) else {
+                                continue;
+                            };
+                            for &b in bucket {
+                                if b <= a {
+                                    continue;
+                                }
+                                let dx = positions[a][0] - positions[b][0];
+                                let dy = positions[a][1] - positions[b][1];
+                                let dist2 = (dx * dx + dy * dy).max(1e-4);
+                                if dist2 > cell * cell * 9.0 {
+                                    continue;
+                                }
+                                let force = (ideal * ideal) / dist2;
+                                let inv = 1.0 / dist2.sqrt();
+                                let fx = dx * inv * force;
+                                let fy = dy * inv * force;
+                                forces[a][0] += fx;
+                                forces[a][1] += fy;
+                                forces[b][0] -= fx;
+                                forces[b][1] -= fy;
+                            }
+                        }
+                    }
+                }
+            } else {
+                for a in 0..n {
+                    for b in (a + 1)..n {
+                        let dx = positions[a][0] - positions[b][0];
+                        let dy = positions[a][1] - positions[b][1];
+                        let dist2 = (dx * dx + dy * dy).max(1e-4);
+                        let force = (ideal * ideal) / dist2;
+                        let inv = 1.0 / dist2.sqrt();
+                        let fx = dx * inv * force;
+                        let fy = dy * inv * force;
+                        forces[a][0] += fx;
+                        forces[a][1] += fy;
+                        forces[b][0] -= fx;
+                        forces[b][1] -= fy;
+                    }
                 }
             }
 
@@ -292,6 +339,21 @@ impl Graph {
                 let max_step = 0.12 * cooling;
                 positions[i][0] += velocities[i][0].clamp(-max_step, max_step);
                 positions[i][1] += velocities[i][1].clamp(-max_step, max_step);
+            }
+
+            // A settled layout never gets better: bail out early instead of
+            // burning the full iteration budget every rebuild.
+            let max_disp = velocities
+                .iter()
+                .map(|v| v[0].abs().max(v[1].abs()))
+                .fold(0.0f32, f32::max);
+            if step >= 40 && max_disp < 1e-3 {
+                settled += 1;
+                if settled >= 3 {
+                    break;
+                }
+            } else {
+                settled = 0;
             }
         }
 

@@ -145,7 +145,7 @@ pub fn draw(
     }
     if filters_active {
         bar.add_space(2.0);
-        let _ = tag_chip(&mut bar, "filtered", theme::ACCENT_INK);
+        let _ = tag_chip(&mut bar, "filtered", theme::accent_ink());
         if text_button(&mut bar, None, t(locale, Key::ClearFilters), false).clicked() {
             state.filters.clear();
         }
@@ -178,9 +178,9 @@ pub fn draw(
         &stats.overdue.to_string(),
         t(locale, Key::TasksOverdue),
         if stats.overdue > 0 {
-            theme::BAD
+            theme::bad()
         } else {
-            theme::FAINT
+            theme::faint()
         },
     );
     right.add_space(10.0);
@@ -188,14 +188,14 @@ pub fn draw(
         &mut right,
         &format!("{}%", stats.completion_rate),
         t(locale, Key::TasksDone),
-        theme::INK,
+        theme::ink(),
     );
     right.add_space(10.0);
     stat(
         &mut right,
         &stats.open.to_string(),
         t(locale, Key::TasksOpen),
-        theme::INK,
+        theme::ink(),
     );
 
     if state.show_filters {
@@ -444,7 +444,7 @@ fn export_ics(vault: &Vault, locale: Locale) {
 
 fn filter_bar(ui: &mut Ui, state: &mut PlanningState, all: &[PlannedTask], locale: Locale) {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 44.0), Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, theme::SUNKEN);
+    ui.painter().rect_filled(rect, 0.0, theme::sunken());
     let mut bar = ui.new_child(
         egui::UiBuilder::new()
             .max_rect(rect.shrink2(vec2(super::VIEW_PAD, 9.0)))
@@ -456,7 +456,7 @@ fn filter_bar(ui: &mut Ui, state: &mut PlanningState, all: &[PlannedTask], local
     // Text
     let width = 150.0;
     Frame::new()
-        .fill(theme::CONTROLS)
+        .fill(theme::controls())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin::symmetric(8, 4))
@@ -642,7 +642,7 @@ fn quick_add(
     enabled: bool,
 ) {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, theme::SUNKEN);
+    ui.painter().rect_filled(rect, 0.0, theme::sunken());
     ui.painter()
         .hline(rect.x_range(), rect.bottom() - 0.5, theme::hairline());
     let mut bar = ui.new_child(
@@ -656,7 +656,7 @@ fn quick_add(
         ui.painter(),
         Rect::from_min_size(ui.cursor().min + vec2(2.0, 5.0), vec2(13.0, 13.0)),
         Icon::Plus,
-        theme::FAINT,
+        theme::faint(),
     );
     ui.add_space(20.0);
 
@@ -679,9 +679,9 @@ fn quick_add(
             .margin(Margin::same(2))
             .font(FontId::new(10.5, theme::mono()))
             .text_color(if due_invalid {
-                theme::BAD
+                theme::bad()
             } else {
-                theme::MUTED
+                theme::muted()
             }),
     );
     if due_response.changed() {
@@ -785,7 +785,7 @@ fn task_row(
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::hover());
     let hovered = ui.rect_contains_pointer(rect);
     if hovered {
-        ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+        ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
     }
     let mut row = ui.new_child(
         egui::UiBuilder::new()
@@ -814,28 +814,28 @@ fn task_row(
             .frame(Frame::NONE)
             .margin(Margin::same(0))
             .font(FontId::new(13.0, egui::FontFamily::Proportional))
-            .text_color(if done { theme::FAINT } else { theme::INK }),
+            .text_color(if done { theme::faint() } else { theme::ink() }),
     );
     if response.changed() {
         touched = true;
     }
 
     if blocked {
-        let _ = tag_chip(ui, t(locale, Key::BlockedShort), theme::BADGE_BETA);
+        let _ = tag_chip(ui, t(locale, Key::BlockedShort), theme::badge_beta());
     }
 
     // Due date edit.
     let mut due = item.due.clone().unwrap_or_default();
     let due_color = if due.is_empty() {
-        theme::FAINT
+        theme::faint()
     } else if is_date_key(&due) {
         if overdue {
-            theme::BAD
+            theme::bad()
         } else {
-            theme::MUTED
+            theme::muted()
         }
     } else {
-        theme::BAD
+        theme::bad()
     };
     let due_response = ui.add_sized(
         vec2(84.0, 22.0),
@@ -962,7 +962,7 @@ fn task_row(
     ui.painter().hline(
         rect.x_range(),
         rect.bottom(),
-        Stroke::new(1.0, theme::fade(theme::LINE, 0.5)),
+        Stroke::new(1.0, theme::fade(theme::line(), 0.5)),
     );
     let _ = key;
 }
@@ -1003,19 +1003,19 @@ fn kanban(
             ui.allocate_ui_with_layout(vec2(width, 0.0), Layout::top_down(Align::Min), |ui| {
                 ui.set_width(width);
                 Frame::new()
-                    .fill(theme::WASH)
+                    .fill(theme::wash())
                     .corner_radius(theme::RADIUS)
                     .stroke(theme::hairline())
                     .inner_margin(Margin::same(8))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            let _ = hud(ui, labels[index], theme::MUTED);
+                            let _ = hud(ui, labels[index], theme::muted());
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 ui.label(
                                     RichText::new(column.len().to_string())
                                         .family(theme::mono())
                                         .size(9.5)
-                                        .color(theme::FAINT),
+                                        .color(theme::faint()),
                                 );
                             });
                         });
@@ -1049,7 +1049,7 @@ fn kanban_card(
     let blocked = is_blocked(task, all);
     let overdue = bucket_of(task, today) == Bucket::Overdue;
     let card = Frame::new()
-        .fill(theme::BG)
+        .fill(theme::bg())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
         .inner_margin(Margin {
@@ -1077,7 +1077,7 @@ fn kanban_card(
                         .margin(Margin::same(0))
                         .desired_rows(1)
                         .font(FontId::new(12.5, egui::FontFamily::Proportional))
-                        .text_color(if done { theme::FAINT } else { theme::INK }),
+                        .text_color(if done { theme::faint() } else { theme::ink() }),
                 );
                 if response.changed() {
                     touched = true;
@@ -1096,14 +1096,14 @@ fn kanban_card(
                         .family(theme::mono())
                         .size(9.0)
                         .color(if overdue {
-                            theme::BAD
+                            theme::bad()
                         } else {
-                            theme::FAINT
+                            theme::faint()
                         }),
                     );
                 }
                 if blocked {
-                    let _ = tag_chip(ui, t(locale, Key::BlockedShort), theme::BADGE_BETA);
+                    let _ = tag_chip(ui, t(locale, Key::BlockedShort), theme::badge_beta());
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if column < 2 {
@@ -1183,9 +1183,9 @@ fn gantt(
                                     .family(theme::mono())
                                     .size(8.5)
                                     .color(if is_today {
-                                        theme::ACCENT_INK
+                                        theme::accent_ink()
                                     } else {
-                                        theme::FAINT
+                                        theme::faint()
                                     }),
                             );
                         },
@@ -1204,7 +1204,7 @@ fn gantt(
                     ui.allocate_exact_size(vec2(label_w + graph_w, 32.0), Sense::hover());
                 let hovered = ui.rect_contains_pointer(rect);
                 if hovered {
-                    ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+                    ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
                 }
                 // Today column wash.
                 let today_offset = planning::days_between(&range.start, today);
@@ -1213,7 +1213,7 @@ fn gantt(
                     ui.painter().rect_filled(
                         Rect::from_min_max(pos2(x, rect.top()), pos2(x + cell_w, rect.bottom())),
                         0.0,
-                        theme::fade(theme::ACCENT, 0.08),
+                        theme::fade(theme::accent(), 0.08),
                     );
                 }
                 let mut label = ui.new_child(
@@ -1237,9 +1237,9 @@ fn gantt(
                 let response = label.add(
                     egui::Label::new(RichText::new(text).size(11.5).color(
                         if task.item.is_done() {
-                            theme::FAINT
+                            theme::faint()
                         } else {
-                            theme::INK
+                            theme::ink()
                         },
                     ))
                     .truncate()
@@ -1259,12 +1259,12 @@ fn gantt(
                     let w = (span as f32 * cell_w - 2.0).max(4.0);
                     let bar = Rect::from_min_size(pos2(x, rect.center().y - 6.0), vec2(w, 12.0));
                     let color = if task.item.is_done() {
-                        theme::fade(theme::MUTED, 0.5)
+                        theme::fade(theme::muted(), 0.5)
                     } else {
                         match task.item.priority() {
-                            "high" => theme::BAD,
-                            "low" => theme::ACCENT_INK,
-                            _ => theme::ACCENT,
+                            "high" => theme::bad(),
+                            "low" => theme::accent_ink(),
+                            _ => theme::accent(),
                         }
                     };
                     ui.painter()
@@ -1281,14 +1281,14 @@ fn gantt(
                             Align2::LEFT_CENTER,
                             format!("{} {}{}", task.item.text, span, t(locale, Key::SpanDays)),
                             FontId::new(9.0, theme::mono()),
-                            theme::MUTED,
+                            theme::muted(),
                         );
                     }
                 }
                 ui.painter().hline(
                     rect.x_range(),
                     rect.bottom(),
-                    Stroke::new(1.0, theme::fade(theme::LINE, 0.5)),
+                    Stroke::new(1.0, theme::fade(theme::line(), 0.5)),
                 );
             }
         });
@@ -1332,7 +1332,7 @@ fn calendar(
                 RichText::new(month_label(state.year, state.month, locale))
                     .family(theme::display())
                     .size(16.0)
-                    .color(theme::INK),
+                    .color(theme::ink()),
             );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if text_button(ui, None, t(locale, Key::Today), false).clicked() {
@@ -1353,7 +1353,7 @@ fn calendar(
                     vec2(cell, 18.0),
                     Layout::top_down(Align::Center),
                     |ui| {
-                        let _ = hud(ui, label, theme::FAINT);
+                        let _ = hud(ui, label, theme::faint());
                     },
                 );
             }
@@ -1374,9 +1374,9 @@ fn calendar(
                     let is_today = key == today;
                     let focused = state.focus_day.as_deref() == Some(key.as_str());
                     let fill = if focused {
-                        theme::fade(theme::ACCENT, 0.12)
+                        theme::fade(theme::accent(), 0.12)
                     } else if is_today {
-                        theme::WASH
+                        theme::wash()
                     } else {
                         Color32::TRANSPARENT
                     };
@@ -1385,14 +1385,14 @@ fn calendar(
                         theme::RADIUS,
                         fill,
                         if is_today {
-                            Stroke::new(1.0, theme::fade(theme::ACCENT, 0.5))
+                            Stroke::new(1.0, theme::fade(theme::accent(), 0.5))
                         } else {
-                            Stroke::new(1.0, theme::fade(theme::LINE, 0.6))
+                            Stroke::new(1.0, theme::fade(theme::line(), 0.6))
                         },
                         egui::StrokeKind::Inside,
                     );
                     if response.hovered() {
-                        ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+                        ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
                     }
                     let day_number = date.map(|d| d.day()).unwrap_or(0);
                     ui.painter().text(
@@ -1401,9 +1401,9 @@ fn calendar(
                         day_number.to_string(),
                         FontId::new(10.0, theme::mono_bold()),
                         if in_month {
-                            theme::MUTED
+                            theme::muted()
                         } else {
-                            theme::fade(theme::FAINT, 0.5)
+                            theme::fade(theme::faint(), 0.5)
                         },
                     );
                     let mut y = rect.top() + 22.0;
@@ -1412,8 +1412,8 @@ fn calendar(
                             break;
                         }
                         let color = match task.item.priority() {
-                            "high" => theme::BAD,
-                            _ => theme::ACCENT_INK,
+                            "high" => theme::bad(),
+                            _ => theme::accent_ink(),
                         };
                         let dot = pos2(rect.left() + 8.0, y + 4.0);
                         ui.painter().circle_filled(dot, 2.0, color);
@@ -1423,9 +1423,9 @@ fn calendar(
                             truncate_chars(&task.item.text, 14),
                             FontId::new(9.0, egui::FontFamily::Proportional),
                             if task.item.is_done() {
-                                theme::FAINT
+                                theme::faint()
                             } else {
-                                theme::MUTED
+                                theme::muted()
                             },
                         );
                         y += 14.0;
@@ -1436,7 +1436,7 @@ fn calendar(
                             Align2::LEFT_CENTER,
                             format!("+{}", tasks.len() - 3),
                             FontId::new(8.5, theme::mono()),
-                            theme::FAINT,
+                            theme::faint(),
                         );
                     }
                     if response.clicked() {
@@ -1451,7 +1451,7 @@ fn calendar(
         section(ui, &format!("{focus}"));
         let day_tasks = tasks_on_day(visible, &focus, true);
         if day_tasks.is_empty() {
-            ui.label(RichText::new("—").size(12.0).color(theme::FAINT));
+            ui.label(RichText::new("—").size(12.0).color(theme::faint()));
         }
         let all = visible.to_vec();
         for task in &day_tasks {

@@ -113,16 +113,16 @@ pub fn vault_switcher(ui: &mut Ui, vault: &Vault) -> Response {
     let full_name = format!("{prefix}{name}");
     let name = truncate_chars(&full_name, 30);
     let font = FontId::new(12.5, theme::medium());
-    let galley = ui.painter().layout_no_wrap(name.clone(), font, theme::INK);
+    let galley = ui.painter().layout_no_wrap(name.clone(), font, theme::ink());
     let width = 12.0 + 14.0 + 8.0 + galley.size().x + 10.0 + 12.0;
     let (rect, response) = ui.allocate_exact_size(vec2(width, 28.0), Sense::click());
     if response.hovered() {
-        ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+        ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
     }
     let ink = if response.hovered() {
-        theme::INK
+        theme::ink()
     } else {
-        theme::MUTED
+        theme::muted()
     };
     icons::paint(
         ui.painter(),
@@ -143,7 +143,7 @@ pub fn vault_switcher(ui: &mut Ui, vault: &Vault) -> Response {
         ui.painter(),
         Rect::from_center_size(pos2(rect.right() - 12.0, rect.center().y), vec2(10.0, 10.0)),
         Icon::ChevronDown,
-        theme::FAINT,
+        theme::faint(),
     );
     response
         .on_hover_text(vault.dir.display().to_string())
@@ -213,19 +213,19 @@ pub fn draw_sidebar(
             theme::HUD_SIZE,
             theme::mono_bold(),
             theme::LABEL_SPACING,
-            theme::SIDEBAR_INK,
+            theme::sidebar_ink(),
         );
         header.painter().galley(
             pos2(rect.left() + 2.0, rect.center().y - label.size().y / 2.0),
             label.clone(),
-            theme::SIDEBAR_INK,
+            theme::sidebar_ink(),
         );
         header.painter().text(
             pos2(rect.left() + 2.0 + label.size().x + 8.0, rect.center().y),
             Align2::LEFT_CENTER,
             vault.capsules.len().to_string(),
             FontId::new(9.0, theme::mono()),
-            theme::FAINT,
+            theme::faint(),
         );
 
         let is_project = crate::vault::is_project_vault(&vault.dir);
@@ -248,13 +248,13 @@ pub fn draw_sidebar(
             })
             .on_hover_cursor(egui::CursorIcon::PointingHand);
         if fold_resp.hovered() {
-            header.painter().rect_filled(fold_rect, theme::RADIUS, theme::WASH);
+            header.painter().rect_filled(fold_rect, theme::RADIUS, theme::wash());
         }
         icons::paint(
             header.painter(),
             Rect::from_center_size(fold_rect.center(), vec2(12.0, 12.0)),
             if all_subfolders_collapsed { Icon::Folder } else { Icon::ChevronDown },
-            if fold_resp.hovered() { theme::INK } else { theme::FAINT },
+            if fold_resp.hovered() { theme::ink() } else { theme::faint() },
         );
         if fold_resp.clicked() {
             if all_subfolders_collapsed {
@@ -277,13 +277,13 @@ pub fn draw_sidebar(
                 .on_hover_text(t(locale, Key::SyncProjectTooltip))
                 .on_hover_cursor(egui::CursorIcon::PointingHand);
             if sync_resp.hovered() {
-                header.painter().rect_filled(sync_rect, theme::RADIUS, theme::WASH);
+                header.painter().rect_filled(sync_rect, theme::RADIUS, theme::wash());
             }
             icons::paint(
                 header.painter(),
                 Rect::from_center_size(sync_rect.center(), vec2(12.0, 12.0)),
                 Icon::Reload,
-                if sync_resp.hovered() { theme::INK } else { theme::FAINT },
+                if sync_resp.hovered() { theme::ink() } else { theme::faint() },
             );
             if sync_resp.clicked() {
                 action.sync_project = true;
@@ -307,16 +307,16 @@ pub fn draw_sidebar(
         if collapse.hovered() {
             header
                 .painter()
-                .rect_filled(collapse_rect, theme::RADIUS, theme::WASH);
+                .rect_filled(collapse_rect, theme::RADIUS, theme::wash());
         }
         icons::paint(
             header.painter(),
             Rect::from_center_size(collapse_rect.center(), vec2(12.0, 12.0)),
             Icon::Sidebar,
             if collapse.hovered() {
-                theme::INK
+                theme::ink()
             } else {
-                theme::FAINT
+                theme::faint()
             },
         );
         if collapse.clicked() {
@@ -336,16 +336,16 @@ pub fn draw_sidebar(
         if plus.hovered() {
             header
                 .painter()
-                .rect_filled(plus_rect, theme::RADIUS, theme::WASH);
+                .rect_filled(plus_rect, theme::RADIUS, theme::wash());
         }
         icons::paint(
             header.painter(),
             Rect::from_center_size(plus_rect.center(), vec2(12.0, 12.0)),
             Icon::Plus,
             if plus.hovered() {
-                theme::INK
+                theme::ink()
             } else {
-                theme::FAINT
+                theme::faint()
             },
         );
         if plus.clicked() {
@@ -401,9 +401,9 @@ pub fn draw_sidebar(
                             Stroke::new(
                                 1.0,
                                 if hovered {
-                                    theme::ACCENT
+                                    theme::accent()
                                 } else {
-                                    theme::fade(theme::LINE, 0.4)
+                                    theme::fade(theme::line(), 0.4)
                                 },
                             ),
                             egui::StrokeKind::Inside,
@@ -413,7 +413,7 @@ pub fn draw_sidebar(
                             ui.painter().rect_filled(
                                 root_drop_rect,
                                 theme::RADIUS,
-                                theme::fade(theme::ACCENT, 0.1),
+                                theme::fade(theme::accent(), 0.1),
                             );
                             drop_target = Some(None);
                         }
@@ -424,7 +424,7 @@ pub fn draw_sidebar(
                             Align2::CENTER_CENTER,
                             text,
                             FontId::new(11.0, theme::mono()),
-                            if hovered { theme::ACCENT } else { theme::FAINT },
+                            if hovered { theme::accent() } else { theme::faint() },
                         );
                     }
 
@@ -469,7 +469,7 @@ pub fn draw_sidebar(
                             search.trim()
                         ))
                         .size(12.0)
-                        .color(theme::MUTED),
+                        .color(theme::muted()),
                     );
                     ui.add_space(6.0);
                     if text_button(ui, None, t(locale, Key::ClearSearch), false).clicked() {
@@ -479,7 +479,7 @@ pub fn draw_sidebar(
                     let _ = hud(
                         ui,
                         &format!("{} · {}", rows.len(), t(locale, Key::Results)),
-                        theme::FAINT,
+                        theme::faint(),
                     );
                     for (index, score, snippet) in rows.iter().take(60) {
                         if draw_search_row(
@@ -519,7 +519,7 @@ pub fn draw_sidebar(
         RichText::new(hud_text)
             .family(theme::mono_bold())
             .size(8.5)
-            .color(theme::FAINT),
+            .color(theme::faint()),
     );
 
     footer.add_space(2.0);
@@ -541,7 +541,7 @@ pub fn draw_sidebar(
         RichText::new(counts)
             .family(theme::mono())
             .size(9.5)
-            .color(theme::MUTED),
+            .color(theme::muted()),
     );
     if !vault.load_errors.is_empty() {
         counts_label.on_hover_text(vault.load_errors.join("\n"));
@@ -582,21 +582,21 @@ fn vault_card(ui: &mut Ui, vault: &Vault) -> Response {
         rect,
         theme::RADIUS,
         if response.hovered() {
-            theme::WASH_HOVER
+            theme::wash_hover()
         } else {
-            theme::WASH
+            theme::wash()
         },
         theme::hairline(),
         egui::StrokeKind::Inside,
     );
     let tile = Rect::from_center_size(pos2(rect.left() + 22.0, rect.center().y), vec2(28.0, 28.0));
     ui.painter()
-        .rect_filled(tile, theme::RADIUS, theme::fade(theme::ACCENT, 0.14));
+        .rect_filled(tile, theme::RADIUS, theme::fade(theme::accent(), 0.14));
     icons::paint(
         ui.painter(),
         Rect::from_center_size(tile.center(), vec2(15.0, 15.0)),
         Icon::Folder,
-        theme::ACCENT_INK,
+        theme::accent_ink(),
     );
     let (name, is_project) = crate::vault::get_vault_display_info(&vault.dir);
     let subtext = if is_project { "Project .capsule" } else { "Local .eml folder" };
@@ -607,14 +607,14 @@ fn vault_card(ui: &mut Ui, vault: &Vault) -> Response {
         Align2::LEFT_CENTER,
         truncated_name,
         FontId::new(12.5, theme::semibold()),
-        theme::INK,
+        theme::ink(),
     );
     ui.painter().text(
         pos2(tile.right() + 10.0, rect.center().y + 8.0),
         Align2::LEFT_CENTER,
         subtext,
         FontId::new(10.0, theme::mono()),
-        theme::FAINT,
+        theme::faint(),
     );
     response
         .on_hover_text(vault.dir.display().to_string())
@@ -626,7 +626,7 @@ fn search_box(ui: &mut Ui, search: &mut String) -> Response {
     ui.painter().rect(
         rect,
         theme::RADIUS,
-        theme::WASH,
+        theme::wash(),
         theme::hairline(),
         egui::StrokeKind::Inside,
     );
@@ -634,7 +634,7 @@ fn search_box(ui: &mut Ui, search: &mut String) -> Response {
         ui.painter(),
         Rect::from_center_size(pos2(rect.left() + 14.0, rect.center().y), vec2(13.0, 13.0)),
         Icon::Search,
-        theme::FAINT,
+        theme::faint(),
     );
     let text_rect = Rect::from_min_max(
         pos2(rect.left() + 28.0, rect.top() + 4.0),
@@ -657,7 +657,7 @@ fn search_box(ui: &mut Ui, search: &mut String) -> Response {
         ui.painter().rect_stroke(
             rect,
             theme::RADIUS,
-            Stroke::new(1.0, theme::ACCENT),
+            Stroke::new(1.0, theme::accent()),
             egui::StrokeKind::Inside,
         );
     }
@@ -673,7 +673,7 @@ fn empty_pages(ui: &mut Ui, action: &mut ShellAction, no_pages: bool) {
             "No native pages in this vault."
         })
         .size(12.0)
-        .color(theme::MUTED),
+        .color(theme::muted()),
     );
     ui.add_space(8.0);
     if primary_button(ui, "New page", 28.0).clicked() {
@@ -732,37 +732,37 @@ fn draw_page_nodes(
             ui.painter().rect_stroke(
                 rect,
                 theme::RADIUS,
-                Stroke::new(1.0, theme::fade(theme::LINE, 0.4)),
+                Stroke::new(1.0, theme::fade(theme::line(), 0.4)),
                 egui::StrokeKind::Inside,
             );
         } else if is_valid_drop_target {
             ui.painter().rect_stroke(
                 rect,
                 theme::RADIUS,
-                Stroke::new(1.5, theme::ACCENT),
+                Stroke::new(1.5, theme::accent()),
                 egui::StrokeKind::Inside,
             );
             ui.painter()
-                .rect_filled(rect, theme::RADIUS, theme::fade(theme::ACCENT, 0.15));
+                .rect_filled(rect, theme::RADIUS, theme::fade(theme::accent(), 0.15));
         } else if is_cycle_target {
             ui.painter().rect_stroke(
                 rect,
                 theme::RADIUS,
-                Stroke::new(1.5, theme::BAD),
+                Stroke::new(1.5, theme::bad()),
                 egui::StrokeKind::Inside,
             );
             ui.painter()
-                .rect_filled(rect, theme::RADIUS, theme::fade(theme::BAD, 0.15));
+                .rect_filled(rect, theme::RADIUS, theme::fade(theme::bad(), 0.15));
         } else if is_selected {
             ui.painter()
-                .rect_filled(rect, theme::RADIUS, theme::WASH_SELECTED);
+                .rect_filled(rect, theme::RADIUS, theme::wash_selected());
             ui.painter().rect_filled(
                 Rect::from_min_size(pos2(rect.left() - 7.0, rect.top() + 7.0), vec2(2.0, 16.0)),
                 0.0,
                 Color32::WHITE,
             );
         } else if response.hovered() {
-            ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+            ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
         }
 
         let chevron_rect = Rect::from_center_size(
@@ -786,7 +786,7 @@ fn draw_page_nodes(
                 } else {
                     Icon::ChevronDown
                 },
-                theme::FAINT,
+                theme::faint(),
             );
             toggle = chev.clicked();
         }
@@ -794,9 +794,9 @@ fn draw_page_nodes(
         let ink = if is_selected || response.hovered() || is_valid_drop_target {
             Color32::WHITE
         } else if is_dragged {
-            theme::FAINT
+            theme::faint()
         } else {
-            theme::SIDEBAR_INK
+            theme::sidebar_ink()
         };
         icons::paint(
             ui.painter(),
@@ -842,7 +842,7 @@ fn draw_page_nodes(
                     vec2(11.0, 11.0),
                 ),
                 Icon::Lock,
-                theme::BADGE_BETA,
+                theme::badge_beta(),
             );
         }
 
@@ -867,11 +867,11 @@ fn draw_page_nodes(
                     pos2(pointer_pos.x + 12.0, pointer_pos.y + 12.0),
                     vec2(140.0, 24.0),
                 );
-                painter.rect_filled(preview_rect, theme::RADIUS, theme::WASH_SELECTED);
+                painter.rect_filled(preview_rect, theme::RADIUS, theme::wash_selected());
                 painter.rect_stroke(
                     preview_rect,
                     theme::RADIUS,
-                    Stroke::new(1.0, theme::ACCENT),
+                    Stroke::new(1.0, theme::accent()),
                     egui::StrokeKind::Inside,
                 );
                 painter.text(
@@ -935,19 +935,19 @@ fn draw_search_row(
     let is_selected = selected == Some(index);
     if is_selected {
         ui.painter()
-            .rect_filled(rect, theme::RADIUS, theme::WASH_SELECTED);
+            .rect_filled(rect, theme::RADIUS, theme::wash_selected());
         ui.painter().rect_filled(
             Rect::from_min_size(pos2(rect.left() - 7.0, rect.top() + 10.0), vec2(2.0, 18.0)),
             0.0,
             Color32::WHITE,
         );
     } else if response.hovered() {
-        ui.painter().rect_filled(rect, theme::RADIUS, theme::WASH);
+        ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
     }
     let ink = if is_selected || response.hovered() {
         Color32::WHITE
     } else {
-        theme::SIDEBAR_INK
+        theme::sidebar_ink()
     };
     icons::paint(
         ui.painter(),
@@ -1001,10 +1001,10 @@ fn draw_search_row(
             if is_selected || response.hovered() {
                 Color32::WHITE
             } else {
-                theme::INK
+                theme::ink()
             }
         } else {
-            theme::FAINT
+            theme::faint()
         };
         let galley = painter.layout_no_wrap(segment, FontId::new(9.5, theme::mono()), color);
         let width = galley.size().x;
@@ -1019,7 +1019,7 @@ fn draw_search_row(
         Align2::RIGHT_CENTER,
         format!("{score:.1}"),
         FontId::new(9.0, theme::mono()),
-        theme::FAINT,
+        theme::faint(),
     );
     if !capsule.native {
         icons::paint(
@@ -1029,7 +1029,7 @@ fn draw_search_row(
                 vec2(11.0, 11.0),
             ),
             Icon::Lock,
-            theme::BADGE_BETA,
+            theme::badge_beta(),
         );
     }
     let response = if capsule.native {

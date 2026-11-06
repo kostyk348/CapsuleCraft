@@ -205,7 +205,7 @@ impl ComponentId {
                 ),
                 name: "engine.tar.gz".to_string(),
             }],
-            ComponentId::OcrModel => ["model.safetensors", "tokenizer.json", "config.json", "chat_template.jinja", "tokenizer_config.json"]
+            ComponentId::OcrModel => ["model.safetensors", "tokenizer.json", "config.json", "processor_config.json", "chat_template.jinja", "tokenizer_config.json"]
                 .iter()
                 .map(|name| FileSpec {
                     url: hf("xiaomi-research/Xiaomi-OCR-0", name),

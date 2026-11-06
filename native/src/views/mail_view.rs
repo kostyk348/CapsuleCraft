@@ -74,7 +74,7 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, state: &mut MailState, locale: Local
             } else {
                 "capsule"
             },
-            theme::FAINT,
+            theme::faint(),
         );
     }
 
@@ -100,7 +100,7 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, state: &mut MailState, locale: Local
         }
         ui.add_space(8.0);
         if !capsule.native {
-            let _ = tag_chip(ui, t(locale, Key::ReadOnly), theme::BADGE_BETA);
+            let _ = tag_chip(ui, t(locale, Key::ReadOnly), theme::badge_beta());
         }
     });
 
@@ -120,16 +120,16 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, state: &mut MailState, locale: Local
                         })
                         .family(theme::display())
                         .size(27.0)
-                        .color(theme::INK),
+                        .color(theme::ink()),
                     )
                     .wrap(),
                 );
                 ui.add_space(10.0);
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = vec2(7.0, 5.0);
-                    envelope_chip(ui, &capsule.from, theme::INK);
-                    ui.label(RichText::new("→").size(11.0).color(theme::FAINT));
-                    envelope_chip(ui, &capsule.to, theme::MUTED);
+                    envelope_chip(ui, &capsule.from, theme::ink());
+                    ui.label(RichText::new("→").size(11.0).color(theme::faint()));
+                    envelope_chip(ui, &capsule.to, theme::muted());
                 });
                 ui.add_space(6.0);
                 ui.horizontal_wrapped(|ui| {
@@ -138,10 +138,10 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, state: &mut MailState, locale: Local
                         RichText::new(&capsule.date)
                             .family(theme::mono())
                             .size(9.5)
-                            .color(theme::FAINT),
+                            .color(theme::faint()),
                     );
                     for tag in &capsule.tags {
-                        let _ = tag_chip(ui, tag, theme::MUTED);
+                        let _ = tag_chip(ui, tag, theme::muted());
                     }
                     if !capsule.attachments.is_empty() {
                         ui.label(
@@ -152,7 +152,7 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, state: &mut MailState, locale: Local
                             ))
                             .family(theme::mono())
                             .size(9.5)
-                            .color(theme::FAINT),
+                            .color(theme::faint()),
                         );
                     }
                 });
@@ -233,7 +233,7 @@ fn external_body(ui: &mut Ui, capsule: &Capsule, state: &MailState, locale: Loca
             egui::Label::new(
                 RichText::new(t(locale, Key::HtmlRenderingNotice))
                     .size(10.5)
-                    .color(theme::FAINT),
+                    .color(theme::faint()),
             )
             .wrap(),
         );
@@ -251,7 +251,7 @@ fn render_block(ui: &mut Ui, block: &MailBlock) {
         }
         MailBlock::Quote(spans) => {
             let inner = Frame::new()
-                .fill(theme::WASH)
+                .fill(theme::wash())
                 .inner_margin(Margin {
                     left: 14,
                     right: 10,
@@ -259,7 +259,7 @@ fn render_block(ui: &mut Ui, block: &MailBlock) {
                     bottom: 8,
                 })
                 .show(ui, |ui| {
-                    ui.horizontal_wrapped(|ui| render_spans(ui, spans, 12.5, theme::MUTED));
+                    ui.horizontal_wrapped(|ui| render_spans(ui, spans, 12.5, theme::muted()));
                 });
             ui.painter().rect_filled(
                 egui::Rect::from_min_size(
@@ -267,7 +267,7 @@ fn render_block(ui: &mut Ui, block: &MailBlock) {
                     vec2(2.0, inner.response.rect.height()),
                 ),
                 0.0,
-                theme::fade(theme::ACCENT, 0.6),
+                theme::fade(theme::accent(), 0.6),
             );
             ui.add_space(10.0);
         }
@@ -279,21 +279,21 @@ fn render_block(ui: &mut Ui, block: &MailBlock) {
                     2 => 17.0,
                     _ => 14.0,
                 };
-                render_spans_styled(ui, spans, size, theme::display(), theme::INK);
+                render_spans_styled(ui, spans, size, theme::display(), theme::ink());
             });
             ui.add_space(6.0);
         }
         MailBlock::Bullet(spans) => {
             ui.horizontal_top(|ui| {
                 ui.add_space(2.0);
-                ui.label(RichText::new("•").size(12.0).color(theme::FAINT));
+                ui.label(RichText::new("•").size(12.0).color(theme::faint()));
                 ui.add_space(4.0);
-                ui.horizontal_wrapped(|ui| render_spans(ui, spans, 13.5, theme::INK));
+                ui.horizontal_wrapped(|ui| render_spans(ui, spans, 13.5, theme::ink()));
             });
             ui.add_space(3.0);
         }
         MailBlock::Paragraph(spans) => {
-            ui.horizontal_wrapped(|ui| render_spans(ui, spans, 13.5, theme::INK));
+            ui.horizontal_wrapped(|ui| render_spans(ui, spans, 13.5, theme::ink()));
             ui.add_space(9.0);
         }
     }
@@ -330,7 +330,7 @@ fn render_spans_styled(
             text = text.italics();
         }
         if let Some(url) = &span.link {
-            ui.add(egui::Label::new(text.color(theme::ACCENT_INK)).sense(Sense::click()))
+            ui.add(egui::Label::new(text.color(theme::accent_ink())).sense(Sense::click()))
                 .on_hover_cursor(egui::CursorIcon::PointingHand)
                 .on_hover_text(url)
                 .clicked()
@@ -348,7 +348,7 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
         ui.label(
             RichText::new(t(locale, Key::NoBody))
                 .size(12.5)
-                .color(theme::FAINT),
+                .color(theme::faint()),
         );
         return;
     }
@@ -372,7 +372,7 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                         RichText::new(crate::mime::block_data_text(block))
                             .family(theme::display())
                             .size(size)
-                            .color(theme::INK),
+                            .color(theme::ink()),
                     )
                     .wrap(),
                 );
@@ -401,13 +401,13 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                     .unwrap_or("blue");
                 let accent = match tone {
                     "emerald" => Color32::from_rgb(52, 211, 153),
-                    "amber" => theme::BADGE_BETA,
+                    "amber" => theme::badge_beta(),
                     "purple" => Color32::from_rgb(167, 139, 250),
                     "rose" => Color32::from_rgb(251, 113, 133),
-                    _ => theme::ACCENT,
+                    _ => theme::accent(),
                 };
                 let inner = Frame::new()
-                    .fill(theme::WASH)
+                    .fill(theme::wash())
                     .corner_radius(theme::RADIUS)
                     .inner_margin(Margin {
                         left: 14,
@@ -437,14 +437,14 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                                 ui.label(
                                     RichText::new(&trimmed[4..])
                                         .font(egui::FontId::new(13.0, theme::semibold()))
-                                        .color(theme::INK),
+                                        .color(theme::ink()),
                                 );
                             } else if trimmed.starts_with("## ") {
                                 ui.add_space(6.0);
                                 ui.label(
                                     RichText::new(&trimmed[3..])
                                         .font(egui::FontId::new(14.0, theme::semibold()))
-                                        .color(theme::INK),
+                                        .color(theme::ink()),
                                 );
                             } else if let Some(dot_pos) = trimmed.find(". ") {
                                 if trimmed[..dot_pos].chars().all(|c| c.is_ascii_digit())
@@ -516,7 +516,7 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                         RichText::new(title)
                             .family(theme::semibold())
                             .size(13.0)
-                            .color(theme::INK),
+                            .color(theme::ink()),
                     );
                     ui.add_space(4.0);
                 }
@@ -541,16 +541,16 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                             rect,
                             theme::RADIUS,
                             if done {
-                                theme::ACCENT
+                                theme::accent()
                             } else {
                                 Color32::TRANSPARENT
                             },
                             Stroke::new(
                                 1.0,
                                 if done {
-                                    theme::ACCENT
+                                    theme::accent()
                                 } else {
-                                    theme::LINE_STRONG
+                                    theme::line_strong()
                                 },
                             ),
                             egui::StrokeKind::Inside,
@@ -565,9 +565,9 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                         }
                         ui.add(
                             egui::Label::new(RichText::new(text).size(12.5).color(if done {
-                                theme::FAINT
+                                theme::faint()
                             } else {
-                                theme::INK
+                                theme::ink()
                             }))
                             .wrap(),
                         );
@@ -580,7 +580,7 @@ fn native_body(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                     RichText::new(format!("[{kind}]"))
                         .family(theme::mono())
                         .size(10.0)
-                        .color(theme::FAINT),
+                        .color(theme::faint()),
                 );
                 ui.add_space(6.0);
             }
@@ -593,12 +593,12 @@ fn attachments(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
         RichText::new(t(locale, Key::AttachmentsTitle))
             .family(theme::semibold())
             .size(13.0)
-            .color(theme::INK),
+            .color(theme::ink()),
     );
     ui.add_space(6.0);
     for attachment in &capsule.attachments {
         Frame::new()
-            .fill(theme::WASH)
+            .fill(theme::wash())
             .corner_radius(theme::RADIUS)
             .stroke(theme::hairline())
             .inner_margin(Margin::symmetric(10, 7))
@@ -611,10 +611,10 @@ fn attachments(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                             vec2(13.0, 13.0),
                         ),
                         Icon::Doc,
-                        theme::MUTED,
+                        theme::muted(),
                     );
                     ui.add_space(18.0);
-                    ui.label(RichText::new(&attachment.name).size(12.0).color(theme::INK));
+                    ui.label(RichText::new(&attachment.name).size(12.0).color(theme::ink()));
                     ui.label(
                         RichText::new(format!(
                             "{} · {}",
@@ -623,7 +623,7 @@ fn attachments(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                         ))
                         .family(theme::mono())
                         .size(9.0)
-                        .color(theme::FAINT),
+                        .color(theme::faint()),
                     );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ghost(ui, Icon::Download, None, t(locale, Key::SaveAs), true, 22.0)
