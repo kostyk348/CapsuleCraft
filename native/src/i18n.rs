@@ -217,6 +217,10 @@ strings! {
     // Editor
     AddBlock => ("Блок", "Block"),
     AddBlockHint => ("Добавить блок", "Add a block"),
+    InsertBelow => ("Вставить ниже", "Insert below"),
+    SlashMenuTitle => ("Вставить блок", "Insert a block"),
+    SlashNoMatches => ("Ничего не найдено", "No matches"),
+    BlockGripHint => ("Меню блока — тяните, чтобы переставить", "Block menu — drag to reorder"),
     BlockHeading => ("Заголовок", "Heading"),
     BlockParagraph => ("Абзац", "Paragraph"),
     BlockTodo => ("Список задач", "Task list"),
@@ -233,7 +237,6 @@ strings! {
     ImageCaption => ("Подпись", "Caption"),
     ImageWidth => ("Ширина", "Width"),
     ImageOpen => ("Открыть в просмотрщике", "Open in viewer"),
-    ImageInsertBelow => ("Вставить изображение ниже", "Insert image below"),
     ImageDecodeFailed => (
         "Не удалось прочитать изображение (png, jpeg, gif, webp, bmp).",
         "Could not read the image (png, jpeg, gif, webp, bmp)."

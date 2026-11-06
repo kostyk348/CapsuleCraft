@@ -3,6 +3,44 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.2.1] — 2026-11-06 — The editor keeps its promises
+
+Three block-editor upgrades the interface already hinted at — plus the grip
+handle finally earns its drag.
+
+### Added
+- **Insert-below palette** (`native/src/blocks/mod.rs`): the grip menu's lone
+  «вставить изображение ниже» became a full «Вставить ниже ▸» section —
+  hovering expands the whole block palette (paragraph, heading, task list,
+  callout, code, data table, audio, image, whiteboard, counter-argument) and
+  any kind lands directly below the block whose menu is open, through the
+  existing `BlockOp::InsertBelow`.
+- **Notion-style «+» in the gutter**: hovering a block shows a small plus
+  next to the grip; it opens the same palette and inserts below the hovered
+  row. Invisible until hover, so the gutter stays quiet.
+- **Slash menu**: typing «/» in a paragraph opens a floating palette under
+  the caret, filtered live by what follows the slash — Russian labels match
+  in the Russian UI and English ones everywhere (`/callout` finds «Врезка»
+  too). Picking a kind converts the paragraph in place; deleting the slash
+  or leaving the block closes it. The standing hint «„/“ в пустом абзаце
+  открывает блоки» is finally true.
+- **Drag-and-drop reorder**: the grip handle now drags. An accent insertion
+  line follows the pointer between rows (top half → above, bottom half →
+  below) and release lands the move through the new `BlockOp::Reorder`, with
+  the index math isolated in `reorder_insert_index` and unit-tested
+  (same-gap and one-below moves are no-ops). The cursor turns into a
+  grabbing hand while a drag is live.
+
+### Changed
+- **Version manifests back in sync**: the v2.2.0 bump moved only
+  `native/Cargo.toml`; `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`
+  and `package.json` had stayed on 2.1.0. All four now say 2.2.1.
+- The grip tooltip now says what the handle actually does — «Меню блока —
+  тяните, чтобы переставить» — instead of the generic «Добавить блок».
+- Native tests 230 → 233 (reorder math ×2, slash filter).
+
+`docs/releases/v2.2.1.md` tells the story.
+
 ## [2.2.0] — 2026-11-06 — Themes, accent, onboarding
 
 The app learns to look like you, and to introduce itself.
