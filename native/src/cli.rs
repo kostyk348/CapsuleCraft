@@ -26,6 +26,8 @@ pub struct Launch {
     pub locale: Option<Locale>,
     /// Pre-filled sidebar search, so a snapshot can show ranked results.
     pub search: Option<String>,
+    /// Force the onboarding tour open (first-run docs and screenshots).
+    pub onboarding: bool,
     /// Pixels to scroll the document before capturing (screenshots only).
     pub scroll: Option<f32>,
     /// Run as a Model Context Protocol (MCP) server over stdin/stdout.
@@ -85,6 +87,7 @@ pub fn parse(args: &[String]) -> Launch {
                 launch.locale = take_value(&mut index).and_then(|v| parse_locale(&v));
             }
             "--search" => launch.search = take_value(&mut index),
+            "--onboarding" => launch.onboarding = true,
             "--scroll" => launch.scroll = take_value(&mut index).and_then(|v| v.parse().ok()),
             "--mcp" => launch.mcp = true,
             "import-obsidian" => {
@@ -183,6 +186,14 @@ mod tests {
         assert_eq!(launch.view, Some(View::Graph));
         assert_eq!(launch.page, Some(3));
         assert_eq!(launch.frames, 12);
+    }
+
+    #[test]
+    fn onboarding_flag_parses() {
+        let launch = parse(&args(&["--onboarding"]));
+        assert!(launch.onboarding);
+        let plain = parse(&args(&[]));
+        assert!(!plain.onboarding);
     }
 
     #[test]
