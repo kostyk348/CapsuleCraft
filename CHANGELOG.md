@@ -3,6 +3,63 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.2.0] — 2026-11-06 — Themes, accent, onboarding
+
+The app learns to look like you, and to introduce itself.
+
+### Added
+- **Obsidian-style theming** (`native/src/theme.rs` rebuilt): a table of
+  **8 complete theme presets** — Graphite (the original dark), Paper, Nord,
+  Gruvbox, Catppuccin, Solarized, Everforest and Rosé Pine. Every surface,
+  text and status colour is explicit per theme; the derived translucency
+  slots (muted/dim/faint/lines/washes) are computed from the theme's ink and
+  base, so a new theme is one table row.
+- **Personal accent colour** layered over any preset (like Obsidian's
+  accent): survives theme switches, and `accent_ink` derives a readable
+  companion tint per base automatically.
+- **Interface font scale** from 80 % to 140 %, applied to every text style.
+- **Appearance picker** (new `native/src/modals/appearance.rs`, open via the
+  new «Внешний вид / Appearance» command in ⌘K): theme cards with live
+  swatches, accent chips, the scale slider — every change applies instantly.
+- **Appearance persistence**: theme id, accent RGB and font scale live in
+  `native-appearance.json` next to the locale setting; the legacy
+  `native-theme.txt` from 582eb17 is still honoured on first run.
+- **Interactive onboarding tour** (new `native/src/modals/onboarding.rs`):
+  12 bilingual steps — pages-as-`.eml`, the block editor, the command
+  palette, theming, the graph, planning, the Project Knowledge Engine
+  (credited to kobaltGIT), offline AI, MCP, import & sync, finish. Steps
+  with a "try it" button jump straight into the real feature (palette,
+  appearance, graph, planning, integrations, MCP dialog, FAQ); the tour
+  hides while the feature is up and resumes from ⌘K with its step kept.
+  Auto-opens on a genuinely first launch (persisted in
+  `native-onboarding.txt`), `--onboarding` forces it for screenshots, and
+  it is gated out of tests and `--snapshot` captures.
+- **Demo vault generator** (maintainer tool): `cargo test generate_demo_vault
+  -- --ignored` writes a six-page vault with real `todo_list` blocks (ids,
+  due dates), tags, parent hierarchy and `[[wiki links]]`.
+- **Real-app screenshots regenerated** with the theme system live: page /
+  search / planning / graph / onboarding plus `screenshots/themes/` with
+  five themes (Nord, Gruvbox, Catppuccin, Paper, Rosé Pine) — all captured
+  by the `--snapshot` CLI under Xvfb, no window-manager automation.
+
+### Fixed
+- **OCR diagnostics** (mistral.rs v0.9.5 verified against its sources, not
+  guessed): the `qwen3_5` vision architecture *is* supported and the CLI
+  shape was correct — the real engine panic was only invisible behind
+  `Stdio::null()`. Now: a pre-flight check (`preflight()`) validates the
+  model folder (weights/tokenizer/config present and non-empty, JSON
+  parses) and names the missing file in milliseconds; readiness failures
+  embed the **last 12 engine log lines** directly in the UI error; `--isq`
+  moved after the `multimodal` subcommand (it belongs to the model-argument
+  group at v0.9.5), pinned by a test.
+
+### Tests
+- 230 passed, 0 failed, 2 ignored (was 221): preset uniqueness/completeness,
+  preset switching, unknown-id safety, accent override persistence,
+  font-scale clamping, theme toggle round-trip, onboarding bilingual text +
+  done-flag round-trip + last-step semantics, `--onboarding` flag parsing,
+  OCR preflight, engine-log tail.
+
 ## [2.1.0] — 2026-11-05 — PDF, images, OCR, English voices
 
 Closes every gap named in the 2.0.0 release notes.

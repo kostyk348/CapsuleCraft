@@ -11,7 +11,7 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 
 [![Release](https://img.shields.io/github/v/release/kostyk348/CapsuleCraft?sort=semver&color=0ea5e9&label=release)](https://github.com/kostyk348/CapsuleCraft/releases)
 [![CI](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml)
-[![native tests](https://img.shields.io/badge/native%20tests-135%20passing-22c55e)](native/)
+[![native tests](https://img.shields.io/badge/native%20tests-230%20passing-22c55e)](native/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![No DB](https://img.shields.io/badge/database-none-orange)](#why-eml)
 [![Offline](https://img.shields.io/badge/offline--first-success)](#strengths)
@@ -35,23 +35,46 @@ editor, search, planning and structure on top — and the files stay yours.
 
 - 🗂 **Zero database** — a folder of `.eml` files is the entire knowledge base.
 - 🛰 **Offline by design** — parsing, search, AI and planning all run locally; the app makes no network calls of its own.
+- 🎨 **Eight full themes** — Graphite, Paper, Nord, Gruvbox, Catppuccin, Solarized, Everforest and Rosé Pine, plus a personal accent colour and an 80–140 % interface scale on top of any of them.
 - 🤖 **Offline Co-Thinker** — deterministic local critique and data analysis. No API keys, no cloud.
-- 🧩 **Downloadable local AI** — OCR (Xiaomi-OCR-0 on a Rust engine), speech-to-text (whisper) and Russian text-to-speech install from the in-app Integrations catalog and run fully offline.
+- 🧩 **Downloadable local AI** — OCR (Xiaomi-OCR-0 on a Rust engine), speech-to-text (whisper) and text-to-speech install from the in-app Integrations catalog and run fully offline.
 - 🖥 **Tiny native shell** — Rust + egui, no browser engine. Ships as an AppImage with **zero bundled libraries**.
 
-CapsuleCraft starts **empty** — no demo notes, no filler. A built-in **FAQ**
-(top bar `ⓘ FAQ`, `F1`, or the command palette) explains storage, search and
+CapsuleCraft starts **empty** — no demo notes, no filler. A bilingual
+**interactive onboarding tour** (auto-opens on first launch, 12 steps, with
+"try it" buttons that jump straight into the real feature) and a built-in
+**FAQ** (`F1`, `ⓘ FAQ`, or the command palette) explain storage, search and
 data transfer right inside the app.
 
 ## Screenshots (from the real app)
 
+Every screenshot below is rendered by the app itself — the `--snapshot` CLI
+captures the real window with the real fonts, layout and the active theme.
+
 | Page | Search (BM25) |
 |---|---|
-| ![Native page editor with wiki links](screenshots/capsulecraft-native-page.png) | ![BM25 search with snippets](screenshots/capsulecraft-native-search.png) |
-| **Backlinks** | **Planning** |
-| ![Wiki links and backlinks](screenshots/capsulecraft-native-backlinks.png) | ![Agenda, kanban, gantt, ICS export](screenshots/capsulecraft-native-planning.png) |
-| **FAQ (built-in)** | **Graph** |
-| ![Built-in FAQ on a fresh empty vault](screenshots/capsulecraft-native-faq.png) | ![Link graph](screenshots/capsulecraft-native-graph.png) |
+| ![Native page editor with a task list and status pills](screenshots/capsulecraft-native-page.png) | ![BM25 search with snippets](screenshots/capsulecraft-native-search.png) |
+| **Planning** | **Graph** |
+| ![Agenda buckets with due dates and source pages](screenshots/capsulecraft-native-planning.png) | ![Link graph](screenshots/capsulecraft-native-graph.png) |
+| **Onboarding tour (12 steps, RU/EN)** | **FAQ (built-in)** |
+| ![The onboarding tour step that opens the command palette](screenshots/capsulecraft-native-onboarding.png) | ![Built-in FAQ on a fresh empty vault](screenshots/capsulecraft-native-faq.png) |
+
+<details>
+<summary><b>Eight themes</b> — one click each in «Внешний вид / Appearance», plus your own accent colour and interface scale</summary>
+
+| Graphite (default) | Nord |
+|---|---|
+| ![The original Graphite dark theme](screenshots/capsulecraft-native-page.png) | ![Nord theme](screenshots/themes/theme-nord.png) |
+| **Gruvbox** | **Catppuccin** |
+| ![Gruvbox theme](screenshots/themes/theme-gruvbox.png) | ![Catppuccin theme](screenshots/themes/theme-catppuccin.png) |
+| **Paper (light)** | **Rosé Pine** |
+| ![Paper light theme](screenshots/themes/theme-paper.png) | ![Rosé Pine theme](screenshots/themes/theme-rose.png) |
+
+Everforest and Solarized ship in the same picker — eight presets total, every
+one accepting a custom accent colour and an 80–140 % font scale, all persisted
+to a single `native-appearance.json`.
+
+</details>
 
 <details>
 <summary><b>More views</b> — threads, raw MIME, mail preview</summary>
@@ -76,6 +99,25 @@ data transfer right inside the app.
 - **Planning** — every task block across the vault aggregated into Agenda,
   Kanban, Gantt (with dependency arrows and cycle protection) and calendar, with
   RFC 5545 ICS export.
+- **Theming** — eight complete presets (Graphite, Paper, Nord, Gruvbox,
+  Catppuccin, Solarized, Everforest, Rosé Pine) in an Obsidian-style appearance
+  picker: theme cards with live swatches, a personal accent colour layered over
+  any preset, and an 80–140 % interface scale. Everything persists to
+  `native-appearance.json` — copy one file to a new machine and the look follows.
+- **Interactive onboarding** — a 12-step bilingual tour opens on first launch
+  and stays available from ⌘K («Обзор приложения / Onboarding tour»): it walks
+  through every feature and its "try it" buttons open the real thing — the
+  command palette, the theme picker, the graph, the integrations catalog.
+- **Project Knowledge Engine** — turn a source tree into a knowledge base:
+  an incremental scan (FNV-1a + mtime cache, a 500-file rescan in under 30 ms)
+  feeds a signature/docstring parser for eight languages (Rust, TypeScript,
+  JavaScript, Python, Go, C#, Java, Dart) plus Markdown docs; the result lands
+  as `.eml` capsules in `.capsule/` with a tech-debt registry and generated
+  agent skills for MCP clients. Orphaned capsules are cleaned automatically
+  when a source file is renamed or deleted. The entire engine — parser, cache,
+  skills scaffolding and the sidebar folder-folding controls — was contributed
+  by [@kobaltgit](https://github.com/kobaltgit) (see
+  [docs/PROJECT_KNOWLEDGE_ENGINE.md](docs/PROJECT_KNOWLEDGE_ENGINE.md)).
 - **Threads** — replies are real child `.eml`s with `In-Reply-To`/`References`,
   exactly like email. Your reasoning tree is standard mail threading.
 - **Datasets** — CSV/JSON travel as MIME parts addressed by `Content-ID`;
@@ -152,6 +194,7 @@ standard mail headers.
 | Your data readable without the app | ✅ Thunderbird / mutt / `grep` | ✅ Markdown | ❌ | ❌ (export only) |
 | `git`-diffable, `grep`, `rsync` | ✅ native | ✅ | ❌ | ❌ |
 | Real email threading | ✅ `In-Reply-To`/`References` | ❌ | ❌ | ❌ |
+| Themes & custom accent | ✅ 8 presets + accent + scale | ✅ (community themes) | ⚠️ dark mode only | ⚠️ limited |
 | Local deterministic AI | ✅ Co-Thinker | ⚠️ via plugins/cloud | ⚠️ Copilot (cloud) | ⚠️ cloud |
 | Open source | ✅ MIT | ❌ (free but closed) | ❌ | ❌ |
 | Install size (Linux) | ~11 MB AppImage, no webview | ~100 MB Electron | 100+ MB | web app |
@@ -169,9 +212,9 @@ deliberately narrower: local-first storage you can trust for decades.
   calls. The AI runs offline because that's the only honest option.
 - **Small and fast.** The native shell has no browser engine inside: an
   8–12 MB AppImage, instant start, glibc-only dependencies.
-- **Honest launch.** Starts with an empty vault and a built-in FAQ — no demo
-  notes pretending to be data. Known gaps are tracked in [LIMITATIONS.md](LIMITATIONS.md),
-  not hidden in marketing.
+- **Honest launch.** Starts with an empty vault, a 12-step onboarding tour and
+  a built-in FAQ — no demo notes pretending to be data. Known gaps are tracked
+  in [LIMITATIONS.md](LIMITATIONS.md), not hidden in marketing.
 - **A migration path.** An Obsidian importer, IMAP sync and `.eml` import
   get real content in on day one.
 
@@ -182,24 +225,24 @@ deliberately narrower: local-first storage you can trust for decades.
 The **native AppImage** (recommended, Linux) or the **.deb** package:
 
 ```bash
-chmod +x CapsuleCraft_2.1.0_amd64.AppImage
-./CapsuleCraft_2.1.0_amd64.AppImage            # default vault...
-./CapsuleCraft_2.1.0_amd64.AppImage /path/to/vault   # ...or your folder
+chmod +x CapsuleCraft_2.2.0_amd64.AppImage
+./CapsuleCraft_2.2.0_amd64.AppImage            # default vault...
+./CapsuleCraft_2.2.0_amd64.AppImage /path/to/vault   # ...or your folder
 # or the deb:
-sudo apt install ./CapsuleCraft_2.1.0_amd64.deb
+sudo apt install ./CapsuleCraft_2.2.0_amd64.deb
 ```
 
 It needs only glibc, an X11 or Wayland desktop and (for audio playback) ALSA —
 no WebKitGTK, no WebView2, nothing else. Every GitHub release also carries
 `SHA256SUMS.txt`.
 
-The **native Windows installer** (x64) is `CapsuleCraft_2.1.0_x64-setup.exe`
+The **native Windows installer** (x64) is `CapsuleCraft_2.2.0_x64-setup.exe`
 (NSIS: Start-menu & desktop shortcuts, uninstaller). Prefer portable? Use
-`CapsuleCraft_native_2.1.0_x64.zip`: unzip it and run `CapsuleCraft.exe`.
+`CapsuleCraft_native_2.2.0_x64.zip`: unzip it and run `CapsuleCraft.exe`.
 Standalone native egui shell, zero dependencies, no WebView2 required.
 
 The **native macOS app** (universal: Apple Silicon + Intel) ships as
-`CapsuleCraft_2.1.0_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
+`CapsuleCraft_2.2.0_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
 onto Applications. It is ad-hoc signed; if Gatekeeper blocks the first launch,
 run `xattr -d com.apple.quarantine /Applications/CapsuleCraft.app`.
 
@@ -207,14 +250,16 @@ Releases carry **native builds only** — no web/Tauri installers. The Linux
 **AppImage / .deb**, Windows **setup.exe**, and macOS **.dmg** are the app,
 period: no browser engine, no webview libraries.
 
-> First launch shows an empty vault and the built-in **FAQ**. Press `F1`,
-> use the `ⓘ FAQ` button or ⌘K → FAQ. No demo notes are ever created.
+> First launch shows an empty vault, the **onboarding tour** (12 bilingual
+> steps — skip it freely, it never nags again and lives in ⌘K) and the
+> built-in **FAQ**. Press `F1`, use the `ⓘ FAQ` button or ⌘K → FAQ. No demo
+> notes are ever created.
 
 ### Build from source
 
 ```bash
 git clone https://github.com/kostyk348/CapsuleCraft.git
-cd capsuleos/native
+cd CapsuleCraft/native
 cargo run --release -- /path/to/your/vault
 ```
 
@@ -223,29 +268,36 @@ Native-only requirements: Rust stable, no GUI toolkit dependencies.
 ### Snapshot CLI (docs/CI)
 
 ```bash
-cargo run --release -- --snapshot out.png --page 1 [--view app] [--search "query"] [--scroll 300]
+cargo run --release -- --snapshot out.png --page 1 [--view graph] [--search "query"] [--onboarding]
 ```
+
+To regenerate the README screenshots: `cargo test generate_demo_vault -- --ignored`
+writes a six-page demo vault to `/tmp/capsule-demo-vault`, then run the binary
+with `--snapshot` under Xvfb (the exact loop is documented in
+`docs/releases/v2.2.0.md`).
 
 ## Architecture (native shell)
 
 ```text
 native/src/
-  main.rs        entry, arg parsing, FAQ modal, snapshot CLI
+  main.rs        entry, arg parsing, modals wiring, snapshot CLI
   cli.rs         typed CLI surface
+  theme.rs       8 theme presets, accent override, font scale, persistence
   mail.rs        RFC 5322 / MIME parsing & serialization
   mime.rs        part splitting, Media-Type registry, datasets
-  blocks.rs      block tree <-> markdown-ish round trip
-  page.rs        page model, ordering, tree
+  blocks/        block renderers: paragraph, todo_list, callout, grid, code…
   links.rs       [[wiki links]], backlink index
   graph.rs       capsule relationship DAG
   threads.rs     In-Reply-To / References threading
   planning.rs    agenda / kanban / gantt extraction, ICS export
   search.rs      BM25 index over the whole vault
+  project_parser.rs  Project Knowledge Engine (codebase -> .capsule/ vault)
+  project_skill.rs   generated agent skills
   mcp.rs         MCP server config for AI agents
   sync_imap.rs   IMAP account sync
-  secrets.rs     keyring-backed account storage
+  components.rs  integrations catalog (OCR / STT / TTS engines)
   i18n.rs        RU / EN strings
-  ...
+  modals/        onboarding tour, appearance picker, FAQ, MCP, integrations…
   views/         page, graph, mail, mime, planning, threads, palette
 ```
 
@@ -254,7 +306,7 @@ native/src/
 ```bash
 # native shell
 cd native
-cargo test          # 135 unit tests
+cargo test          # 230 unit tests
 
 # legacy web engine
 npm ci
@@ -265,6 +317,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v2.2.0** | Obsidian-style theming: 8 complete theme presets, personal accent colour, 80–140 % interface scale, appearance picker in ⌘K; interactive bilingual onboarding tour (12 steps, try-it buttons, first-run auto-open); OCR diagnostics (model preflight + engine log tail in the error); refreshed real-app screenshots incl. a themes gallery | 2026-11-06 |
 | **v2.1.0** | PDF pages render again (one pdfium binding per process); image block inserts a picture below any block with width/caption and viewer; OCR fixed (no invalid `-a`, real model id from `/v1/models`, 15-minute cold start, PDF page → OCR); English TTS voice Amy + STT language follows the locale; custom model folders for STT/TTS/OCR | 2026-11-05 |
 | **v2.0.0** | Project Knowledge Engine: index any source tree into a `.capsule/` vault of `.eml` pages (incremental FNV-1a scan, signature/docstring parsing for 8 languages, tech-debt registry, zero-loss re-sync) + generated agent skills; folder folding in the sidebar | 2026-11-03 |
 | **v1.12.2** | Fixed the ⚙ Integrations button doing nothing (action field lost in `ShellAction::absorb`); Integrations in the ⌘K palette; installers for every platform (Windows NSIS setup.exe, macOS universal .dmg, Linux .deb) | 2026-11-02 |
@@ -292,11 +345,12 @@ runs no timed side effects or I/O, and vault sync is still a manual folder copy.
 
 ## Roadmap
 
-- ✅ v1.0 – v1.9 (current milestone)
+- ✅ v1.0 – v2.2 (current milestone)
 - ✅ Native code execution (REPL / JS table formulas) — done in v1.9.0 (boa)
 - ✅ Audio playback in the native shell — done in v1.9.0 (rodio)
 - ✅ GPG-encrypted capsules — done in v1.9.0 (rPGP, passphrase `.eml.asc`)
 - ✅ macOS native builds in CI (arm64)
+- ✅ Full theming (8 presets, accent, font scale) + onboarding tour — done in v2.2.0
 - ⬜ Optional end-to-end-encrypted vault sync (tamper/censor-proof, still zero-cloud)
 
 ## Contributing
@@ -306,8 +360,8 @@ PRs welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). Changes are tracked in
 
 ## Contributors
 
-- **Konstantin** ([@kostyk348](https://github.com/kostyk348)) — creator, architecture, native shell, releases
-- **kobaltGIT** ([@kobaltgit](https://github.com/kobaltgit)) — native UI and MIME parser, live vault watching, offline Co-Thinker, MCP server, Obsidian importer, hierarchy drag & drop, IMAP sync; current GUI redesign (two-tier header, Zen focus mode, wide canvas)
+- **Konstantin** ([@kostyk348](https://github.com/kostyk348)) — creator, architecture, native shell, theming system, releases
+- **kobaltGIT** ([@kobaltgit](https://github.com/kobaltgit)) — author of the **Project Knowledge Engine** (the codebase→knowledge-base pipeline: 8-language signature parser, incremental FNV-1a cache, `.capsule/` capsule generation, tech-debt registry, AI-skills scaffolding, folder folding — the heart of v2.0.0), the in-place rich text editor and block transformation, the two-tier header redesign with Zen focus mode and wide canvas, live vault watching, the offline Co-Thinker, MCP server, Obsidian importer, hierarchy drag & drop, IMAP sync, microphone recording, OpenPGP capsule encryption, grid formulas + code execution, the customizable brand icon, and the multi-platform release pipeline
 
 ## License
 
