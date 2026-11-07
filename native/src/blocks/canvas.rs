@@ -16,8 +16,10 @@ use egui::{
 };
 use serde_json::{json, Value};
 
+use super::{image::pick_image, image::texture_for, BlockOp};
 use crate::i18n::{t, Key, Locale};
-use crate::icons::Icon;
+use crate::icons::{self, Icon};
+use crate::mime::Attachment;
 use crate::theme;
 use crate::{hud, now_nanos, text_button};
 
@@ -168,6 +170,7 @@ pub fn canvas_element_at(kind: &str, at: Pos2, locale: Locale) -> Value {
         "diamond" => (120.0, 90.0, String::new()),
         "rounded" => (150.0, 60.0, String::new()),
         "page" => (170.0, 52.0, String::new()),
+        "image" => (180.0, 120.0, String::new()),
         _ => (150.0, 90.0, String::new()),
     };
     json!({
@@ -192,6 +195,29 @@ pub fn spawn_position(view: &CanvasView, canvas_rect: Option<Rect>, count: usize
     let center = view.screen_to_world(rect.center());
     let cascade = (count % 8) as f32 * 16.0;
     pos2(center.x + cascade, center.y + cascade)
+}
+
+/// The largest rect keeping `natural`'s aspect ratio that fits inside
+/// `bounds`, centered. Canvas image nodes letterbox into their user-sized
+/// node rect instead of stretching.
+pub fn fit_inside(natural: Vec2, bounds: Rect) -> Rect {
+    if !natural.is_finite() || natural.x <= 0.0 || natural.y <= 0.0 {
+        return bounds;
+    }
+    let scale = (bounds.width() / natural.x).min(bounds.height() / natural.y);
+    Rect::from_center_size(bounds.center(), natural * scale)
+}
+
+/// Resolves an image element's `cid` to a picture attachment.
+fn image_attachment<'a>(element: &Value, attachments: &'a [Attachment]) -> Option<&'a Attachment> {
+    let cid = element
+        .get("cid")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim_start_matches("cid:");
+    attachments
+        .iter()
+        .find(|attachment| attachment.cid == cid && attachment.mime_type.starts_with("image/"))
 }
 
 /// Undo-snapshot, spawn at the visible center, append, flag the change.
@@ -397,7 +423,13 @@ fn paint_arrowhead(painter: &egui::Painter, tip: Pos2, from: Pos2, color: Color3
     ));
 }
 
-pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
+pub fn draw_canvas_block(
+    ui: &mut Ui,
+    block: &mut Value,
+    attachments: &[Attachment],
+    locale: Locale,
+    op: &mut Option<BlockOp>,
+) -> bool {
     let mut changed = false;
     // A clicked, already-selected page node asks the app to open its page.
     // The request is stashed under a fixed id: exactly one document view is
@@ -463,6 +495,91 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                             &block_id,
                             locale,
                         );
+                    }
+                    let image_button =
+                        text_button(ui, Some(Icon::Image), t(locale, Key::CanvasAddImage), false);
+                    let pixels: Vec<&Attachment> = attachments
+                        .iter()
+                        .filter(|attachment| attachment.mime_type.starts_with("image/"))
+                        .collect();
+                    let mut picked_cid: Option<String> = None;
+                    let mut pick_from_file = false;
+                    if !pixels.is_empty() {
+                        // Images already in the capsule: pick one instead of
+                        // stacking a second copy of the same file.
+                        egui::Popup::menu(&image_button)
+                            .frame(crate::popover_frame())
+                            .align(egui::RectAlign::BOTTOM_END)
+                            .show(|ui| {
+                                ui.set_min_width(200.0);
+                                if crate::menu_row(
+                                    ui,
+                                    Some(Icon::Plus),
+                                    t(locale, Key::ImageChoose),
+                                    None,
+                                    false,
+                                    true,
+                                    false,
+                                )
+                                .clicked()
+                                {
+                                    pick_from_file = true;
+                                }
+                                for attachment in &pixels {
+                                    if crate::menu_row(
+                                        ui,
+                                        Some(Icon::Image),
+                                        &crate::util::truncate_chars(&attachment.name, 34),
+                                        None,
+                                        false,
+                                        true,
+                                        false,
+                                    )
+                                    .clicked()
+                                    {
+                                        picked_cid = Some(attachment.cid.clone());
+                                    }
+                                }
+                            });
+                    } else if image_button.clicked() {
+                        pick_from_file = true;
+                    }
+                    if pick_from_file {
+                        if let Some((name, cid, mime, b64, size, ..)) = pick_image(locale) {
+                            changed |= add_element(
+                                ui,
+                                &view,
+                                rect_key,
+                                "image",
+                                &mut elements,
+                                &block_id,
+                                locale,
+                            );
+                            if let Some(element) = elements.last_mut() {
+                                element["cid"] = json!(format!("cid:{cid}"));
+                            }
+                            *op = Some(BlockOp::AttachImage {
+                                name,
+                                cid,
+                                mime,
+                                b64,
+                                size,
+                            });
+                        }
+                    }
+                    if let Some(cid) = picked_cid {
+                        changed |= add_element(
+                            ui,
+                            &view,
+                            rect_key,
+                            "image",
+                            &mut elements,
+                            &block_id,
+                            locale,
+                        );
+                        if let Some(element) = elements.last_mut() {
+                            element["cid"] = json!(format!("cid:{cid}"));
+                        }
                     }
                     if text_button(ui, None, t(locale, Key::CanvasAddRounded), false).clicked() {
                         changed |= add_element(
@@ -779,8 +896,15 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                     next_selection = vec![id.clone()];
                 }
                 if response.double_clicked() {
-                    edit_id = Some(id.clone());
-                    edit_wants_focus = true;
+                    // A picture opens the viewer; other nodes edit their text.
+                    if kind == "image" {
+                        if let Some(attachment) = image_attachment(&elements[index], attachments) {
+                            *op = Some(BlockOp::OpenViewer(attachment.cid.clone()));
+                        }
+                    } else {
+                        edit_id = Some(id.clone());
+                        edit_wants_focus = true;
+                    }
                 }
 
                 let is_selected = selection.contains(&id);
@@ -788,12 +912,76 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                     "rectangle" | "diamond" | "rounded" => (theme::wash(), theme::line_strong()),
                     "text" => (Color32::TRANSPARENT, theme::fade(theme::line(), 0.0)),
                     "page" => (theme::wash(), theme::accent()),
+                    "image" => (Color32::TRANSPARENT, theme::fade(theme::line(), 0.0)),
                     _ => (
                         Color32::from_rgb(45, 129, 255),
                         theme::fade(theme::accent_ink(), 0.4),
                     ),
                 };
-                if kind == "diamond" {
+                if kind == "image" {
+                    // Letterbox the picture into the node rect; an unresolved
+                    // cid gets a quiet placeholder instead of a blank box.
+                    let texture = image_attachment(&elements[index], attachments)
+                        .and_then(|attachment| texture_for(ui, &attachment.cid, attachment));
+                    match texture {
+                        Some(handle) => {
+                            let fit = fit_inside(handle.size_vec2(), screen_rect);
+                            painter.image(
+                                handle.id(),
+                                fit,
+                                Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                                Color32::WHITE,
+                            );
+                        }
+                        None => {
+                            painter.rect(
+                                screen_rect,
+                                theme::RADIUS,
+                                theme::wash(),
+                                Stroke::new(1.0, theme::hairline().color),
+                                egui::StrokeKind::Inside,
+                            );
+                            let missing = elements[index]
+                                .get("cid")
+                                .and_then(Value::as_str)
+                                .unwrap_or("")
+                                .trim_start_matches("cid:")
+                                .is_empty();
+                            let label = t(
+                                locale,
+                                if missing {
+                                    Key::ImageNoFile
+                                } else {
+                                    Key::ImageDecodeFailed
+                                },
+                            );
+                            icons::paint(
+                                &painter,
+                                Rect::from_center_size(
+                                    screen_rect.center() - vec2(0.0, 9.0 * view.zoom),
+                                    vec2(16.0, 16.0),
+                                ),
+                                Icon::Image,
+                                theme::muted(),
+                            );
+                            painter.text(
+                                screen_rect.center() + vec2(0.0, 12.0 * view.zoom),
+                                Align2::CENTER_CENTER,
+                                label,
+                                FontId::new((10.0 * view.zoom).max(6.0), FontFamily::Proportional),
+                                theme::muted(),
+                            );
+                        }
+                    }
+                    if is_selected {
+                        painter.rect_stroke(
+                            screen_rect,
+                            theme::RADIUS,
+                            Stroke::new(1.6, theme::accent_ink()),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
+                } else if kind == "diamond" {
                     let c = screen_rect.center();
                     painter.add(Shape::convex_polygon(
                         vec![
@@ -1497,7 +1685,9 @@ mod page_node_tests {
             egui::Area::new(egui::Id::new("page-canvas-test"))
                 .fixed_pos(egui::Pos2::ZERO)
                 .show(ctx, |ui| {
-                    changed = draw_canvas_block(ui, &mut block, crate::i18n::Locale::En);
+                    let mut op: Option<BlockOp> = None;
+                    changed =
+                        draw_canvas_block(ui, &mut block, &[], crate::i18n::Locale::En, &mut op);
                 });
         });
         // Headless: drop the texture updates instead of painting them.
@@ -1600,7 +1790,9 @@ mod spawn_tests {
             egui::Area::new(egui::Id::new("spawn-canvas-test"))
                 .fixed_pos(egui::Pos2::ZERO)
                 .show(ctx, |ui| {
-                    let _ = draw_canvas_block(ui, &mut block, crate::i18n::Locale::En);
+                    let mut op: Option<BlockOp> = None;
+                    let _ =
+                        draw_canvas_block(ui, &mut block, &[], crate::i18n::Locale::En, &mut op);
                 });
         });
         out.textures_delta.clear();
@@ -1617,5 +1809,129 @@ mod spawn_tests {
         let el = canvas_element_at("sticky", egui::pos2(60.0, 60.0), crate::i18n::Locale::En);
         assert_eq!(el.get("x").and_then(Value::as_f64), Some(60.0));
         assert_eq!(el.get("type").and_then(Value::as_str), Some("sticky"));
+    }
+}
+
+#[cfg(test)]
+mod image_node_tests {
+    use super::*;
+    use base64::Engine as _;
+
+    /// A small PNG built in-process: no magic constants, the codec under the
+    /// hood is the same one the texture path uses.
+    fn tiny_png_b64() -> String {
+        let img = image::RgbaImage::from_pixel(8, 6, image::Rgba([200u8, 40, 40, 255]));
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(img.into())
+            .write_to(&mut png, image::ImageFormat::Png)
+            .expect("encode png");
+        base64::engine::general_purpose::STANDARD.encode(png.get_ref())
+    }
+
+    fn picture_attachment() -> crate::mime::Attachment {
+        let b64 = tiny_png_b64();
+        crate::mime::Attachment {
+            name: "shot.png".into(),
+            cid: "image-shot".into(),
+            mime_type: "image/png".into(),
+            content: String::new(),
+            size_bytes: 64,
+            raw_b64: Some(b64),
+        }
+    }
+
+    /// The factory builds the default picture node: 180x120, no text.
+    #[test]
+    fn image_factory_defaults() {
+        let el = canvas_element_at("image", pos2(10.0, 10.0), crate::i18n::Locale::En);
+        assert_eq!(el.get("type").and_then(Value::as_str), Some("image"));
+        assert_eq!(el.get("width").and_then(Value::as_f64), Some(180.0));
+        assert_eq!(el.get("height").and_then(Value::as_f64), Some(120.0));
+        assert_eq!(el.get("text").and_then(Value::as_str), Some(""));
+    }
+
+    /// cid resolution: prefix stripped, only image MIMEs match.
+    #[test]
+    fn image_attachment_resolves_by_cid() {
+        let mut el = canvas_element_at("image", pos2(0.0, 0.0), crate::i18n::Locale::En);
+        el["cid"] = json!("cid:image-shot");
+        let good = picture_attachment();
+        let attachments = vec![
+            good,
+            crate::mime::Attachment {
+                name: "notes.txt".into(),
+                cid: "image-shot".into(),
+                mime_type: "text/plain".into(),
+                content: "decoy".into(),
+                size_bytes: 5,
+                raw_b64: None,
+            },
+        ];
+        let found = image_attachment(&el, &attachments).expect("resolves");
+        assert_eq!(found.mime_type, "image/png");
+        el["cid"] = json!("cid:missing");
+        assert!(image_attachment(&el, &attachments).is_none());
+    }
+
+    /// Letterbox: aspect kept, centered, never exceeds the bounds.
+    #[test]
+    fn fit_inside_letterboxes() {
+        let bounds = Rect::from_min_size(pos2(0.0, 0.0), vec2(200.0, 100.0));
+        // Wide picture: capped by the bounds' width, vertically centered.
+        let fit = fit_inside(vec2(400.0, 100.0), bounds);
+        assert_eq!(fit.width(), 200.0);
+        assert_eq!(fit.height(), 50.0);
+        assert!((fit.center().y - 50.0).abs() < 0.01);
+        // Tall picture: capped by the bounds' height.
+        let fit = fit_inside(vec2(50.0, 200.0), bounds);
+        assert_eq!(fit.width(), 25.0);
+        assert_eq!(fit.height(), 100.0);
+        // Degenerate natural size: fall back to the whole bounds.
+        assert_eq!(fit_inside(vec2(0.0, 0.0), bounds), bounds);
+        // Aspect survives.
+        let fit = fit_inside(vec2(300.0, 150.0), bounds);
+        assert!((fit.width() / fit.height() - 2.0).abs() < 0.01);
+    }
+
+    /// Drawing a board with a resolved picture must not panic headlessly,
+    /// and neither must the placeholder path (cid set, attachment missing).
+    #[test]
+    fn image_nodes_draw_headlessly() {
+        let ctx = egui::Context::default();
+        for cid in ["cid:image-shot", "cid:missing"] {
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1000.0, 800.0),
+                )),
+                ..Default::default()
+            };
+            let mut block = json!({
+                "id": "img-canvas",
+                "type": "interactive_canvas",
+                "data": {
+                    "elements": [
+                        {"id":"im1","type":"image","x":20.0,"y":20.0,"width":180.0,
+                         "height":120.0,"text":"","color":"","cid":cid}
+                    ]
+                }
+            });
+            let attachment = picture_attachment();
+            let mut op: Option<BlockOp> = None;
+            let mut out = ctx.run_pass(raw, |ctx| {
+                egui::Area::new(egui::Id::new("img-canvas-test"))
+                    .fixed_pos(egui::Pos2::ZERO)
+                    .show(ctx, |ui| {
+                        let _ = draw_canvas_block(
+                            ui,
+                            &mut block,
+                            std::slice::from_ref(&attachment),
+                            crate::i18n::Locale::En,
+                            &mut op,
+                        );
+                    });
+            });
+            out.textures_delta.clear();
+        }
     }
 }

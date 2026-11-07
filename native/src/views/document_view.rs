@@ -290,9 +290,59 @@ pub fn draw_document(
                                 serde_json::json!(ui.available_height().max(480.0)),
                             );
                         }
-                        if crate::blocks::draw_canvas_block(ui, &mut data, locale) {
+                        let mut canvas_op: Option<crate::blocks::BlockOp> = None;
+                        if crate::blocks::draw_canvas_block(
+                            ui,
+                            &mut data,
+                            &capsule.attachments,
+                            locale,
+                            &mut canvas_op,
+                        ) {
                             capsule.page_canvas = Some(data.clone());
                             action.changed = true;
+                        }
+                        // The page canvas can ask for the same things a block
+                        // row can: a new image attachment or the viewer.
+                        match canvas_op {
+                            Some(crate::blocks::BlockOp::AttachImage {
+                                name,
+                                cid,
+                                mime,
+                                b64,
+                                size,
+                            }) => {
+                                let attachment = crate::mime::Attachment {
+                                    name,
+                                    cid: cid.clone(),
+                                    mime_type: mime,
+                                    content: String::new(),
+                                    size_bytes: size,
+                                    raw_b64: Some(b64),
+                                };
+                                match capsule
+                                    .attachments
+                                    .iter_mut()
+                                    .find(|existing| existing.cid == cid)
+                                {
+                                    Some(existing) => *existing = attachment,
+                                    None => capsule.attachments.push(attachment),
+                                }
+                                action.changed = true;
+                            }
+                            Some(crate::blocks::BlockOp::OpenViewer(cid)) => {
+                                if let Some(attachment) =
+                                    capsule.attachments.iter().find(|a| a.cid == cid)
+                                {
+                                    if let Some(bytes) = attachment_bytes(attachment) {
+                                        action.attachments.push(AttachmentAction::View {
+                                            name: attachment.name.clone(),
+                                            mime: attachment.mime_type.clone(),
+                                            bytes,
+                                        });
+                                    }
+                                }
+                            }
+                            _ => {}
                         }
                         ui.add_space(24.0);
                     } else {

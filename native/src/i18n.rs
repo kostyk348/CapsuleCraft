@@ -310,6 +310,7 @@ strings! {
     CanvasAddRounded => ("Скруглённый", "Rounded"),
     CanvasAddText => ("Текст", "Text"),
     CanvasAddPage => ("Страница", "Page node"),
+    CanvasAddImage => ("Картинка", "Image"),
     PageModePage => ("Страница", "Page"),
     PageModeCanvas => ("Канвас", "Canvas"),
     CanvasReset => ("Сброс вида", "Reset view"),
