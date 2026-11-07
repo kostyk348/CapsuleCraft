@@ -19,10 +19,9 @@
 
 ## Checks
 
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] `cargo fmt --manifest-path src-tauri/Cargo.toml --check`
-- [ ] `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`
+- [ ] `cargo fmt --manifest-path native/Cargo.toml --check`
+- [ ] `cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings`
+- [ ] `cargo test --manifest-path native/Cargo.toml -j 1`
 - [ ] Exported `.eml` round-trips back into the same capsule (if format touched)
 
 ## Screenshots

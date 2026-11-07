@@ -19,38 +19,34 @@ Thanks for taking the time to help. CapsuleCraft is small on purpose — please 
 
 ```bash
 git clone https://github.com/kostyk348/CapsuleCraft.git
-cd capsuleos
-npm ci
-npm run tauri:dev
+cd CapsuleCraft/native
+cargo run --release -- /path/to/your/vault
 ```
 
-Requirements: Rust 1.77.2+, Node.js 20+, platform WebView (WebView2 / WebKitGTK / WKWebView).
+Requirements: Rust stable. There is no browser engine, no Node.js and no WebView in the build — the app is a standalone egui shell (`native/`).
 
 ### Before you open a PR
 
 ```bash
-npm run typecheck                  # TypeScript
-npm run build                      # Vite build
-cargo fmt --manifest-path src-tauri/Cargo.toml --check
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo fmt --manifest-path native/Cargo.toml --check
+cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path native/Cargo.toml -j 1
 ```
 
-CI runs exactly these checks on Linux plus a Windows release build on tags.
+CI runs exactly these checks on Linux; tags also build the release artifacts (Windows, AppImage, macOS, Android APK).
 
 ### Style
 
-- TypeScript/React: functional components, hooks, no `any` in new engine code.
 - Rust: `cargo fmt` defaults, no `unwrap()` on user-controlled paths.
 - Commits: [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`, `fix:`, `docs:`, `chore:`, `ci:`.
-- UI copy: English and Russian strings should stay consistent if you touch labels.
+- UI copy: English and Russian strings should stay consistent if you touch labels (`native/src/i18n.rs`).
 
 ### Adding a block type
 
-1. Add the data interface to `src/types.ts` and extend `BlockType`.
-2. Add the component in `src/components/blocks/`.
-3. Register the renderer in the canvas editor and the slash-command menu.
-4. Extend the MIME builder/parser in `src/engine/mime.ts` if the block needs new parts.
-5. Check that an exported `.eml` round-trips back into the same capsule.
+1. Add the block data model in `native/src/blocks/` (serialization is plain MIME/RFC 5322 headers + parts).
+2. Implement the renderer next to the other block renderers.
+3. Register it in the document view and the command palette.
+4. Check that an exported `.eml` round-trips back into the same capsule.
 
 ### Reporting bugs
 
@@ -75,38 +71,34 @@ Security issues: please do **not** open a public issue, mail the maintainer inst
 
 ```bash
 git clone https://github.com/kostyk348/CapsuleCraft.git
-cd capsuleos
-npm ci
-npm run tauri:dev
+cd CapsuleCraft/native
+cargo run --release -- /path/to/your/vault
 ```
 
-Требования: Rust 1.77.2+, Node.js 20+, WebView платформы (WebView2 / WebKitGTK / WKWebView).
+Требования: Rust stable. В сборке нет браузерного движка, Node.js и WebView — приложение это standalone-шелл на egui (`native/`).
 
 ### Перед PR
 
 ```bash
-npm run typecheck
-npm run build
-cargo fmt --manifest-path src-tauri/Cargo.toml --check
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo fmt --manifest-path native/Cargo.toml --check
+cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path native/Cargo.toml -j 1
 ```
 
-CI гоняет ровно эти проверки на Linux, плюс релизную сборку под Windows на тегах.
+CI гоняет ровно эти проверки на Linux; на тегах собираются релизные артефакты (Windows, AppImage, macOS, Android APK).
 
 ### Стиль
 
-- TypeScript/React: функциональные компоненты, хуки, без `any` в новом коде движка.
 - Rust: дефолты `cargo fmt`, без `unwrap()` на путях, приходящих от пользователя.
 - Коммиты: [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`, `fix:`, `docs:`, `chore:`, `ci:`.
-- Тексты интерфейса: если трогаете подписи, держите английский и русский варианты согласованными.
+- Тексты интерфейса: если трогаете подписи, держите английский и русский варианты согласованными (`native/src/i18n.rs`).
 
 ### Новый тип блока
 
-1. Добавьте интерфейс данных в `src/types.ts` и расширьте `BlockType`.
-2. Добавьте компонент в `src/components/blocks/`.
-3. Зарегистрируйте рендер в канвас-редакторе и в меню слэш-команд.
-4. Расширьте сборщик/парсер MIME в `src/engine/mime.ts`, если блоку нужны новые части.
-5. Проверьте, что экспортированный `.eml` читается обратно в ту же капсулу.
+1. Добавьте модель данных блока в `native/src/blocks/` (сериализация — обычные заголовки и части MIME/RFC 5322).
+2. Реализуйте рендер рядом с остальными рендерерами блоков.
+3. Зарегистрируйте его в документе и в палитре команд.
+4. Проверьте, что экспортированный `.eml` читается обратно в ту же капсулу.
 
 ### Баг-репорты
 

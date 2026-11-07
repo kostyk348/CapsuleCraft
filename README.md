@@ -11,7 +11,7 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 
 [![Release](https://img.shields.io/github/v/release/kostyk348/CapsuleCraft?sort=semver&color=0ea5e9&label=release)](https://github.com/kostyk348/CapsuleCraft/releases)
 [![CI](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml)
-[![native tests](https://img.shields.io/badge/native%20tests-277%20passing-22c55e)](native/)
+[![native tests](https://img.shields.io/badge/native%20tests-286%20passing-22c55e)](native/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![No DB](https://img.shields.io/badge/database-none-orange)](#why-eml)
 [![Offline](https://img.shields.io/badge/offline--first-success)](#strengths)
@@ -123,8 +123,8 @@ to a single `native-appearance.json`.
   exactly like email. Your reasoning tree is standard mail threading.
 - **Datasets** — CSV/JSON travel as MIME parts addressed by `Content-ID`;
   datagrid blocks render them as tables — and `=SUM(A1:A5)`-style formula cells
-  are evaluated by the embedded offline JS engine, both in the browser and in
-  the native shell.
+  are evaluated by the embedded offline boa JS engine right in the native
+  shell.
 - **Native audio recording & playback** — record voice notes right from the
   audio block (cpal → 16-bit PCM WAV, live level meter) and play MIME audio
   in the egui shell (rodio: WAV/MP3/OGG/FLAC) with play/pause/stop, scrub
@@ -133,7 +133,7 @@ to a single `native-appearance.json`.
   passphrase-encrypted `.eml.asc` (AES-256, SEIPD v1 via rPGP) and imported
   back with the same dialog; fully offline, no gpg binary required.
 - **Offline code execution** — JavaScript REPL blocks run in the native shell
-  through the embedded boa engine (the web build uses a sandboxed worker);
+  through the embedded boa engine;
   JSON blocks validate and pretty-print; Python/Rust stay honest about having
   no interpreter in a zero-dependency build.
 - **Import** — drop `.eml` files into the window (byte-for-byte), import from
@@ -226,28 +226,29 @@ deliberately narrower: local-first storage you can trust for decades.
 The **native AppImage** (recommended, Linux) or the **.deb** package:
 
 ```bash
-chmod +x CapsuleCraft_2.8.0_amd64.AppImage
-./CapsuleCraft_2.8.0_amd64.AppImage            # default vault...
-./CapsuleCraft_2.8.0_amd64.AppImage /path/to/vault   # ...or your folder
+chmod +x CapsuleCraft_2.9.0_amd64.AppImage
+./CapsuleCraft_2.9.0_amd64.AppImage            # default vault...
+./CapsuleCraft_2.9.0_amd64.AppImage /path/to/vault   # ...or your folder
 # or the deb:
-sudo apt install ./CapsuleCraft_2.8.0_amd64.deb
+sudo apt install ./CapsuleCraft_2.9.0_amd64.deb
 ```
 
 It needs only glibc, an X11 or Wayland desktop and (for audio playback) ALSA —
 no WebKitGTK, no WebView2, nothing else. Every GitHub release also carries
 `SHA256SUMS.txt`.
 
-The **native Windows installer** (x64) is `CapsuleCraft_2.8.0_x64-setup.exe`
+The **native Windows installer** (x64) is `CapsuleCraft_2.9.0_x64-setup.exe`
 (NSIS: Start-menu & desktop shortcuts, uninstaller). Prefer portable? Use
 `CapsuleCraft_native_2.8.0_x64.zip`: unzip it and run `CapsuleCraft.exe`.
 Standalone native egui shell, zero dependencies, no WebView2 required.
 
 The **native macOS app** (universal: Apple Silicon + Intel) ships as
-`CapsuleCraft_2.8.0_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
+`CapsuleCraft_2.9.0_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
 onto Applications. It is ad-hoc signed; if Gatekeeper blocks the first launch,
 run `xattr -d com.apple.quarantine /Applications/CapsuleCraft.app`.
 
-Releases carry **native builds only** — no web/Tauri installers. The Linux
+Releases carry **native builds only** — the legacy web engine was removed from
+the repository in v2.9.0; no web/Tauri installers exist. The Linux
 **AppImage / .deb**, Windows **setup.exe**, and macOS **.dmg** are the app,
 period: no browser engine, no webview libraries.
 
@@ -322,17 +323,14 @@ native/src/
 ```bash
 # native shell
 cd native
-cargo test          # 277 unit tests
-
-# legacy web engine
-npm ci
-npx vitest run      # 172 tests
+cargo test          # 286 unit tests
 ```
 
 ## Releases
 
 | Version | What | When |
 |---|---|---|
+| **v2.9.0** | Blocks move three ways (hover toolbar ↑/⧉/↓, a full-height gutter grab strip, Alt+↑/↓), the unreachable topmost drag gap fixed; the canvas opens on content, keyboard zoom `+`/`−`/`Home`/`Ctrl+0`, minimap from any content; **cross-device sync** — two-way vault ↔ folder merge (LWW by mtime, 5 tests), a «Sync» button in the sidebar; Android begins (NativeActivity scaffold, debug-APK in CI, five cross-build obstacles fixed); **the legacy web engine removed** — the repo is the native shell only, CI runs native tests only. Tests 277 → 286 | 2026-11-07 |
 | **v2.8.0** | Planning made clickable and the calendar made useful: every plan opens its page (row background, calendar chip, «+N», Gantt bar — five click-pipeline regression tests drive real pointer events); the calendar becomes two-pane — the month grid on the left, the focused day with full task rows and a quick add on the right, and a chip **dragged onto another day reschedules the plan**; Russian README restored (`README.ru.md`, the language switcher in both files actually works now); promo banner + social card. Tests 272 → 277 | 2026-11-07 |
 | **v2.7.0** | Icon sets: **Nova** (new default), **Document**, **Capsule**, **custom PNG** — live taskbar/titlebar switching, palette commands + mark cycle, legacy `mascot` alias kept; **drag-to-reorder of blocks fixed** (dead since v2.2.1 — stale cleanup raced the landing; regression test drives a real pointer drag); README promo reel `demo.gif` (was referenced, never committed) + Nova hero + honest counts. Tests 268 → 272 | 2026-11-07 |
 | **v2.6.0** | Freehand on the canvas: «Рисовать» toggle (Icon::Pen), decimated strokes as `{type:"ink"}` (bbox + relative points), polyline/dot rendering, persistent pen flag; the STT busy-flag test de-raced (was the red CI on v2.5.0). Tests 263 → 268 | 2026-11-07 |
@@ -365,7 +363,8 @@ npx vitest run      # 172 tests
 
 See [`LIMITATIONS.md`](LIMITATIONS.md). Notably: audio playback covers
 WAV/MP3/OGG/FLAC (browser-recorded webm/opus needs conversion), the JS engine
-runs no timed side effects or I/O, and vault sync is still a manual folder copy.
+runs no timed side effects or I/O, and sync is a two-way folder merge with no
+built-in cloud transport.
 
 ## Roadmap
 

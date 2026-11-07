@@ -94,7 +94,7 @@ _Last updated: 2026-11-01 (v1.12.0)_
 
 ## Architecture / product
 
-- Sync, multi-user access and RBAC remain roadmap items. Capsule **export**
+- Multi-user access and RBAC remain roadmap items. Capsule **export**
   to OpenPGP (`passphrase .eml.asc`) exists since v1.9.0, but there is no
   keyring integration, no per-user public-key workflow and no
   encryption-at-rest for the vault folder itself.
@@ -106,9 +106,12 @@ _Last updated: 2026-11-01 (v1.12.0)_
   captures `log/warn/error`, but there are no timers, no `fetch`, no filesystem
   access and no shared state between runs.
 - No plugin API, webhooks or external API yet. Extensibility is limited to the
-  `.eml` file format and the TypeScript engine.
-- The web build persists the vault in `localStorage`; the Tauri build persists a
-  folder of `.eml` files. Cross-device sync is manual (copy the folder).
+  `.eml` file format and the built-in `boa` JS engine.
+- Cross-device sync is a two-way **folder merge** (v2.9.0, `native/src/sync.rs`):
+  point CapsuleCraft at a folder another service mirrors (Syncthing, Dropbox,
+  Nextcloud, a USB drive) and it merges both sides. There is no built-in cloud
+  transport, no conflict UI beyond last-writer-wins by mtime and no mobile
+  client yet (Android scaffold only).
 - The "Co-Thinker" is a deterministic heuristic engine, not an LLM. It quotes
   real capsule content and refuses to invent numbers, but it cannot reason
   beyond its rule set.

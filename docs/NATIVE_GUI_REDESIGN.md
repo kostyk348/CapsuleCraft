@@ -273,8 +273,8 @@ cargo build --manifest-path native/Cargo.toml --release -j 1
 2. **Параллельная матрица:**
    - `native-windows`: компиляция и упаковка `CapsuleCraft_native_${VER}_x64.zip` (автономный `.exe` без WebView2);
    - `native-appimage`: сборка с glibc 2.35 и linuxdeploy (`CapsuleCraft_${VER}_amd64.AppImage`);
-   - `native-macos`: сборка arm64 и упаковка `CapsuleCraft_native_${VER}_arm64.app.zip`;
-   - `build`: сборка Tauri web-пакетов (`.msi`, `-setup.exe`, `.deb`, `.rpm`, `.dmg`).
+   - `native-macos`: сборка arm64 и упаковка `CapsuleCraft_native_${VER}_arm64.app.zip`.
+   (Старая джоба `build` с Tauri web-пакетами удалена — релизы только нативные.)
 3. **`finalize-release`:** скачивает все готовые дистрибутивы, рассчитывает общий `SHA256SUMS.txt` и публикует релиз.
 
 ---

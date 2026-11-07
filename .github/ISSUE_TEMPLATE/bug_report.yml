@@ -41,23 +41,13 @@ body:
         - Windows 10
         - Linux
         - macOS
-        - Browser (web mode)
-    validations:
-      required: true
-  - type: dropdown
-    id: mode
-    attributes:
-      label: Runtime
-      options:
-        - Desktop (Tauri)
-        - Web mode (Vite dev / preview)
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
       label: Logs / console output
-      description: DevTools console, terminal output, or `%APPDATA%\com.capsuleos.app\logs` if present.
+      description: Terminal output, or `%APPDATA%\com.capsuleos.app\logs` if present.
       render: shell
     validations:
       required: false

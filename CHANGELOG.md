@@ -41,15 +41,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
   own, and `.github/workflows/android.yml` builds a debug APK in CI.
 
 ### Docs
-- **Promo set in the neon style** (assets/promo): Habr banner, square and
-  X/Twitter banners regenerated from the pink-neon capsule references, with
-  the current version chip and the real feature list.
+- **Promo set redone around the real icon** (assets/promo): two banners —
+  the Habr one (RU, native-shell focus) and the X/Twitter one (EN,
+  icon-forward) — built from the original 1254×1254 Nova icon art
+  (`nova_icon_1254.png`, the same icon the README has carried since v2.7.0),
+  not from a generated stand-in. The generated neon capsule art and the
+  square banner are gone; `scripts/make_promo_v4.py` regenerates the set.
 
 ### Tests
 - Blocks: a real-pointer toolbar duplicate test, an Alt+arrow keyboard test
   and a gap-0 nudge test join the grip-drag regression (286 total).
 - Canvas: `canvas_open_view` fits off-screen content once and never re-fits
   a deliberately moved view.
+
+### Removed
+- **The legacy web engine, entirely.** `src/` (React frontend, vitest
+  suite), `src-tauri/` (Tauri wrapper, kept only for icons), `index.html`,
+  `vite.config.ts`, `tsconfig.json`, `package.json`, `package-lock.json`,
+  `public/` and the web co-thinker doc are gone — CapsuleCraft has shipped
+  native-only installers since v1.12.1, and the web tree had been dead
+  weight ever since. CI now runs the native egui test job only;
+  `release.yml` resolves the version from `native/Cargo.toml` and takes
+  icons from `native/assets/`; READMEs and CONTRIBUTING describe the
+  native-only build.
 
 ## [2.8.0] — 2026-11-07 — Clickable plans, a calendar you can use
 
