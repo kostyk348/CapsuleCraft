@@ -224,6 +224,78 @@ pub fn draw_document(
                     }
                     ui.add_space(70.0);
                 } else {
+                    // --- Page mode: «Страница | Канвас» ---
+                    // A per-page view toggle kept in egui state. Canvas mode
+                    // replaces the block list with one full-page canvas
+                    // stored in the capsule as page-canvas.json.
+                    let mode_id =
+                        egui::Id::new(("page-canvas-mode", capsule.message_id.clone()));
+                    let mut canvas_mode = ui
+                        .ctx()
+                        .data_mut(|data| data.get_temp::<bool>(mode_id).unwrap_or(false));
+                    ui.horizontal(|ui| {
+                        let _ = crate::hud(ui, t(locale, Key::PageModePage), theme::faint());
+                        ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                            let page_active = !canvas_mode;
+                            let canvas_clicked = if canvas_mode {
+                                crate::primary_button(
+                                    ui,
+                                    t(locale, Key::PageModeCanvas),
+                                    24.0,
+                                )
+                                .clicked()
+                            } else {
+                                crate::secondary_button(
+                                    ui,
+                                    None,
+                                    t(locale, Key::PageModeCanvas),
+                                    24.0,
+                                )
+                                .clicked()
+                            };
+                            let page_clicked = if page_active {
+                                crate::primary_button(ui, t(locale, Key::PageModePage), 24.0)
+                                    .clicked()
+                            } else {
+                                crate::secondary_button(
+                                    ui,
+                                    None,
+                                    t(locale, Key::PageModePage),
+                                    24.0,
+                                )
+                                .clicked()
+                            };
+                            if canvas_clicked && !canvas_mode {
+                                canvas_mode = true;
+                                ui.ctx()
+                                    .data_mut(|data| data.insert_temp(mode_id, true));
+                            }
+                            if page_clicked && canvas_mode {
+                                canvas_mode = false;
+                                ui.ctx()
+                                    .data_mut(|data| data.insert_temp(mode_id, false));
+                            }
+                        });
+                    });
+                    ui.add_space(10.0);
+
+                    if canvas_mode {
+                        let mut data = capsule.page_canvas.clone().unwrap_or_else(|| {
+                            serde_json::json!({ "elements": [], "snap": false })
+                        });
+                        // Full-page: fill the visible viewport height.
+                        if let Some(obj) = data.as_object_mut() {
+                            obj.insert(
+                                "height".to_string(),
+                                serde_json::json!(ui.available_height().max(480.0)),
+                            );
+                        }
+                        if crate::blocks::draw_canvas_block(ui, &mut data, locale) {
+                            capsule.page_canvas = Some(data.clone());
+                            action.changed = true;
+                        }
+                        ui.add_space(24.0);
+                    } else {
                     let mut block_op: Option<(usize, BlockOp)> = None;
                     let block_count = capsule.blocks.len();
                     for index in 0..block_count {
@@ -418,6 +490,8 @@ pub fn draw_document(
                         }
                     }
 
+                    }
+                    if !canvas_mode {
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
                         ui.add_space(2.0);
@@ -455,6 +529,7 @@ pub fn draw_document(
                     }
                     action.attachments.extend(attachment_actions);
                     ui.add_space(90.0);
+                    }
                 }
             });
         });

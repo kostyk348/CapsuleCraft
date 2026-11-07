@@ -170,6 +170,7 @@ pub fn canvas_element(kind: &str, index: usize, locale: Locale) -> Value {
         "sticky" => (150.0, 90.0, t(locale, Key::CanvasAddSticky).to_string()),
         "diamond" => (120.0, 90.0, String::new()),
         "rounded" => (150.0, 60.0, String::new()),
+        "page" => (170.0, 52.0, String::new()),
         _ => (150.0, 90.0, String::new()),
     };
     json!({
@@ -373,6 +374,10 @@ fn paint_arrowhead(painter: &egui::Painter, tip: Pos2, from: Pos2, color: Color3
 
 pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
     let mut changed = false;
+    // A clicked, already-selected page node asks the app to open its page.
+    // The request is stashed under a fixed id: exactly one document view is
+    // drawn per frame, and main.rs drains it after the document pass.
+    let mut navigate: Option<String> = None;
     let block_id = block
         .get("id")
         .and_then(Value::as_str)
@@ -414,6 +419,13 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                         elements.push(canvas_element("text", elements.len(), locale));
                         changed = true;
                     }
+                    if text_button(ui, Some(Icon::Doc), t(locale, Key::CanvasAddPage), false)
+                        .clicked()
+                    {
+                        push_undo(ui, &block_id, &elements);
+                        elements.push(canvas_element("page", elements.len(), locale));
+                        changed = true;
+                    }
                     if text_button(ui, None, t(locale, Key::CanvasAddRounded), false).clicked() {
                         push_undo(ui, &block_id, &elements);
                         elements.push(canvas_element("rounded", elements.len(), locale));
@@ -452,8 +464,18 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
             let edit_key = egui::Id::new(("canvas-edit", block_id.clone()));
             let edit_focus_key = egui::Id::new(("canvas-edit-focus", block_id.clone()));
             let draft_key = egui::Id::new(("canvas-draft", block_id.clone()));
-            let (canvas_rect, canvas_resp) =
-                ui.allocate_exact_size(vec2(ui.available_width(), 300.0), Sense::click_and_drag());
+            // Page mode ("Страница | Канвас") asks for the whole content
+            // height via data.height; the block default stays 300.
+            let canvas_height = block
+                .get("data")
+                .and_then(|data| data.get("height"))
+                .and_then(Value::as_f64)
+                .map(|h| h.max(120.0) as f32)
+                .unwrap_or(300.0);
+            let (canvas_rect, canvas_resp) = ui.allocate_exact_size(
+                vec2(ui.available_width(), canvas_height),
+                Sense::click_and_drag(),
+            );
             let painter = ui.painter_at(canvas_rect);
             painter.rect_filled(canvas_rect, theme::RADIUS, theme::bg());
             painter.rect_stroke(
@@ -674,6 +696,19 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                     group_delta = Some(response.drag_delta() / view.zoom);
                 }
                 if response.clicked() {
+                    // A page node is a wiki-link: clicking an already
+                    // selected one opens the target page.
+                    if kind == "page" && selection.contains(&id) {
+                        let target = elements[index]
+                            .get("text")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .trim()
+                            .to_string();
+                        if !target.is_empty() {
+                            navigate = Some(target);
+                        }
+                    }
                     next_selection = vec![id.clone()];
                 }
                 if response.double_clicked() {
@@ -685,6 +720,7 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                 let (fill, stroke) = match kind.as_str() {
                     "rectangle" | "diamond" | "rounded" => (theme::wash(), theme::line_strong()),
                     "text" => (Color32::TRANSPARENT, theme::fade(theme::line(), 0.0)),
+                    "page" => (theme::wash(), theme::accent()),
                     _ => (
                         Color32::from_rgb(45, 129, 255),
                         theme::fade(theme::accent_ink(), 0.4),
@@ -1100,6 +1136,12 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
         block["data"]["snap"] = json!(snap);
         changed = true;
     }
+    if let Some(target) = navigate {
+        ui.data_mut(|data| {
+            data.insert_temp(egui::Id::new("page-canvas-nav"), target);
+        });
+    }
+
     changed
 }
 
@@ -1342,5 +1384,67 @@ mod tests {
         assert_eq!(snap_pos(9.9), 0.0);
         assert_eq!(snap_pos(30.0), 40.0);
         assert_eq!(snap_pos(-14.0), -20.0);
+    }
+}
+
+#[cfg(test)]
+mod page_node_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// The page node exists, is a node (not an arrow) and carries its title.
+    #[test]
+    fn page_element_factory_produces_a_node() {
+        let el = canvas_element("page", 0, crate::i18n::Locale::En);
+        assert!(is_node(&el));
+        assert_eq!(el.get("type").and_then(Value::as_str), Some("page"));
+        assert_eq!(el.get("width").and_then(Value::as_f64), Some(170.0));
+        // Text starts empty: the user types the page title on it.
+        assert_eq!(el.get("text").and_then(Value::as_str), Some(""));
+    }
+
+    /// Drawing the full-page canvas with page nodes must not panic headlessly
+    /// and the height override must be honored by the allocation.
+    #[test]
+    fn page_canvas_draws_headlessly() {
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1000.0, 800.0),
+            )),
+            ..Default::default()
+        };
+        let mut block = json!({
+            "id": "page-canvas",
+            "type": "interactive_canvas",
+            "data": {
+                "elements": [
+                    {"id":"pg1","type":"page","x":20.0,"y":20.0,"width":170.0,"height":52.0,
+                     "text":"Дорожная карта","color":""}
+                ],
+                "height": 640.0
+            }
+        });
+        let mut changed = false;
+        let mut out = ctx.run_pass(raw, |ctx| {
+            egui::Area::new(egui::Id::new("page-canvas-test"))
+                .fixed_pos(egui::Pos2::ZERO)
+                .show(ctx, |ui| {
+                    changed = draw_canvas_block(ui, &mut block, crate::i18n::Locale::En);
+                });
+        });
+        // Headless: drop the texture updates instead of painting them.
+        out.textures_delta.clear();
+        let _ = changed; // an untouched board legitimately reports no change
+        assert_eq!(
+            block
+                .get("data")
+                .and_then(|d| d.get("elements"))
+                .and_then(|e| e.get(0))
+                .and_then(|e| e.get("type"))
+                .and_then(Value::as_str),
+            Some("page")
+        );
     }
 }

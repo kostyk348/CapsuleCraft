@@ -40,6 +40,9 @@ pub struct Capsule {
     pub status: String,
     pub file_name: String,
     pub blocks: Vec<Value>,
+    /// Full-page canvas ("Страница | Канвас"): `{"elements":[…],"view":{…}}`
+    /// stored as the `page-canvas.json` part; `None` on every ordinary page.
+    pub page_canvas: Option<Value>,
     pub attachments: Vec<Attachment>,
     /// True when this file carried a CapsuleCraft canvas payload and can be saved
     /// back without destroying unknown blocks.
@@ -75,6 +78,7 @@ impl Capsule {
                 "type": "paragraph",
                 "data": { "text": "" }
             })],
+            page_canvas: None,
             attachments: Vec::new(),
             native: true,
             parse_note: None,
@@ -194,6 +198,10 @@ pub fn parse_eml(raw: &str, file_name: &str, fallback_timestamp: i64) -> Capsule
     let mut blocks: Vec<Value> = Vec::new();
     let mut native = false;
     let mut parse_note = None;
+    // Page-mode canvas ("Страница | Канвас"): a full-page diagram stored
+    // beside the block payload; absent on every ordinary page.
+    let page_canvas: Option<Value> = extract_json_part(raw_body, "page-canvas.json")
+        .and_then(|json| serde_json::from_str::<Value>(&json).ok());
     if let Some(canvas) = extract_canvas_json(raw_body) {
         match serde_json::from_str::<Value>(&canvas) {
             Ok(value) => match value.get("blocks").and_then(Value::as_array) {
@@ -243,6 +251,7 @@ pub fn parse_eml(raw: &str, file_name: &str, fallback_timestamp: i64) -> Capsule
         parent_id,
         references,
         tags,
+        page_canvas,
         status,
         file_name: file_name.to_string(),
         blocks,
@@ -488,6 +497,23 @@ pub fn assemble_eml(capsule: &Capsule) -> String {
 
     let mut parts = vec![alternative];
 
+    // Page-mode canvas: a full-page diagram, stored as its own JSON part so
+    // the .eml stays a plain flat file every editor can open.
+    if let Some(page_canvas) = &capsule.page_canvas {
+        let page_json =
+            serde_json::to_string_pretty(page_canvas).unwrap_or_else(|_| "{}".to_string());
+        parts.push(
+            [
+                format!("--{root_boundary}"),
+                "Content-Type: application/json; name=\"page-canvas.json\"".to_string(),
+                "Content-Disposition: inline; filename=\"page-canvas.json\"".to_string(),
+                String::new(),
+                page_json,
+            ]
+            .join("\r\n"),
+        );
+    }
+
     for attachment in &capsule.attachments {
         let cid = attachment
             .cid
@@ -631,8 +657,14 @@ fn parse_headers(raw: &str) -> BTreeMap<String, String> {
 }
 
 fn extract_canvas_json(body: &str) -> Option<String> {
+    extract_json_part(body, "canvas_state.json")
+}
+
+/// Raw JSON payload of a named `application/json` part (used for
+/// `canvas_state.json` and the page-mode `page-canvas.json`).
+fn extract_json_part(body: &str, filename: &str) -> Option<String> {
     let lower = body.to_ascii_lowercase();
-    let marker = "canvas_state.json";
+    let marker = filename;
     let marker_pos = lower.find(marker)?;
     let after_marker = &body[marker_pos + marker.len()..];
 
@@ -688,7 +720,9 @@ fn parse_attachments(boundary: Option<&str>, body: &str) -> Vec<Attachment> {
                     .and_then(|value| header_param(value, "name"))
             });
         let Some(name) = name else { continue };
-        if name.eq_ignore_ascii_case("canvas_state.json") {
+        if name.eq_ignore_ascii_case("canvas_state.json")
+            || name.eq_ignore_ascii_case("page-canvas.json")
+        {
             continue;
         }
 
@@ -1093,6 +1127,36 @@ mod tests {
     }
 
     #[test]
+    fn page_canvas_round_trips_and_stays_invisible() {
+        let mut capsule = sample();
+        capsule.page_canvas = Some(json!({
+            "elements": [
+                {"id":"pg1","type":"page","x":40.0,"y":40.0,"width":170.0,"height":52.0,
+                 "text":"Архитектура","color":""}
+            ],
+            "snap": true
+        }));
+
+        let raw = assemble_eml(&capsule);
+        assert!(raw.contains("page-canvas.json"));
+        let parsed = parse_eml(&raw, "test.eml", 0);
+        let canvas = parsed.page_canvas.expect("page canvas survived the round trip");
+        assert_eq!(
+            canvas.get("elements").and_then(|e| e.get(0))
+                .and_then(|e| e.get("text")).and_then(Value::as_str),
+            Some("Архитектура")
+        );
+        assert!(canvas.get("snap").and_then(Value::as_bool).unwrap_or(false));
+        // The diagram is page state, not a user-visible attachment.
+        assert!(parsed
+            .attachments
+            .iter()
+            .all(|att| !att.name.eq_ignore_ascii_case("page-canvas.json")));
+        // Pages without a canvas keep parsing exactly as before.
+        let plain = parse_eml(&assemble_eml(&sample()), "plain.eml", 0);
+        assert!(plain.page_canvas.is_none());
+    }
+
     fn round_trips_native_capsule() {
         let capsule = sample();
         let raw = assemble_eml(&capsule);

@@ -2200,6 +2200,21 @@ impl NativeApp {
                                         .as_deref(),
                                     self.ocr_highlight.as_ref().map(|(id, _)| id.as_str()),
                                 ));
+
+                            // Page-mode canvas: a clicked, already-selected
+                            // page node asks to open its page (title-based,
+                            // exactly like a [[wiki-link]]).
+                            if let Some(target) =
+                                ui.ctx()
+                                    .data_mut(|data| data.remove_temp::<String>(egui::Id::new("page-canvas-nav")))
+                            {
+                                if let Some(index) = links::resolve(&target, &self.vault.capsules)
+                                {
+                                    editor.select = Some(index);
+                                } else {
+                                    editor.create_page = Some(target);
+                                }
+                            }
                             }
                             _ => views::draw_empty_state(ui, &mut editor, self.locale),
                         },
