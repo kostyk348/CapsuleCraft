@@ -39,6 +39,28 @@ impl SttJobs {
         wav_bytes: Vec<u8>,
         language: whisper::Language,
     ) -> Result<(), String> {
+        self.start_with(model_dir, cid, wav_bytes, language, |model_dir, wav, language| {
+            whisper::transcribe(&model_dir, &wav, language)
+        })
+    }
+
+    /// The seam behind `start`: the worker closure is injectable so tests can
+    /// hold it open and assert the busy-flag without racing the transcriber
+    /// (a real failing worker finishes in microseconds and used to win the
+    /// race on loaded CI runners).
+    fn start_with<F>(
+        &self,
+        model_dir: PathBuf,
+        cid: &str,
+        wav_bytes: Vec<u8>,
+        language: whisper::Language,
+        worker: F,
+    ) -> Result<(), String>
+    where
+        F: FnOnce(PathBuf, Vec<u8>, whisper::Language) -> Result<String, String>
+            + Send
+            + 'static,
+    {
         let mut jobs = self.inner.lock().map_err(|_| "stt lock poisoned")?;
         if jobs.get(cid) == Some(&SttPhase::Running) {
             return Err("already running".to_string());
@@ -49,7 +71,7 @@ impl SttJobs {
         let inner = Arc::clone(&self.inner);
         let cid = cid.to_string();
         thread::spawn(move || {
-            let phase = match whisper::transcribe(&model_dir, &wav_bytes, language) {
+            let phase = match worker(model_dir, wav_bytes, language) {
                 Ok(text) if text.trim().is_empty() => {
                     SttPhase::Failed("empty transcript".to_string())
                 }
@@ -109,15 +131,31 @@ mod tests {
     #[allow(unused_imports)]
     fn start_rejects_when_missing_model() {
         use std::path::Path;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        // Hold the worker open behind a gate: the busy-flag assertions below
+        // must not race a worker that (in production) can fail in
+        // microseconds and flip Running -> Failed before they run.
+        let (gate_tx, gate_rx) = mpsc::channel::<()>();
+        let (entered_tx, entered_rx) = mpsc::channel::<()>();
         let jobs = SttJobs::default();
-        let err = jobs.start(
+        let err = jobs.start_with(
             Path::new("/nonexistent").to_path_buf(),
             "cid-1",
             b"xx".to_vec(),
             whisper::Language::Russian,
+            move |_dir, _wav, _lang| {
+                let _ = entered_tx.send(());
+                let _ = gate_rx.recv();
+                Err("model missing".to_string())
+            },
         );
         // The job is queued and fails asynchronously; starting itself is fine.
         assert!(err.is_ok());
+        entered_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("worker entered");
         // Busy-flag prevents double starts while the (failing) job runs.
         assert!(jobs.is_running("cid-1"));
         assert!(jobs
@@ -128,12 +166,20 @@ mod tests {
                 whisper::Language::English
             )
             .is_err());
-        // Eventually the worker marks the failure.
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        assert!(matches!(
-            jobs.take_finished("cid-1"),
-            Some(SttPhase::Failed(_))
-        ));
+        // Release the worker; the failure must be marked (bounded wait
+        // instead of a fixed sleep, so slow runners cannot flake either).
+        let _ = gate_tx.send(());
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            match jobs.take_finished("cid-1") {
+                Some(SttPhase::Failed(_)) => break,
+                Some(other) => panic!("unexpected terminal phase {other:?}"),
+                None if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(20))
+                }
+                None => panic!("worker never marked the failure"),
+            }
+        }
     }
 
     #[test]
