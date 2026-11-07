@@ -332,6 +332,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v2.4.1** | Canvas toolbar adds spawn at the visible center (were pinned near the world origin — off-screen after panning: «при добавлении через кнопку нестабильно показывает»), +16 px cascade for consecutive adds; tests 255 → 259 | 2026-11-07 |
 | **v2.4.0** | Page mode «Страница \| Канвас»: every page toggles between the block editor and a full-height canvas (v2.3 engine: pan/zoom, arrows, shapes, snap, minimap); diagrams persist as `page-canvas.json` inside the same `.eml`; page-link nodes open/create pages like `[[wiki-links]]`; IMAP sync off the UI thread, duplicate-proof downloads (content hashing + Message-Id names), working auto_sync; honest data dirs with `CAPSULECRAFT_DATA_DIR` / `CAPSULECRAFT_CONFIG_DIR` overrides | 2026-11-07 |
 | **v2.3.0** | The canvas engine: node boards with pan/zoom, snapping, minimap and undo; sticky notes, shapes, arrows and free text as first-class canvas elements; the planning Gantt and the board share one zooming field language | 2026-11-07 |
 | **v2.2.1** | Editor promises kept: «Вставить ниже ▸» expands the full block palette in the grip menu; Notion-style «+» appears in the gutter on hover and inserts below the hovered block; slash menu — typing «/» opens a live-filtered floating palette and converts the paragraph; drag-and-drop block reorder with an accent insertion line; version manifests re-synced after the 2.1.0 stragglers | 2026-11-06 |
