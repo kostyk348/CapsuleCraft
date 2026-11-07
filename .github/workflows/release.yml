@@ -503,12 +503,114 @@ jobs:
           name: mistralrs-engine-${{ matrix.name }}
           path: ${{ matrix.artifact }}
 
+  # Android: the NativeActivity shell built for arm64-v8a and packaged as a
+  # SIGNED release APK (stable keystore from repo secrets; an ephemeral CI
+  # key is generated when the secrets are absent, and its certificate digest
+  # is printed so installs can be compared across runs).
+  android-apk:
+    name: Android APK (arm64-v8a, signed release)
+    needs: create-release
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27c
+          add-to-path: true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Prepare signing keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -e
+          mkdir -p android/keystore
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > android/keystore/capsulecraft-release.keystore
+            echo "Signed with the ANDROID_KEYSTORE_BASE64 secret."
+          elif [ -f android/keystore/capsulecraft-release.keystore ]; then
+            # No secret storage: the repo carries its own release key (see
+            # android/keystore/README.md) so upgrades keep the same signature.
+            echo "Signed with the committed android/keystore key."
+          else
+            echo "Keystore secrets absent — generating an EPHEMERAL release key."
+            keytool -genkeypair -v \
+              -keystore android/keystore/capsulecraft-release.keystore \
+              -alias capsulecraft -keyalg RSA -keysize 2048 -validity 10950 \
+              -storepass capsulecraft -keypass capsulecraft \
+              -dname "CN=CapsuleCraft Release, O=CapsuleCraft, C=RU"
+            KS_PASS=capsulecraft
+            KS_ALIAS=capsulecraft
+          fi
+          echo "KS_PASS=$KS_PASS" >> "$GITHUB_ENV"
+          echo "KS_ALIAS=$KS_ALIAS" >> "$GITHUB_ENV"
+          keytool -list -v \
+            -keystore android/keystore/capsulecraft-release.keystore \
+            -storepass "$KS_PASS" 2>/dev/null | grep 'SHA256:' || true
+
+      # --lib: on Android the app is the cdylib (android_main), not the bin.
+      - name: Build native lib (arm64-v8a)
+        working-directory: native
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: cargo ndk -t arm64-v8a -o ../android/app/src/main/jniLibs build --release --lib
+
+      - name: Assemble signed release APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ github.workspace }}/android/keystore/capsulecraft-release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ env.KS_PASS }}
+          ANDROID_KEY_ALIAS: ${{ env.KS_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ env.KS_PASS }}
+        run: gradle assembleRelease --no-daemon
+
+      - name: Upload APK to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -e
+          VERSION="${{ needs.create-release.outputs.version }}"
+          SRC=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
+          OUT="CapsuleCraft_${VERSION}_android_arm64.apk"
+          cp "$SRC" "$OUT"
+          gh release upload "${{ needs.create-release.outputs.tag }}" "$OUT" --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capsulecraft-android-arm64
+          path: CapsuleCraft_*_android_arm64.apk
+
   # Finalization step: runs once all parallel build jobs have finished.
   # Downloads all release assets, computes a single authoritative SHA256SUMS.txt,
   # uploads it to the release, and publishes the draft.
   finalize-release:
     name: Finalize Release (Checksums & Publish)
-    needs: [create-release, native-windows, native-appimage, native-macos, ocr-engine]
+    needs: [create-release, native-windows, native-appimage, native-macos, ocr-engine, android-apk]
     if: always() && needs.create-release.result == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -522,6 +624,7 @@ jobs:
           NATIVE_APPIMAGE: ${{ needs.native-appimage.result }}
           NATIVE_MACOS: ${{ needs.native-macos.result }}
           OCR_ENGINE: ${{ needs.ocr-engine.result }}
+          ANDROID_APK: ${{ needs.android-apk.result }}
         run: |
           set -e
           TAG="${{ needs.create-release.outputs.tag }}"
@@ -548,7 +651,8 @@ jobs:
           for job in "native-windows=$NATIVE_WINDOWS" \
                      "native-appimage=$NATIVE_APPIMAGE" \
                      "native-macos=$NATIVE_MACOS" \
-                     "ocr-engine=$OCR_ENGINE"; do
+                     "ocr-engine=$OCR_ENGINE" \
+                     "android-apk=$ANDROID_APK"; do
             name="${job%%=*}"
             result="${job#*=}"
             if [ "$result" != "success" ]; then

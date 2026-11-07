@@ -17,4 +17,26 @@ android {
             abiFilters += listOf("arm64-v8a")
         }
     }
+
+    // Release signing comes from the environment (CI secrets). Without it a
+    // build falls back to the auto-generated debug key so `gradle assemble`
+    // never blocks locally.
+    signingConfigs {
+        create("release") {
+            val ks = System.getenv("ANDROID_KEYSTORE_FILE") ?: ""
+            if (ks.isNotEmpty()) {
+                storeFile = file(ks)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = if (System.getenv("ANDROID_KEYSTORE_FILE")?.isNotEmpty() == true)
+                signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+        }
+    }
 }
