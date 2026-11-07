@@ -1873,11 +1873,22 @@ impl NativeApp {
         // Straight rm is a one-way door: send the page file to the OS trash
         // first (recoverable), and only fall back to a hard delete when the
         // trash is unavailable (e.g. network mounts).
-        let trashed = match trash::delete(&path) {
-            Ok(()) => true,
-            Err(err) => {
-                eprintln!("trash::delete failed, falling back to rm: {err}");
+        let trashed = {
+            #[cfg(target_os = "android")]
+            {
+                // No trash service on Android yet — straight delete
+                // (recoverable deletion returns with the SAF work).
                 std::fs::remove_file(&path).is_ok()
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                match trash::delete(&path) {
+                    Ok(()) => true,
+                    Err(err) => {
+                        eprintln!("trash::delete failed, falling back to rm: {err}");
+                        std::fs::remove_file(&path).is_ok()
+                    }
+                }
             }
         };
         if !trashed {

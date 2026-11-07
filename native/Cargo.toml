@@ -27,8 +27,6 @@ boa_engine = "0.20"
 pgp = "0.15"
 rand = "0.8"
 ignore = "0.4"
-# Page files go to the OS trash instead of being deleted outright.
-trash = "5"
 
 # Downloadable integrations (v1.12.0): components catalog, viewers, local AI.
 # Every crate here is pure Rust except pdfium-render, which loads the pdfium
@@ -55,6 +53,9 @@ winres = "0.1"
 # util::dialog shim answers None until the SAF picker lands.
 [target.'cfg(not(target_os = "android"))'.dependencies]
 rfd = "0.17.2"
+# Page files go to the OS trash instead of being deleted outright.
+# (No trash service on Android — the shim falls back to plain deletes.)
+trash = "5"
 
 # Android (scaffold, v2.9.0): the same egui app as a NativeActivity. The
 # desktop eframe features (x11/wayland/glow) are inert on this target; winit
