@@ -1211,7 +1211,7 @@ pub fn draw_block_content(
         "data_grid_view" => draw_grid_block(ui, block, attachments, locale),
         "audio_note" => draw_audio_block(ui, block, attachments, locale, op),
         "image" => draw_image_block(ui, block, attachments, locale, op),
-        "interactive_canvas" => draw_canvas_block(ui, block, locale),
+        "interactive_canvas" => draw_canvas_block(ui, block, attachments, locale, op),
         "ai_opponent_block" => draw_opponent_block(ui, block, locale),
         _ => {
             let inner = Frame::new()

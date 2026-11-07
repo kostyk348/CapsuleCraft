@@ -280,7 +280,7 @@ pub fn draw_image_block(
 }
 
 /// File dialog → `(name, cid, mime, base64, size, width, height)`.
-fn pick_image(locale: Locale) -> Option<(String, String, String, String, usize, u32, u32)> {
+pub(crate) fn pick_image(locale: Locale) -> Option<(String, String, String, String, usize, u32, u32)> {
     let path = rfd::FileDialog::new()
         .set_title(t(locale, Key::ImageChoose))
         .add_filter("images", &IMAGE_EXTENSIONS)
@@ -308,7 +308,7 @@ fn pick_image(locale: Locale) -> Option<(String, String, String, String, usize, 
 
 /// Decode once per (cid) and keep the texture in egui's temp store: a page
 /// with ten photos must not decode ten JPEGs every frame.
-fn texture_for(ui: &Ui, cid: &str, attachment: &Attachment) -> Option<egui::TextureHandle> {
+pub(crate) fn texture_for(ui: &Ui, cid: &str, attachment: &Attachment) -> Option<egui::TextureHandle> {
     let key = ui.id().with(("image-block-texture", cid));
     if let Some(handle) = ui.data(|data| data.get_temp::<egui::TextureHandle>(key)) {
         return Some(handle);
