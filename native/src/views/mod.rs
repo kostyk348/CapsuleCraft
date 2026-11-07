@@ -12,7 +12,9 @@ pub mod sidebar_view;
 pub mod threads_view;
 
 pub use document_view::{draw_document, draw_empty_state, EditorAction, LinkContext};
-pub use sidebar_view::{draw_sidebar, draw_vault_dropdown, render_vault_menu_contents, vault_switcher};
+pub use sidebar_view::{
+    draw_sidebar, draw_vault_dropdown, render_vault_menu_contents, vault_switcher,
+};
 
 use egui::{
     pos2, vec2, Align, Color32, FontId, Frame, Layout, Margin, Response, RichText, Sense, Ui,
@@ -259,7 +261,11 @@ pub fn segments(ui: &mut Ui, options: &[(&str, bool)]) -> Option<usize> {
             egui::Align2::CENTER_CENTER,
             label,
             FontId::new(11.0, theme::medium()),
-            if *active { theme::ink() } else { theme::muted() },
+            if *active {
+                theme::ink()
+            } else {
+                theme::muted()
+            },
         );
         if response.clicked() {
             clicked = Some(index);

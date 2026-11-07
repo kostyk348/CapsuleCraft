@@ -50,6 +50,10 @@ pub struct PlanningState {
     pub show_filters: bool,
     /// Task key waiting for a blocker to be picked.
     pub linking: Option<String>,
+    /// Draft text of the day-panel quick add in the calendar.
+    pub day_text: String,
+    /// Key of the task currently dragged between calendar day cells.
+    pub drag_key: Option<String>,
 }
 
 impl Default for PlanningState {
@@ -71,6 +75,8 @@ impl Default for PlanningState {
             focus_day: None,
             show_filters: false,
             linking: None,
+            day_text: String::new(),
+            drag_key: None,
         }
     }
 }
@@ -776,13 +782,21 @@ fn task_row(
     edits: &mut Vec<Edit>,
     action: &mut ViewAction,
 ) {
-    let key = format!("{}|{}", task.capsule_id, task.key());
     let mut item = task.item.clone();
     let mut touched = false;
     let blocked = is_blocked(task, all);
     let overdue = bucket_of(task, today) == Bucket::Overdue;
 
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::hover());
+    // The row itself is clickable and opens the plan's source page; widgets
+    // drawn after it (checkbox, edits, pills) sit on top and win the pointer.
+    let row_hit = ui
+        .interact(
+            rect,
+            egui::Id::unique(("plan-row", task.key())),
+            Sense::click(),
+        )
+        .on_hover_cursor(egui::CursorIcon::PointingHand);
     let hovered = ui.rect_contains_pointer(rect);
     if hovered {
         ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
@@ -958,13 +972,15 @@ fn task_row(
             item,
         ));
     }
+    if row_hit.clicked() {
+        action.select_id = Some(task.capsule_id.clone());
+    }
 
     ui.painter().hline(
         rect.x_range(),
         rect.bottom(),
         Stroke::new(1.0, theme::fade(theme::line(), 0.5)),
     );
-    let _ = key;
 }
 
 /// The shell resolves the message id to a page index after drawing; the view
@@ -1275,6 +1291,18 @@ fn gantt(
                         Stroke::new(1.0, theme::fade(color, 0.7)),
                         egui::StrokeKind::Inside,
                     );
+                    // The bar itself opens the plan: nothing else senses the
+                    // graph area, so this interaction shadows nothing.
+                    let hit = ui
+                        .interact(
+                            bar,
+                            egui::Id::unique(("gantt-bar", task.key())),
+                            Sense::click(),
+                        )
+                        .on_hover_cursor(egui::CursorIcon::PointingHand);
+                    if hit.clicked() {
+                        action.select_id = Some(task.capsule_id.clone());
+                    }
                     if hovered {
                         ui.painter().text(
                             pos2(bar.right() + 6.0, bar.center().y),
@@ -1309,7 +1337,7 @@ fn calendar(
     action: &mut ViewAction,
 ) {
     ui.add_space(12.0);
-    centred(ui, 880.0, |ui| {
+    centred(ui, 1220.0, |ui| {
         ui.horizontal(|ui| {
             if icon_button(ui, Icon::ChevronLeft, "←", true, false).clicked() {
                 if state.month == 1 {
@@ -1343,119 +1371,621 @@ fn calendar(
                 }
             });
         });
+        ui.add_space(2.0);
+        ui.label(
+            RichText::new(t(locale, Key::CalendarHint))
+                .size(10.5)
+                .color(theme::faint()),
+        );
         ui.add_space(8.0);
 
-        let grid = month_grid(state.year, state.month);
-        ui.horizontal(|ui| {
-            let cell = (ui.available_width() - 6.0 * 6.0) / 7.0;
-            for label in weekday_labels(locale) {
-                ui.allocate_ui_with_layout(
-                    vec2(cell, 18.0),
-                    Layout::top_down(Align::Center),
-                    |ui| {
-                        let _ = hud(ui, label, theme::faint());
-                    },
-                );
-            }
-        });
-        ui.add_space(4.0);
+        // Two panes: the month grid on the left, the focused day with full
+        // task rows and a quick add on the right.
+        let width = ui.available_width();
+        let grid_w = (width * 0.60).floor().clamp(300.0, 740.0);
+        let day_w = (width - grid_w - super::VIEW_PAD).max(220.0);
+        let released = ui.input(|i| i.pointer.any_released());
+        let focus = state.focus_day.clone().unwrap_or_else(today_key);
 
-        for week in 0..6 {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
-                let cell_w = (ui.available_width() - 6.0 * 6.0) / 7.0;
-                for day_index in 0..7 {
-                    let key = &grid[week * 7 + day_index];
-                    let date = planning::parse_key(key);
-                    let in_month = date.map(|d| d.month() == state.month).unwrap_or(false);
-                    let tasks = tasks_on_day(visible, key, true);
-                    let (rect, response) =
-                        ui.allocate_exact_size(vec2(cell_w, 74.0), Sense::click());
-                    let is_today = key == today;
-                    let focused = state.focus_day.as_deref() == Some(key.as_str());
-                    let fill = if focused {
-                        theme::fade(theme::accent(), 0.12)
-                    } else if is_today {
-                        theme::wash()
-                    } else {
-                        Color32::TRANSPARENT
-                    };
-                    ui.painter().rect(
-                        rect,
-                        theme::RADIUS,
-                        fill,
-                        if is_today {
-                            Stroke::new(1.0, theme::fade(theme::accent(), 0.5))
-                        } else {
-                            Stroke::new(1.0, theme::fade(theme::line(), 0.6))
-                        },
-                        egui::StrokeKind::Inside,
-                    );
-                    if response.hovered() {
-                        ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
-                    }
-                    let day_number = date.map(|d| d.day()).unwrap_or(0);
-                    ui.painter().text(
-                        rect.min + vec2(7.0, 6.0),
-                        Align2::LEFT_TOP,
-                        day_number.to_string(),
-                        FontId::new(10.0, theme::mono_bold()),
-                        if in_month {
-                            theme::muted()
-                        } else {
-                            theme::fade(theme::faint(), 0.5)
-                        },
-                    );
-                    let mut y = rect.top() + 22.0;
-                    for task in tasks.iter().take(3) {
-                        if y + 12.0 > rect.bottom() - 2.0 {
-                            break;
-                        }
-                        let color = match task.item.priority() {
-                            "high" => theme::bad(),
-                            _ => theme::accent_ink(),
-                        };
-                        let dot = pos2(rect.left() + 8.0, y + 4.0);
-                        ui.painter().circle_filled(dot, 2.0, color);
-                        ui.painter().text(
-                            pos2(dot.x + 6.0, dot.y),
-                            Align2::LEFT_CENTER,
-                            truncate_chars(&task.item.text, 14),
-                            FontId::new(9.0, egui::FontFamily::Proportional),
-                            if task.item.is_done() {
-                                theme::faint()
-                            } else {
-                                theme::muted()
+        ui.horizontal_top(|ui| {
+            // ------------------------------------------------ left: grid ---
+            ui.allocate_ui_with_layout(vec2(grid_w, 0.0), Layout::top_down(Align::Min), |ui| {
+                ui.set_width(grid_w);
+                let grid = month_grid(state.year, state.month);
+                ui.horizontal(|ui| {
+                    let cell = (grid_w - 6.0 * 6.0) / 7.0;
+                    for label in weekday_labels(locale) {
+                        ui.allocate_ui_with_layout(
+                            vec2(cell, 18.0),
+                            Layout::top_down(Align::Center),
+                            |ui| {
+                                let _ = hud(ui, label, theme::faint());
                             },
                         );
-                        y += 14.0;
                     }
-                    if tasks.len() > 3 {
-                        ui.painter().text(
-                            pos2(rect.left() + 8.0, y + 4.0),
-                            Align2::LEFT_CENTER,
-                            format!("+{}", tasks.len() - 3),
-                            FontId::new(8.5, theme::mono()),
-                            theme::faint(),
-                        );
-                    }
-                    if response.clicked() {
-                        state.focus_day = Some(key.clone());
-                    }
+                });
+                ui.add_space(4.0);
+
+                for week in 0..6 {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        let cell_w = (grid_w - 6.0 * 6.0) / 7.0;
+                        for day_index in 0..7 {
+                            let key = &grid[week * 7 + day_index];
+                            let date = planning::parse_key(key);
+                            let in_month = date.map(|d| d.month() == state.month).unwrap_or(false);
+                            let tasks = tasks_on_day(visible, key, true);
+                            let (rect, response) =
+                                ui.allocate_exact_size(vec2(cell_w, 84.0), Sense::click());
+                            let cell_hit = ui.interact(
+                                rect,
+                                egui::Id::unique(("day-cell", key.clone())),
+                                Sense::click(),
+                            );
+                            let is_today = key == today;
+                            let focused = state.focus_day.as_deref() == Some(key.as_str());
+                            let drag_active = state.drag_key.is_some();
+                            let drop_target = drag_active && response.contains_pointer();
+                            let fill = if focused || drop_target {
+                                theme::fade(theme::accent(), 0.12)
+                            } else if is_today {
+                                theme::wash()
+                            } else {
+                                Color32::TRANSPARENT
+                            };
+                            ui.painter().rect(
+                                rect,
+                                theme::RADIUS,
+                                fill,
+                                if is_today || drop_target {
+                                    Stroke::new(1.0, theme::fade(theme::accent(), 0.5))
+                                } else {
+                                    Stroke::new(1.0, theme::fade(theme::line(), 0.6))
+                                },
+                                egui::StrokeKind::Inside,
+                            );
+                            if response.hovered() && !drop_target {
+                                ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
+                            }
+                            let day_number = date.map(|d| d.day()).unwrap_or(0);
+                            ui.painter().text(
+                                rect.min + vec2(7.0, 6.0),
+                                Align2::LEFT_TOP,
+                                day_number.to_string(),
+                                FontId::new(10.0, theme::mono_bold()),
+                                if in_month {
+                                    theme::muted()
+                                } else {
+                                    theme::fade(theme::faint(), 0.5)
+                                },
+                            );
+
+                            // Task chips: a click opens the plan's page, a drag
+                            // moves the plan to the day it is dropped on.
+                            let mut y = rect.top() + 22.0;
+                            for (index, task) in tasks.iter().take(3).enumerate() {
+                                if y + 13.0 > rect.bottom() - 4.0 {
+                                    break;
+                                }
+                                let chip_rect = Rect::from_min_size(
+                                    pos2(rect.left() + 6.0, y),
+                                    vec2(cell_w - 10.0, 13.0),
+                                );
+                                let dragging =
+                                    state.drag_key.as_deref() == Some(task.key().as_str());
+                                let chip = ui
+                                    .interact(
+                                        chip_rect,
+                                        egui::Id::unique(("day-chip", key.clone(), index)),
+                                        Sense::click_and_drag(),
+                                    )
+                                    .on_hover_cursor(if dragging {
+                                        egui::CursorIcon::Grabbing
+                                    } else {
+                                        egui::CursorIcon::PointingHand
+                                    });
+                                let color = match task.item.priority() {
+                                    "high" => theme::bad(),
+                                    _ => theme::accent_ink(),
+                                };
+                                let ink = if dragging {
+                                    Color32::WHITE
+                                } else if task.item.is_done() {
+                                    theme::faint()
+                                } else {
+                                    theme::muted()
+                                };
+                                if dragging || chip.hovered() {
+                                    ui.painter().rect_filled(
+                                        chip_rect,
+                                        4.0,
+                                        if dragging {
+                                            theme::accent()
+                                        } else {
+                                            theme::wash()
+                                        },
+                                    );
+                                }
+                                ui.painter().circle_filled(
+                                    pos2(chip_rect.left() + 6.0, chip_rect.center().y),
+                                    2.0,
+                                    if dragging { Color32::WHITE } else { color },
+                                );
+                                ui.painter().text(
+                                    pos2(chip_rect.left() + 12.0, chip_rect.center().y),
+                                    Align2::LEFT_CENTER,
+                                    truncate_chars(&task.item.text, 14),
+                                    FontId::new(9.0, egui::FontFamily::Proportional),
+                                    ink,
+                                );
+                                if chip.drag_started() {
+                                    state.drag_key = Some(task.key());
+                                }
+                                if chip.clicked() {
+                                    action.select_id = Some(task.capsule_id.clone());
+                                }
+                                y += 14.0;
+                            }
+                            if tasks.len() > 3 && y + 12.0 <= rect.bottom() - 2.0 {
+                                let more_rect = Rect::from_min_size(
+                                    pos2(rect.left() + 6.0, y),
+                                    vec2(cell_w - 10.0, 12.0),
+                                );
+                                let more = ui
+                                    .interact(
+                                        more_rect,
+                                        egui::Id::unique(("day-more", key.clone())),
+                                        Sense::click(),
+                                    )
+                                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                    .on_hover_text(t(locale, Key::ShowAllDay));
+                                ui.painter().text(
+                                    pos2(more_rect.left() + 2.0, more_rect.center().y),
+                                    Align2::LEFT_CENTER,
+                                    format!("+{}", tasks.len() - 3),
+                                    FontId::new(8.5, theme::mono()),
+                                    theme::faint(),
+                                );
+                                if more.clicked() {
+                                    state.focus_day = Some(key.clone());
+                                }
+                            }
+
+                            // Landing a drag reschedules the plan to this day.
+                            if released && drop_target {
+                                let drag_key = state.drag_key.clone().unwrap_or_default();
+                                if let Some(task) = visible.iter().find(|t| t.key() == drag_key) {
+                                    if task.item.due.as_deref() != Some(key.as_str()) {
+                                        let mut item = task.item.clone();
+                                        item.due = Some(key.clone());
+                                        edits.push(Edit::Patch(
+                                            task.capsule_id.clone(),
+                                            task.block_id.clone(),
+                                            item,
+                                        ));
+                                        action.toast = Some(format!(
+                                            "{} {}",
+                                            t(locale, Key::Rescheduled),
+                                            human_date(key, locale)
+                                        ));
+                                    }
+                                }
+                            } else if cell_hit.clicked() {
+                                state.focus_day = Some(key.clone());
+                            }
+                        }
+                    });
+                    ui.add_space(6.0);
                 }
             });
-            ui.add_space(6.0);
-        }
 
-        let focus = state.focus_day.clone().unwrap_or_else(today_key);
-        section(ui, &format!("{focus}"));
-        let day_tasks = tasks_on_day(visible, &focus, true);
-        if day_tasks.is_empty() {
-            ui.label(RichText::new("—").size(12.0).color(theme::faint()));
-        }
-        let all = visible.to_vec();
-        for task in &day_tasks {
-            task_row(ui, task, &all, today, locale, edits, action);
+            ui.add_space(super::VIEW_PAD);
+
+            // ----------------------------------------------- right: day ---
+            ui.allocate_ui_with_layout(vec2(day_w, 0.0), Layout::top_down(Align::Min), |ui| {
+                ui.set_width(day_w);
+                section(
+                    ui,
+                    &format!("{} {}", t(locale, Key::TasksOn), human_date(&focus, locale)),
+                );
+                let day_tasks = tasks_on_day(visible, &focus, true);
+                if day_tasks.is_empty() {
+                    ui.label(RichText::new("—").size(12.0).color(theme::faint()));
+                }
+                let all = visible.to_vec();
+                for task in &day_tasks {
+                    task_row(ui, task, &all, today, locale, edits, action);
+                }
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    let mut day_edit = None;
+                    Frame::new()
+                        .fill(theme::controls())
+                        .corner_radius(theme::RADIUS)
+                        .stroke(theme::hairline())
+                        .inner_margin(Margin::symmetric(8, 4))
+                        .show(ui, |ui| {
+                            let w = (ui.available_width() - 84.0).max(90.0);
+                            day_edit = Some(
+                                ui.add_sized(
+                                    vec2(w, 22.0),
+                                    TextEdit::singleline(&mut state.day_text)
+                                        .frame(Frame::NONE)
+                                        .margin(Margin::same(0))
+                                        .font(FontId::new(12.5, egui::FontFamily::Proportional))
+                                        .hint_text(t(locale, Key::QuickAdd)),
+                                ),
+                            );
+                        });
+                    let submit = day_edit.is_some_and(|response| {
+                        response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    });
+                    if ui
+                        .add(egui::Button::new(
+                            RichText::new(t(locale, Key::AddTask)).size(11.5),
+                        ))
+                        .clicked()
+                        || submit
+                    {
+                        if !state.day_text.trim().is_empty() {
+                            edits.push(Edit::Add {
+                                text: state.day_text.trim().to_string(),
+                                due: Some(focus.clone()),
+                                priority: "normal".into(),
+                            });
+                            state.day_text.clear();
+                        }
+                    }
+                });
+            });
+        });
+
+        if released {
+            state.drag_key = None;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mime::Capsule;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    const KEY: &str = "blk-1:item-1";
+
+    fn capsule_with_task(due: &str) -> Vault {
+        Vault {
+            dir: std::path::PathBuf::new(),
+            capsules: vec![Capsule {
+                message_id: "msg-1".into(),
+                subject: "План спринта".into(),
+                from: String::new(),
+                to: String::new(),
+                date: String::new(),
+                timestamp: 0,
+                in_reply_to: None,
+                parent_id: None,
+                references: Vec::new(),
+                tags: vec!["#inbox".into()],
+                status: String::new(),
+                file_name: "plan.eml".into(),
+                blocks: vec![serde_json::json!({
+                    "id": "blk-1",
+                    "type": "todo_list",
+                    "data": {"items": [{
+                        "id": "item-1",
+                        "text": "Написать план",
+                        "done": false,
+                        "due": due,
+                        "priority": "normal"
+                    }]}
+                })],
+                page_canvas: None,
+                attachments: Vec::new(),
+                native: true,
+                parse_note: None,
+                plain_body: None,
+                html_body: None,
+                raw_eml: None,
+            }],
+            load_errors: Vec::new(),
+        }
+    }
+
+    fn press(pos: egui::Pos2) -> egui::Event {
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        }
+    }
+
+    fn release(pos: egui::Pos2) -> egui::Event {
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        }
+    }
+
+    fn item_due(vault: &Vault) -> String {
+        vault.capsules[0].blocks[0]["data"]["items"][0]["due"]
+            .as_str()
+            .expect("due")
+            .to_string()
+    }
+
+    /// Clicking the empty part of a plan row opens the plan's source page.
+    #[test]
+    fn plan_row_click_opens_the_page() {
+        let ctx = egui::Context::default();
+        let vault = Rc::new(RefCell::new(capsule_with_task(&today_key())));
+        let state = Rc::new(RefCell::new(PlanningState::default()));
+        let action: Rc<RefCell<Option<ViewAction>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let vault = vault.clone();
+            let state = state.clone();
+            let action = action.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut out = ctx.run_pass(raw, |ctx| {
+                    ctx.root_ui(|ui| {
+                        let mut vault = vault.borrow_mut();
+                        let mut state = state.borrow_mut();
+                        let act = draw(ui, &mut vault, &mut state, Locale::En, None);
+                        *action.borrow_mut() = Some(act);
+                    });
+                });
+                out.textures_delta.clear();
+            }
+        };
+
+        run(vec![]);
+        let row = ctx
+            .read_response(egui::Id::unique(("plan-row", KEY)))
+            .expect("plan row response");
+        // The top edge of the row: child widgets (whose interact radius
+        // reaches ~5px beyond their rects) do not cover it.
+        let p = pos2(row.rect.center().x, row.rect.top() + 2.5);
+        run(vec![egui::Event::PointerMoved(p)]);
+        run(vec![press(p)]);
+        run(vec![release(p)]);
+        let action = action.borrow_mut().take().expect("action");
+        assert_eq!(
+            action.select_id.as_deref(),
+            Some("msg-1"),
+            "row background click must open the plan's page"
+        );
+        assert!(
+            vault.borrow().capsules[0].blocks[0]["data"]["items"][0]["done"]
+                .as_bool()
+                .unwrap()
+                == false
+        );
+    }
+
+    /// Clicking a task chip inside a calendar day cell opens the page.
+    #[test]
+    fn calendar_chip_click_opens_the_page() {
+        let ctx = egui::Context::default();
+        let vault = Rc::new(RefCell::new(capsule_with_task(&today_key())));
+        let mut state = PlanningState::default();
+        state.mode = Mode::Calendar;
+        let state = Rc::new(RefCell::new(state));
+        let action: Rc<RefCell<Option<ViewAction>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let vault = vault.clone();
+            let state = state.clone();
+            let action = action.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut out = ctx.run_pass(raw, |ctx| {
+                    ctx.root_ui(|ui| {
+                        let mut vault = vault.borrow_mut();
+                        let mut state = state.borrow_mut();
+                        let act = draw(ui, &mut vault, &mut state, Locale::En, None);
+                        *action.borrow_mut() = Some(act);
+                    });
+                });
+                out.textures_delta.clear();
+            }
+        };
+
+        run(vec![]);
+        let chip = ctx
+            .read_response(egui::Id::unique(("day-chip", today_key(), 0usize)))
+            .expect("day chip response");
+        let p = chip.rect.center();
+        run(vec![egui::Event::PointerMoved(p)]);
+        run(vec![press(p)]);
+        run(vec![release(p)]);
+        let action = action.borrow_mut().take().expect("action");
+        assert_eq!(
+            action.select_id.as_deref(),
+            Some("msg-1"),
+            "chip click must open the plan's page"
+        );
+    }
+
+    /// Dropping a chip on another day cell reschedules the plan.
+    #[test]
+    fn calendar_drag_chip_reschedules() {
+        let ctx = egui::Context::default();
+        let vault = Rc::new(RefCell::new(capsule_with_task(&today_key())));
+        let mut state = PlanningState::default();
+        state.mode = Mode::Calendar;
+        let state = Rc::new(RefCell::new(state));
+        let action: Rc<RefCell<Option<ViewAction>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let vault = vault.clone();
+            let state = state.clone();
+            let action = action.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut out = ctx.run_pass(raw, |ctx| {
+                    ctx.root_ui(|ui| {
+                        let mut vault = vault.borrow_mut();
+                        let mut state = state.borrow_mut();
+                        let act = draw(ui, &mut vault, &mut state, Locale::En, None);
+                        *action.borrow_mut() = Some(act);
+                    });
+                });
+                out.textures_delta.clear();
+            }
+        };
+
+        run(vec![]);
+        let target = add_days(&today_key(), 3);
+        let chip = ctx
+            .read_response(egui::Id::unique(("day-chip", today_key(), 0usize)))
+            .expect("day chip response")
+            .rect;
+        let cell = ctx
+            .read_response(egui::Id::unique(("day-cell", target.as_str())))
+            .expect("target cell response")
+            .rect;
+        let from = chip.center();
+        let to = pos2(cell.center().x, cell.bottom() - 4.0);
+        run(vec![egui::Event::PointerMoved(from)]);
+        run(vec![press(from)]);
+        run(vec![egui::Event::PointerMoved(to)]);
+        run(vec![release(to)]);
+        assert_eq!(
+            item_due(&vault.borrow()),
+            target,
+            "dropping the chip on a day must reschedule the plan"
+        );
+        let action = action.borrow_mut().take().expect("action");
+        assert!(action.changed, "the reschedule must mark the vault changed");
+        assert!(
+            action.toast.is_some(),
+            "the reschedule must toast the new date"
+        );
+        assert_eq!(state.borrow().drag_key, None, "drag state must be cleared");
+    }
+
+    /// Clicking a day cell focuses it; the day panel then lists its tasks.
+    #[test]
+    fn calendar_cell_click_focuses_day() {
+        let ctx = egui::Context::default();
+        let vault = Rc::new(RefCell::new(capsule_with_task(&today_key())));
+        let mut state = PlanningState::default();
+        state.mode = Mode::Calendar;
+        let state = Rc::new(RefCell::new(state));
+        let action: Rc<RefCell<Option<ViewAction>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let vault = vault.clone();
+            let state = state.clone();
+            let action = action.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut out = ctx.run_pass(raw, |ctx| {
+                    ctx.root_ui(|ui| {
+                        let mut vault = vault.borrow_mut();
+                        let mut state = state.borrow_mut();
+                        let act = draw(ui, &mut vault, &mut state, Locale::En, None);
+                        *action.borrow_mut() = Some(act);
+                    });
+                });
+                out.textures_delta.clear();
+            }
+        };
+
+        run(vec![]);
+        let target = add_days(&today_key(), 3);
+        let cell = ctx
+            .read_response(egui::Id::unique(("day-cell", target.as_str())))
+            .expect("target cell response")
+            .rect;
+        let p = pos2(cell.center().x, cell.bottom() - 4.0);
+        run(vec![egui::Event::PointerMoved(p)]);
+        run(vec![press(p)]);
+        run(vec![release(p)]);
+        assert_eq!(
+            state.borrow().focus_day.as_deref(),
+            Some(target.as_str()),
+            "cell click must focus the day"
+        );
+        assert_eq!(action.borrow().as_ref().expect("action").select_id, None);
+    }
+
+    /// Kanban and Gantt still draw headless with the new interactions.
+    #[test]
+    fn kanban_and_gantt_draw_headless() {
+        let ctx = egui::Context::default();
+        let vault = Rc::new(RefCell::new(capsule_with_task(&today_key())));
+        let mut state = PlanningState::default();
+        state.mode = Mode::Kanban;
+        let state = Rc::new(RefCell::new(state));
+
+        let run = {
+            let ctx = ctx.clone();
+            let vault = vault.clone();
+            let state = state.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut out = ctx.run_pass(raw, |ctx| {
+                    ctx.root_ui(|ui| {
+                        let mut vault = vault.borrow_mut();
+                        let mut state = state.borrow_mut();
+                        let _ = draw(ui, &mut vault, &mut state, Locale::En, None);
+                    });
+                });
+                out.textures_delta.clear();
+            }
+        };
+
+        run(vec![]);
+        state.borrow_mut().mode = Mode::Gantt;
+        run(vec![]);
+        assert_eq!(item_due(&vault.borrow()), today_key());
+    }
 }
