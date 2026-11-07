@@ -43,6 +43,7 @@ mod project_verify;
 pub mod rich_text;
 mod search;
 mod snapshot;
+mod sync;
 mod sync_imap;
 mod theme;
 mod ui_state;
@@ -83,6 +84,7 @@ pub(crate) const GUTTER: f32 = 26.0;
 /// Set once the `--snapshot` capture has been written, so the app can close.
 static SNAPSHOT_WRITTEN: AtomicBool = AtomicBool::new(false);
 
+#[cfg(not(target_os = "android"))]
 fn main() -> eframe::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let launch = cli::parse(&args);
@@ -161,6 +163,38 @@ fn main() -> eframe::Result<()> {
         std::process::exit(1);
     }
     std::process::exit(0);
+}
+
+/// Android entry (scaffold, v2.9.0): the same `NativeApp` runs as a
+/// NativeActivity. The vault lives in the app's internal data dir and syncs
+/// outward through the folder-sync engine (see `sync.rs` and
+/// docs/android.md) — no storage-permission prompts in this first cut.
+#[cfg(target_os = "android")]
+#[no_mangle]
+fn android_main(app: android_activity::AndroidApp) {
+    if let Some(data) = app.internal_data_path() {
+        vault::set_android_data_dir(std::path::PathBuf::from(data));
+    }
+    android_logger::init_once(
+        android_logger::Config::default().with_max_level(log::LevelFilter::Info),
+    );
+    let launch = cli::parse(&[]);
+    let options = eframe::NativeOptions {
+        android_app: Some(app),
+        ..Default::default()
+    };
+    let result = eframe::run_native(
+        "CapsuleCraft",
+        options,
+        Box::new(move |cc| {
+            theme::load();
+            theme::apply(&cc.egui_ctx);
+            Ok(Box::new(NativeApp::new(launch)))
+        }),
+    );
+    if let Err(err) = result {
+        log::error!("CapsuleCraft error: {err}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1290,6 +1324,81 @@ impl NativeApp {
         self.refresh_links();
     }
 
+    /// Two-way merge between the vault and a folder another device mirrors
+    /// (Dropbox, Nextcloud, Syncthing, a USB drive). A remembered folder
+    /// syncs on a plain click; Shift (or the first run) opens the picker.
+    fn sync_folder_action(&mut self, force_pick: bool) {
+        let pick = self
+            .ui_state
+            .sync_dir
+            .as_deref()
+            .map(PathBuf::from)
+            .filter(|dir| dir.is_dir())
+            .is_none()
+            || force_pick;
+        let dir = if pick {
+            rfd::FileDialog::new()
+                .set_title(t(self.locale, Key::SyncFolderPick))
+                .set_directory(&self.vault.dir)
+                .pick_folder()
+        } else {
+            self.ui_state
+                .sync_dir
+                .as_deref()
+                .map(PathBuf::from)
+                .filter(|dir| dir.is_dir())
+        };
+        let Some(dir) = dir else {
+            return;
+        };
+        if !self.save_selected() {
+            return;
+        }
+        match crate::sync::sync_now(&self.vault.dir, &dir) {
+            Ok((pushed, pulled)) => {
+                self.ui_state.sync_dir = Some(dir.to_string_lossy().to_string());
+                self.ui_state.save();
+                if pushed + pulled == 0 {
+                    self.toast(format!(
+                        "{} ({})",
+                        t(self.locale, Key::SyncUpToDate),
+                        dir.display()
+                    ));
+                } else {
+                    // Pulled pages are on disk now; bring the vault in and
+                    // keep the current selection by message id.
+                    let selected_id = self
+                        .selected
+                        .and_then(|index| self.vault.capsules.get(index))
+                        .map(|capsule| capsule.message_id.clone());
+                    self.vault.reload();
+                    self.selected = selected_id
+                        .and_then(|id| {
+                            self.vault
+                                .capsules
+                                .iter()
+                                .position(|capsule| capsule.message_id == id)
+                        })
+                        .or_else(|| self.vault.selected_root());
+                    self.dirty = false;
+                    self.last_write = Instant::now();
+                    self.refresh_links();
+                    self.toast(format!(
+                        "{}: +{} / −{} ({})",
+                        t(self.locale, Key::SyncDone),
+                        pushed,
+                        pulled,
+                        dir.display()
+                    ));
+                }
+            }
+            Err(err) => {
+                self.status = format!("{}: {err}", t(self.locale, Key::SyncFailed));
+                self.status_error = true;
+            }
+        }
+    }
+
     fn open_vault_dialog(&mut self) {
         if !self.save_selected() {
             return;
@@ -1906,6 +2015,8 @@ pub(crate) struct ShellAction {
     pub(crate) open_project_dialog: bool,
     pub(crate) sync_project: bool,
     pub(crate) switch_vault: Option<PathBuf>,
+    /// Two-way folder sync was requested from the sidebar footer.
+    pub(crate) sync_folder: bool,
 }
 
 impl ShellAction {
@@ -1940,6 +2051,7 @@ impl ShellAction {
         self.open_project_dialog |= other.open_project_dialog;
         self.sync_project |= other.sync_project;
         self.switch_vault = other.switch_vault.or_else(|| self.switch_vault.take());
+        self.sync_folder |= other.sync_folder;
     }
 }
 
@@ -2340,6 +2452,10 @@ impl NativeApp {
         }
         if editor.open_vault || shell.open_vault {
             self.open_vault_dialog();
+        }
+        if shell.sync_folder {
+            let force_pick = ui.input(|i| i.modifiers.shift);
+            self.sync_folder_action(force_pick);
         }
         if editor.new_subpage {
             let parent = self

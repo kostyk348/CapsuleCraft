@@ -1,0 +1,7 @@
+*.apk
+*.aab
+build/
+.gradle/
+local.properties
+# Native libs are built by CI (cargo ndk), never committed:
+app/src/main/jniLibs/**/*.so

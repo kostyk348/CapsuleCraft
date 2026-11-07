@@ -348,6 +348,7 @@ pub fn draw_document(
                     } else {
                     let mut block_op: Option<(usize, BlockOp)> = None;
                     let block_count = capsule.blocks.len();
+                    let first_row_top = ui.cursor().top();
                     for index in 0..block_count {
                         let mut block = capsule.blocks[index].clone();
                         let kind = block_type(&block).to_string();
@@ -414,6 +415,21 @@ pub fn draw_document(
                             BlockOp::Down if index + 1 < capsule.blocks.len() => {
                                 capsule.blocks.swap(index, index + 1);
                                 action.changed = true;
+                            }
+                            BlockOp::Duplicate => {
+                                // A copy lands right below with a fresh id so
+                                // links, todos and code state stay independent.
+                                if let Some(block) = capsule.blocks.get(index) {
+                                    let mut copy = block.clone();
+                                    if let Some(obj) = copy.as_object_mut() {
+                                        obj.insert(
+                                            "id".to_string(),
+                                            json!(crate::mime::new_block_id("paragraph")),
+                                        );
+                                    }
+                                    capsule.blocks.insert(index + 1, copy);
+                                    action.changed = true;
+                                }
                             }
                             BlockOp::Reorder { from, to } => {
                                 if let Some(insert) =
@@ -537,6 +553,32 @@ pub fn draw_document(
                                 action.changed = true;
                             }
                             _ => {}
+                        }
+                    }
+
+                    // While a grip drag is live, a pointer lifted above the
+                    // first rendered row (over the title) means "drop at the
+                    // very top" — gap 0, unreachable by row hit-testing when
+                    // block 0 is skipped as a duplicate heading.
+                    crate::blocks::nudge_drag_to_top(ui, first_row_top);
+
+                    // Alt+↑ / Alt+↓ moves the block last hovered. Independent
+                    // of the grip, the popup and the pointer, so reordering
+                    // stays possible even when a drag release is eaten.
+                    if let Some((hovered_index, up)) =
+                        crate::blocks::keyboard_move_request(ui, block_count)
+                    {
+                        let target = if up {
+                            hovered_index.checked_sub(1)
+                        } else if hovered_index + 1 < block_count {
+                            Some(hovered_index + 1)
+                        } else {
+                            None
+                        };
+                        if let Some(target) = target {
+                            capsule.blocks.swap(hovered_index, target);
+                            crate::blocks::set_last_hovered_block(ui, target);
+                            action.changed = true;
                         }
                     }
 

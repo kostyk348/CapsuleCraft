@@ -192,7 +192,18 @@ impl Vault {
     }
 }
 
+/// Android's app-private data dir, handed over by `android_main` before any
+/// UI exists. Desktop targets never touch it.
+static ANDROID_DATA_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+pub fn set_android_data_dir(dir: PathBuf) {
+    let _ = ANDROID_DATA_DIR.set(dir);
+}
+
 pub fn app_data_dir() -> PathBuf {
+    if let Some(dir) = ANDROID_DATA_DIR.get() {
+        return dir.join("capsulecraft");
+    }
     resolve_data_dir(
         std::env::var("CAPSULECRAFT_DATA_DIR").ok(),
         std::env::var("APPDATA").ok(),
