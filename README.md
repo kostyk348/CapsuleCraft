@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="screenshots/capsulecraft-nova.png" alt="CapsuleCraft — the Nova brand icon: a neon capsule with an envelope" width="180">
+<img src="screenshots/banner.png" alt="CapsuleCraft — your knowledge base is a folder of emails" width="760">
 
 # CapsuleCraft
 
@@ -11,20 +11,20 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 
 [![Release](https://img.shields.io/github/v/release/kostyk348/CapsuleCraft?sort=semver&color=0ea5e9&label=release)](https://github.com/kostyk348/CapsuleCraft/releases)
 [![CI](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml)
-[![native tests](https://img.shields.io/badge/native%20tests-272%20passing-22c55e)](native/)
+[![native tests](https://img.shields.io/badge/native%20tests-277%20passing-22c55e)](native/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![No DB](https://img.shields.io/badge/database-none-orange)](#why-eml)
 [![Offline](https://img.shields.io/badge/offline--first-success)](#strengths)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 [![Listed on Remade](https://remade.wiki/badges/listed-on-remade.svg)](https://remade.wiki/projects/capsulecraft/)
 
-[English](README.md) · **Русский**
+**English** · [Русский](README.ru.md)
 
 </div>
 
 ---
 
-<p align="center"><img src="screenshots/demo.gif" alt="CapsuleCraft in motion — themes, onboarding, the canvas, picture nodes, freehand drawing, icon styles and the release train v2.2 → v2.7" width="720"></p>
+<p align="center"><img src="screenshots/demo.gif" alt="CapsuleCraft in motion — themes, onboarding, the canvas, picture nodes, freehand drawing, icon styles and the release train v2.2 → v2.8" width="720"></p>
 
 ## What is CapsuleCraft?
 
@@ -97,8 +97,9 @@ to a single `native-appearance.json`.
   snippets and Cyrillic-aware case folding; «Related by meaning» ranks pages by
   tf-idf cosine similarity using the same index.
 - **Planning** — every task block across the vault aggregated into Agenda,
-  Kanban, Gantt (with dependency arrows and cycle protection) and calendar, with
-  RFC 5545 ICS export.
+  Kanban, Gantt (with dependency arrows and cycle protection) and a two-pane
+  calendar: click any plan to open its page — row, chip or Gantt bar — and
+  drag a calendar chip onto another day to reschedule it. RFC 5545 ICS export.
 - **Theming** — eight complete presets (Graphite, Paper, Nord, Gruvbox,
   Catppuccin, Solarized, Everforest, Rosé Pine) in an Obsidian-style appearance
   picker: theme cards with live swatches, a personal accent colour layered over
@@ -225,24 +226,24 @@ deliberately narrower: local-first storage you can trust for decades.
 The **native AppImage** (recommended, Linux) or the **.deb** package:
 
 ```bash
-chmod +x CapsuleCraft_2.2.1_amd64.AppImage
-./CapsuleCraft_2.2.1_amd64.AppImage            # default vault...
-./CapsuleCraft_2.2.1_amd64.AppImage /path/to/vault   # ...or your folder
+chmod +x CapsuleCraft_2.8.0_amd64.AppImage
+./CapsuleCraft_2.8.0_amd64.AppImage            # default vault...
+./CapsuleCraft_2.8.0_amd64.AppImage /path/to/vault   # ...or your folder
 # or the deb:
-sudo apt install ./CapsuleCraft_2.2.1_amd64.deb
+sudo apt install ./CapsuleCraft_2.8.0_amd64.deb
 ```
 
 It needs only glibc, an X11 or Wayland desktop and (for audio playback) ALSA —
 no WebKitGTK, no WebView2, nothing else. Every GitHub release also carries
 `SHA256SUMS.txt`.
 
-The **native Windows installer** (x64) is `CapsuleCraft_2.2.1_x64-setup.exe`
+The **native Windows installer** (x64) is `CapsuleCraft_2.8.0_x64-setup.exe`
 (NSIS: Start-menu & desktop shortcuts, uninstaller). Prefer portable? Use
-`CapsuleCraft_native_2.2.0_x64.zip`: unzip it and run `CapsuleCraft.exe`.
+`CapsuleCraft_native_2.8.0_x64.zip`: unzip it and run `CapsuleCraft.exe`.
 Standalone native egui shell, zero dependencies, no WebView2 required.
 
 The **native macOS app** (universal: Apple Silicon + Intel) ships as
-`CapsuleCraft_2.2.1_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
+`CapsuleCraft_2.8.0_macos_universal.dmg`: open it, drag `CapsuleCraft.app`
 onto Applications. It is ad-hoc signed; if Gatekeeper blocks the first launch,
 run `xattr -d com.apple.quarantine /Applications/CapsuleCraft.app`.
 
@@ -321,7 +322,7 @@ native/src/
 ```bash
 # native shell
 cd native
-cargo test          # 272 unit tests
+cargo test          # 277 unit tests
 
 # legacy web engine
 npm ci
@@ -332,6 +333,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v2.8.0** | Planning made clickable and the calendar made useful: every plan opens its page (row background, calendar chip, «+N», Gantt bar — five click-pipeline regression tests drive real pointer events); the calendar becomes two-pane — the month grid on the left, the focused day with full task rows and a quick add on the right, and a chip **dragged onto another day reschedules the plan**; Russian README restored (`README.ru.md`, the language switcher in both files actually works now); promo banner + social card. Tests 272 → 277 | 2026-11-07 |
 | **v2.7.0** | Icon sets: **Nova** (new default), **Document**, **Capsule**, **custom PNG** — live taskbar/titlebar switching, palette commands + mark cycle, legacy `mascot` alias kept; **drag-to-reorder of blocks fixed** (dead since v2.2.1 — stale cleanup raced the landing; regression test drives a real pointer drag); README promo reel `demo.gif` (was referenced, never committed) + Nova hero + honest counts. Tests 268 → 272 | 2026-11-07 |
 | **v2.6.0** | Freehand on the canvas: «Рисовать» toggle (Icon::Pen), decimated strokes as `{type:"ink"}` (bbox + relative points), polyline/dot rendering, persistent pen flag; the STT busy-flag test de-raced (was the red CI on v2.5.0). Tests 263 → 268 | 2026-11-07 |
 | **v2.5.0** | Image nodes on the canvas: «Картинка» on the toolbar picks from the capsule's pictures or a file, the node references the attachment by cid (one copy of the bytes), letterboxed rendering with a quiet placeholder, double-click opens the viewer; page mode and block canvas share the ops. Tests 259 → 263 | 2026-11-07 |

@@ -3,6 +3,46 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.8.0] — 2026-11-07 — Clickable plans, a calendar you can use
+
+### Fixed
+- **Plans in the planning view never navigated on a plain click**
+  («не кликаются планы»): the row background, the calendar day chips, the
+  «+N ещё» overflow marker and the Gantt bar were painted-only — clicks
+  landed nowhere or entered text editing. Now every plan opens its source
+  page when you click it: the row background (widgets on top still win
+  their own pointer), a calendar chip, «+N ещё» and the Gantt bar, each
+  with a pointing-hand cursor.
+
+### Added
+- **Two-pane calendar** (`native/src/views/planning_view.rs`): the month
+  grid on the left, the focused day on the right with full task rows and
+  a quick add that files the task with that day as the due date (Enter or
+  the button, focused on the day field). A hint line explains both moves.
+- **Drag a calendar chip onto another day to reschedule it**: press and
+  drag a task chip, the hovered day lights up with an accent outline, and
+  the drop patches the task's due date with a «Срок перенесён» toast.
+  Clicking a day still focuses it; a drop never double-fires as a click.
+
+### Docs
+- **Russian README restored**: `README.ru.md` was a v1.x fossil (135-test
+  badge, mascot hero). It is now a full bilingual mirror of the current
+  README — same structure, same screenshots, v1.0 → v2.8.0 history — and
+  the language switcher in both files actually links to the other one
+  (the English README pointed «Русский» at itself).
+- **Promo banner + social card** (`screenshots/banner.png`,
+  `screenshots/social-card.png`): Nova mark, bilingual tagline, feature
+  chips; the banner leads both READMEs, the social card is ready for
+  GitHub Settings → Social preview.
+
+### Tests
+- Planning: five regression tests drive real pointer events through
+  egui's pipeline — a row-background click opens the page, a calendar
+  chip click opens the page, a chip drag to another day reschedules the
+  plan (due patched, toast set, drag state cleared), a day click focuses
+  it, and kanban/gantt still draw headless.
+- Native suite: 272 → **277** passed (0 failed, 2 ignored).
+
 ## [2.7.0] — 2026-11-07 — Four faces and a working drag
 
 ### Added
