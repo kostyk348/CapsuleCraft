@@ -6,6 +6,15 @@ description = "CapsuleCraft native egui prototype (same .eml vault, no webview)"
 license = "MIT"
 publish = false
 
+# Android (NativeActivity) loads the app as a shared library exporting
+# android_main — the same src/main.rs is therefore also a cdylib target.
+# Desktop builds/releases target the bin explicitly (--bin capsuleos-native);
+# CI's Android job builds --lib (cargo ndk) to get libcapsuleos_native.so.
+[lib]
+name = "capsuleos_native"
+path = "src/main.rs"
+crate-type = ["cdylib"]
+
 [[bin]]
 name = "capsuleos-native"
 path = "src/main.rs"

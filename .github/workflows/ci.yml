@@ -42,4 +42,4 @@ jobs:
         run: cargo check --manifest-path native/Cargo.toml
 
       - name: Cargo test
-        run: cargo test --manifest-path native/Cargo.toml -j 1
+        run: cargo test --bin capsuleos-native --manifest-path native/Cargo.toml -j 1

@@ -12,12 +12,15 @@
   `<internal>/capsulecraft/vault`.
 - `native/Cargo.toml` — target-зависимости `aarch64`: eframe с фичей
   `android-game-activity`, `android-activity 0.6` (та же мажорная версия,
-  что у winit, чтобы тип `AndroidApp` совпал), `android_logger`.
+  что у winit, чтобы тип `AndroidApp` совпал), `android_logger`; тот же
+  `src/main.rs` объявлен ещё и целью `[lib]` с `crate-type = ["cdylib"]` —
+  NativeActivity грузит приложение как `libcapsuleos_native.so`, а не как
+  бинарь (у bin-цели под Android нет `main` — E0601).
 - `android/` — минимальный gradle-проект: `NativeActivity` с
   `android.app.lib_name = capsuleos_native`, `hasCode=false` — никакого
   собственного Java/Kotlin-кода.
 - `.github/workflows/android.yml` — CI собирает `libcapsuleos_native.so`
-  через `cargo ndk` и упаковывает debug-APK (артефакт джобы).
+  через `cargo ndk … --lib` и упаковывает debug-APK (артефакт джобы).
 
 ## Сборка локально
 
@@ -25,7 +28,7 @@
 rustup target add aarch64-linux-android
 cargo install cargo-ndk --locked
 cd native
-cargo ndk -t arm64-v8a -o ../android/app/src/main/jniLibs build --release
+cargo ndk -t arm64-v8a -o ../android/app/src/main/jniLibs build --release --lib
 cd ../android
 gradle assembleDebug
 # → app/build/outputs/apk/debug/app-debug.apk

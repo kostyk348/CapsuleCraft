@@ -92,7 +92,7 @@ jobs:
           workspaces: native
 
       - name: Build native shell
-        run: cargo build --release --manifest-path native/Cargo.toml
+        run: cargo build --release --manifest-path native/Cargo.toml --bin capsuleos-native
 
       - name: Package Windows portable zip
         shell: pwsh
@@ -188,7 +188,7 @@ jobs:
             libwayland-client0
 
       - name: Build native shell
-        run: cargo build --release --manifest-path native/Cargo.toml
+        run: cargo build --release --manifest-path native/Cargo.toml --bin capsuleos-native
 
       - name: Assemble AppDir
         run: |
@@ -362,8 +362,8 @@ jobs:
       - name: Build native shell (arm64 + x64)
         run: |
           set -e
-          cargo build --release --manifest-path native/Cargo.toml
-          cargo build --release --manifest-path native/Cargo.toml --target x86_64-apple-darwin
+          cargo build --release --manifest-path native/Cargo.toml --bin capsuleos-native
+          cargo build --release --manifest-path native/Cargo.toml --target x86_64-apple-darwin --bin capsuleos-native
           lipo -create \
             native/target/release/capsuleos-native \
             native/target/x86_64-apple-darwin/release/capsuleos-native \

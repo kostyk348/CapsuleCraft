@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), ver
 ## [2.9.0] — 2026-11-07 — Blocks that move, a canvas that navigates, sync that starts
 
 ### Fixed
+- **Android CI build (E0601)**: the crate was bin-only, but a NativeActivity
+  loads the app as a shared library — and the bin target has no `main` under
+  `target_os = "android"`. The same `src/main.rs` is now also a `[lib]`
+  target with `crate-type = ["cdylib"]`; the Android job builds
+  `cargo ndk … --lib` (→ `libcapsuleos_native.so`, the name the manifest
+  expects) and the desktop release builds pin `--bin capsuleos-native`.
 - **The topmost reorder gap was unreachable** (blocks/mod.rs): when block 0
   is skipped as a duplicate page heading, dragging any block upward
   dead-ended at gap 1 — the pointer over the title area never updated the
