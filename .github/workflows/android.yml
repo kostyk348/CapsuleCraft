@@ -36,6 +36,11 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # AGP 8.7.x needs Gradle >= 8.9; pin instead of trusting the runner.
+          gradle-version: "8.10.2"
+
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
 
