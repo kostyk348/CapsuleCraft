@@ -3,6 +3,25 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.5.0] — 2026-11-07 — Pictures on the board
+
+### Added
+- **Image nodes on the canvas** (`native/src/blocks/canvas.rs`): the
+  toolbar's «Картинка» lists the pictures already in the capsule plus
+  «Выбрать файл…»; the node stores a `cid` reference while the bytes
+  stay one-copy in `capsule.attachments` (same scheme as the image
+  block, cid derived from the bytes). File picks come back as
+  `BlockOp::AttachImage`; both the block-level canvas and page mode
+  apply canvas ops now (`AttachImage` upsert, `OpenViewer`).
+- Rendering letterboxes into the node rect (`fit_inside`); unresolved
+  cids draw a quiet placeholder; double-click opens the full-screen
+  viewer.
+
+### Tests
+- Factory defaults, cid resolution, letterbox math, headless draw of
+  texture and placeholder paths.
+- Native suite: 259 -> **263** passed (0 failed, 2 ignored).
+
 ## [2.4.1] — 2026-11-07 — The button's result is always on screen
 
 ### Fixed
