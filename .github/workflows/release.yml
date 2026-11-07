@@ -555,6 +555,9 @@ jobs:
           elif [ -f android/keystore/capsulecraft-release.keystore ]; then
             # No secret storage: the repo carries its own release key (see
             # android/keystore/README.md) so upgrades keep the same signature.
+            # The password lives in that README — it is public by design.
+            KS_PASS=c88f596eab12ed8a2d11b84904da1d26
+            KS_ALIAS=capsulecraft
             echo "Signed with the committed android/keystore key."
           else
             echo "Keystore secrets absent — generating an EPHEMERAL release key."
