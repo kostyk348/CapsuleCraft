@@ -34,7 +34,14 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
+      # The runner image ships the Android SDK with accepted licenses; only
+      # the NDK is installed here (android-actions/setup-android proved
+      # flaky: its sdkmanager license pass dies mid-update).
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27c
+          add-to-path: true
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -46,6 +53,8 @@ jobs:
 
       - name: Build native lib (arm64-v8a)
         working-directory: native
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: cargo ndk -t arm64-v8a -o ../android/app/src/main/jniLibs build --release
 
       - name: Assemble debug APK
