@@ -3,6 +3,29 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.6.0] — 2026-11-07 — A pen for the board
+
+### Added
+- **Freehand drawing on the canvas** (`native/src/blocks/canvas.rs`): a
+  «Рисовать» toolbar toggle (new `Icon::Pen`); while on, a drag on the
+  empty field collects a decimated world-space stroke instead of a
+  marquee. The stroke lands as `{type: "ink"}` — bbox in x/y/width/
+  height, points relative to the origin rounded to 0.1; rendering is a
+  polyline (a dot for a single click); undo, drag, marquee, fit and
+  delete treat it like any element; the pen flag persists like snap.
+
+### Fixed
+- De-raced `start_rejects_when_missing_model` (the red native CI on the
+  v2.5.0 release merge): `start()` now delegates to a private
+  `start_with()` with an injectable worker; the test gates a fake
+  worker behind a channel and polls for the failure with a bounded
+  wait. 200/200 stressed runs with `-j 1`.
+
+### Tests
+- Ink bbox, relative-points round-trip, JSON round-trip, headless draw
+  with pen on/off.
+- Native suite: 263 -> **268** passed (0 failed, 2 ignored).
+
 ## [2.5.0] — 2026-11-07 — Pictures on the board
 
 ### Added
