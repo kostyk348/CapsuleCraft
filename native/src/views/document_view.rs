@@ -798,6 +798,18 @@ pub fn document_meta(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool
                 .size(9.5)
                 .color(theme::faint()),
             );
+            ui.label(
+                RichText::new(i18n::plural(
+                    locale,
+                    links::word_count(capsule),
+                    Key::WordOne,
+                    Key::WordFew,
+                    Key::WordMany,
+                ))
+                .family(theme::mono())
+                .size(9.5)
+                .color(theme::faint()),
+            );
         } else {
             ui.label(
                 RichText::new(t(locale, Key::ImportedEmail))

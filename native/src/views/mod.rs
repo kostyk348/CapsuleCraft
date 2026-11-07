@@ -58,6 +58,33 @@ impl View {
         }
     }
 
+    /// Stable storage key (`ui_state.last_view`); CLI `--view` uses the same
+    /// names so the persisted session and the flag stay interchangeable.
+    pub fn storage_key(self) -> &'static str {
+        match self {
+            View::Page => "page",
+            View::Planning => "planning",
+            View::Graph => "graph",
+            View::Threads => "threads",
+            View::Mime => "mime",
+            View::Mail => "mail",
+            View::Faq => "faq",
+        }
+    }
+
+    pub fn from_storage_key(value: &str) -> Option<View> {
+        match value.trim().to_lowercase().as_str() {
+            "page" => Some(View::Page),
+            "planning" => Some(View::Planning),
+            "graph" => Some(View::Graph),
+            "threads" => Some(View::Threads),
+            "mime" => Some(View::Mime),
+            "mail" => Some(View::Mail),
+            "faq" => Some(View::Faq),
+            _ => None,
+        }
+    }
+
     pub fn icon(self) -> Icon {
         match self {
             View::Page => Icon::Doc,

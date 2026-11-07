@@ -384,9 +384,20 @@ impl NativeApp {
         let imap_config = sync_imap::ImapConfig::load_from_vault(&dir);
         let vault = Vault::load(dir);
         let locale = launch.locale.unwrap_or_else(Locale::detect);
+        // Session restore: unless the CLI pins a page/view explicitly, reopen
+        // what the user had on the previous run (by Message-ID, so vault
+        // reorders don't break the pointer; a deleted page falls back to the
+        // vault root).
+        let ui_state = UiState::load();
         let selected = launch
             .page
             .filter(|index| *index < vault.capsules.len())
+            .or_else(|| {
+                ui_state
+                    .last_page_id
+                    .as_deref()
+                    .and_then(|id| vault.capsules.iter().position(|c| c.message_id == id))
+            })
             .or_else(|| vault.selected_root());
         let snapshot_job = launch.snapshot.clone().map(|path| SnapshotJob {
             path,
@@ -406,6 +417,12 @@ impl NativeApp {
             view: launch
                 .view
                 .filter(|value| !matches!(value, View::Faq))
+                .or_else(|| {
+                    ui_state
+                        .last_view
+                        .as_deref()
+                        .and_then(views::View::from_storage_key)
+                })
                 .unwrap_or(View::Page),
             planning: PlanningState::default(),
             graph: GraphState::new(),
@@ -444,7 +461,7 @@ impl NativeApp {
             watcher: None,
             external_pending: false,
             last_write: Instant::now(),
-            ui_state: UiState::load(),
+            ui_state,
             zen_mode: false,
             components: components::Manager::load(),
             show_integrations: false,
@@ -2106,6 +2123,19 @@ impl NativeApp {
         if cmd && ctx.input(|i| i.key_pressed(egui::Key::Backslash)) {
             self.toggle_sidebar();
         }
+        // «/» focuses the sidebar search from anywhere (Gmail-style) — and
+        // un-collapses the sidebar first if it was hidden. Skipped while a
+        // text field or the palette owns the keyboard.
+        if ctx.input(|i| i.key_pressed(egui::Key::Slash))
+            && !self.palette.open
+            && !ctx.input(|i| i.modifiers.any())
+            && ctx.memory(|m| m.focused().is_none())
+        {
+            if self.ui_state.sidebar_collapsed {
+                self.toggle_sidebar();
+            }
+            ctx.memory_mut(|m| m.request_focus(egui::Id::new("sidebar_search")));
+        }
         if cmd && shift && ctx.input(|i| i.key_pressed(egui::Key::W)) {
             self.toggle_wide_canvas();
         }
@@ -2761,6 +2791,8 @@ impl NativeApp {
             self.save_selected();
         }
 
+        self.persist_session();
+
         chrome::window_edges(&ctx);
         ctx.request_repaint_after(Duration::from_millis(200));
     }
@@ -2935,6 +2967,25 @@ impl NativeApp {
 
     /// Runs IMAP sync in the background: the network round-trip (TLS connect,
     /// folder scan, body fetches) takes seconds to minutes, and v2.3 ran it
+    /// Remembers the open page (by Message-ID) and the active view so the
+    /// next launch reopens the same session. Writes at most once per change,
+    /// never per frame.
+    fn persist_session(&mut self) {
+        let page_id = self
+            .selected
+            .and_then(|index| self.vault.capsules.get(index))
+            .map(|capsule| capsule.message_id.clone());
+        let view_key = self.view.storage_key().to_string();
+        if self.ui_state.last_page_id.as_deref() != page_id.as_deref()
+            || self.ui_state.last_view.as_deref() != Some(view_key.as_str())
+        {
+            self.ui_state.last_page_id = page_id;
+            self.ui_state.last_view = Some(view_key);
+            self.ui_state.save();
+        }
+    }
+
+    /// Dispatches the IMAP sync to a worker thread instead of running it
     /// on the UI thread — the whole interface froze mid-sync. The result
     /// lands through a channel polled in [`Self::poll_imap_sync`].
     fn trigger_imap_sync(&mut self) {

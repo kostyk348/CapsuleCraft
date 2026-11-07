@@ -267,6 +267,47 @@ pub fn page_text(capsule: &Capsule) -> String {
     text
 }
 
+/// Approximate body word count of a page (the subject is excluded): every
+/// whitespace-separated token across all block data strings. Drives the
+/// «N слов» indicator next to the block count in the page meta line.
+pub fn word_count(capsule: &Capsule) -> usize {
+    let mut text = String::new();
+    for block in &capsule.blocks {
+        if let Some(data) = block.get("data") {
+            collect_prose(data, &mut text);
+        }
+    }
+    text.split_whitespace().count()
+}
+
+/// Block keys that carry structure, not prose — skipped by [`word_count`]
+/// so a code block's `"language":"rust"` or a todo item's `"id"` don't
+/// inflate the counter.
+const NON_PROSE_KEYS: [&str; 5] = ["id", "language", "url", "src", "cid"];
+
+fn collect_prose(value: &Value, out: &mut String) {
+    match value {
+        Value::String(text) => {
+            out.push_str(text);
+            out.push('\n');
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect_prose(item, out);
+            }
+        }
+        Value::Object(map) => {
+            for (key, item) in map {
+                if NON_PROSE_KEYS.contains(&key.as_str()) {
+                    continue;
+                }
+                collect_prose(item, out);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn collect_strings(value: &Value, out: &mut String) {
     match value {
         Value::String(text) => {
@@ -775,6 +816,71 @@ fn rewrite_text(text: &str, old_norm: &str, new: &str) -> (String, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn word_count_ignores_subject_and_counts_block_text() {
+        let capsule = Capsule {
+            message_id: "<w@vault.local>".into(),
+            subject: "Tiny page".into(),
+            from: String::new(),
+            to: String::new(),
+            date: String::new(),
+            timestamp: 0,
+            in_reply_to: None,
+            parent_id: None,
+            references: Vec::new(),
+            tags: Vec::new(),
+            status: "Active".into(),
+            file_name: "tiny.eml".into(),
+            blocks: serde_json::json!([
+                {"id":"b1","type":"paragraph","data":{"text":"one two three"}},
+                {"id":"b2","type":"todo_list","data":{"items":[
+                    {"id":"t1","text":"four five","done":false}
+                ]}},
+                {"id":"b3","type":"code","data":{"language":"rust","code":"let x = 1;"}}
+            ])
+            .as_array()
+            .cloned()
+            .unwrap_or_default(),
+            page_canvas: None,
+            attachments: Vec::new(),
+            native: true,
+            parse_note: None,
+            plain_body: None,
+            html_body: None,
+            raw_eml: None,
+        };
+        // 3 (paragraph) + 2 (todo item) + 4 code tokens; the subject "Tiny
+        // page", the item ids and the code `language` must not leak in.
+        assert_eq!(word_count(&capsule), 9);
+    }
+
+    #[test]
+    fn word_count_of_empty_page_is_zero() {
+        let capsule = Capsule {
+            message_id: "<e@vault.local>".into(),
+            subject: "Empty".into(),
+            from: String::new(),
+            to: String::new(),
+            date: String::new(),
+            timestamp: 0,
+            in_reply_to: None,
+            parent_id: None,
+            references: Vec::new(),
+            tags: Vec::new(),
+            status: "Active".into(),
+            file_name: "empty.eml".into(),
+            blocks: Vec::new(),
+            page_canvas: None,
+            attachments: Vec::new(),
+            native: true,
+            parse_note: None,
+            plain_body: None,
+            html_body: None,
+            raw_eml: None,
+        };
+        assert_eq!(word_count(&capsule), 0);
+    }
 
     #[test]
     fn finds_simple_spans() {

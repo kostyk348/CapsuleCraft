@@ -3,6 +3,39 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.9.1] — 2026-11-07 — Nine quality-of-life fixes from a critique pass
+
+A headless critique session (every view screenshotted, every flow read in
+code) produced this batch of small, everyday-friction fixes. Tests 286 → 291.
+
+### Fixed
+- **The sidebar footer rendered the literal «стр. .eml»** — a broken format
+  string shipped with the page counter. It now names the open page:
+  `6 .eml · стр. 3 из 6` (EN: `page 3 of 6`), with an em dash when nothing
+  is open.
+- **The sidebar search placeholder was hardcoded English** ("Search pages")
+  even in the Russian locale; the empty-vault message and the «New page»
+  button were English-only too. All three are localized now.
+- **Planning rows with no date showed a clipped «YYYY-MM…»** placeholder in
+  every no-date row. They show a quiet «—» instead, and the full
+  `YYYY-MM-DD` format moved to a hover tooltip on the date cell.
+- **Graph node labels truncated at 18 characters** («Meeting notes — va…»)
+  — they now carry 26 («Meeting notes — vault sync» fits).
+
+### Added
+- **Session restore**: the open page (by Message-ID, so vault reordering
+  can't break it) and the active view persist to `ui_state.json` and reopen
+  on the next launch. The CLI `--page`/`--view` flags still win, and a page
+  deleted on disk falls back to the vault root.
+- **Word count** next to the block count in the page meta line
+  («2 блока · 39 слов»), with proper Russian plural forms (1 слово / 3
+  слова / 39 слов). Code fences, item ids and `language` keys don't count.
+- **«/» focuses the sidebar search from anywhere** (Gmail-style); if the
+  sidebar is collapsed it un-collapses first. Skipped while the palette or
+  a text field owns the keyboard.
+- **Search clearing**: a ✕ button at the right edge of the search box, and
+  Esc clears the query while the field is focused.
+
 ## [2.9.0] — 2026-11-07 — Blocks that move, a canvas that navigates, sync that starts
 
 ### Fixed

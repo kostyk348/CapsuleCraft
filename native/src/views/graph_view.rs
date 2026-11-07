@@ -290,7 +290,7 @@ pub fn draw(
             let label = if capsule.subject.is_empty() {
                 t(locale, Key::Untitled).to_string()
             } else {
-                truncate_chars(&capsule.subject, 18)
+                truncate_chars(&capsule.subject, 26)
             };
             painter.text(
                 pos2(pos.x, pos.y + node_radius + 6.0),

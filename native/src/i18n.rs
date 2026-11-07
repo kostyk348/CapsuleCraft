@@ -144,6 +144,15 @@ strings! {
     ZeroDb => ("Zero-DB хранилище", "Zero-DB vault"),
     Watching => ("папка под наблюдением", "folder watched"),
     PageCount => ("стр. .eml", ".eml pages"),
+    PageShort => ("стр.", "page"),
+    PageRangeOf => ("из", "of"),
+    SearchPagesHint => ("Поиск страниц", "Search pages"),
+    PagesEmptyTitle => ("Страниц пока нет.", "No pages yet."),
+    PagesEmptyNative => ("Нативных страниц в этом хранилище нет.", "No native pages in this vault."),
+    DueDateHint => ("Срок: YYYY-MM-DD", "Due date: YYYY-MM-DD"),
+    WordOne => ("слово", "words"),
+    WordFew => ("слова", "words"),
+    WordMany => ("слов", "words"),
     PageOne => ("страница", "page"),
     PageFew => ("страницы", "pages"),
     PageMany => ("страниц", "pages"),
@@ -729,6 +738,27 @@ pub fn t(locale: Locale, key: Key) -> &'static str {
     key.get(locale)
 }
 
+/// Sidebar footer counter: "стр. 3 из 6" / "page 3 of 6", with an em dash
+/// when no page is open. Replaces the old literal `PageCount` string that
+/// rendered as "стр. .eml".
+pub fn page_range(locale: Locale, current: Option<usize>, total: usize) -> String {
+    match current {
+        Some(n) => format!(
+            "{} {} {} {}",
+            t(locale, Key::PageShort),
+            n,
+            t(locale, Key::PageRangeOf),
+            total
+        ),
+        None => format!(
+            "{} – {} {}",
+            t(locale, Key::PageShort),
+            t(locale, Key::PageRangeOf),
+            total
+        ),
+    }
+}
+
 /// "1 page / 3 pages" with the right plural form for the locale.
 ///
 /// English has two forms; Russian needs three (`1 блок`, `2 блока`,
@@ -825,5 +855,23 @@ mod tests {
             plural(Locale::En, 2, Key::ReplyOne, Key::ReplyFew, Key::ReplyMany),
             "2 replies"
         );
+    }
+
+    #[test]
+    fn page_range_names_the_open_page() {
+        // The sidebar footer used to render the literal "стр. .eml"; the
+        // counter must now name the open page and the total.
+        assert_eq!(page_range(Locale::Ru, Some(3), 6), "стр. 3 из 6");
+        assert_eq!(page_range(Locale::En, Some(3), 6), "page 3 of 6");
+        assert_eq!(page_range(Locale::Ru, None, 6), "стр. – из 6");
+        assert_eq!(page_range(Locale::En, None, 6), "page – of 6");
+    }
+
+    #[test]
+    fn word_plural_forms() {
+        assert_eq!(plural(Locale::Ru, 1, Key::WordOne, Key::WordFew, Key::WordMany), "1 слово");
+        assert_eq!(plural(Locale::Ru, 3, Key::WordOne, Key::WordFew, Key::WordMany), "3 слова");
+        assert_eq!(plural(Locale::Ru, 61, Key::WordOne, Key::WordFew, Key::WordMany), "61 слово");
+        assert_eq!(plural(Locale::En, 7, Key::WordOne, Key::WordFew, Key::WordMany), "7 words");
     }
 }

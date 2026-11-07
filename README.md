@@ -11,7 +11,7 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 
 [![Release](https://img.shields.io/github/v/release/kostyk348/CapsuleCraft?sort=semver&color=0ea5e9&label=release)](https://github.com/kostyk348/CapsuleCraft/releases)
 [![CI](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml)
-[![native tests](https://img.shields.io/badge/native%20tests-286%20passing-22c55e)](native/)
+[![native tests](https://img.shields.io/badge/native%20tests-291%20passing-22c55e)](native/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![No DB](https://img.shields.io/badge/database-none-orange)](#why-eml)
 [![Offline](https://img.shields.io/badge/offline--first-success)](#strengths)
@@ -323,13 +323,14 @@ native/src/
 ```bash
 # native shell
 cd native
-cargo test          # 286 unit tests
+cargo test          # 291 unit tests
 ```
 
 ## Releases
 
 | Version | What | When |
 |---|---|---|
+| **v2.9.1** | Nine QoL fixes from a critique pass: the sidebar footer literally rendered «стр. .eml» — now `стр. 3 из 6`; the search placeholder, empty-vault message and «New page» button are finally localized; no-date planning rows show «—» (format moved to a hover tooltip) instead of a clipped «YYYY-MM…»; graph labels carry 26 chars; **session restore** — the open page (by Message-ID) and view reopen on launch; word count in the page meta line («2 блока · 39 слов», RU plurals); **«/» focuses the sidebar search from anywhere** (un-collapses the sidebar if needed); ✕ button + Esc clear the search. Tests 286 → 291 | 2026-11-07 |
 | **v2.9.0** | Blocks move three ways (hover toolbar ↑/⧉/↓, a full-height gutter grab strip, Alt+↑/↓), the unreachable topmost drag gap fixed; the canvas opens on content, keyboard zoom `+`/`−`/`Home`/`Ctrl+0`, minimap from any content; **cross-device sync** — two-way vault ↔ folder merge (LWW by mtime, 5 tests), a «Sync» button in the sidebar; Android begins (NativeActivity scaffold, debug-APK in CI, five cross-build obstacles fixed); **the legacy web engine removed** — the repo is the native shell only, CI runs native tests only. Tests 277 → 286 | 2026-11-07 |
 | **v2.8.0** | Planning made clickable and the calendar made useful: every plan opens its page (row background, calendar chip, «+N», Gantt bar — five click-pipeline regression tests drive real pointer events); the calendar becomes two-pane — the month grid on the left, the focused day with full task rows and a quick add on the right, and a chip **dragged onto another day reschedules the plan**; Russian README restored (`README.ru.md`, the language switcher in both files actually works now); promo banner + social card. Tests 272 → 277 | 2026-11-07 |
 | **v2.7.0** | Icon sets: **Nova** (new default), **Document**, **Capsule**, **custom PNG** — live taskbar/titlebar switching, palette commands + mark cycle, legacy `mascot` alias kept; **drag-to-reorder of blocks fixed** (dead since v2.2.1 — stale cleanup raced the landing; regression test drives a real pointer drag); README promo reel `demo.gif` (was referenced, never committed) + Nova hero + honest counts. Tests 268 → 272 | 2026-11-07 |
