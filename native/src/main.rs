@@ -123,11 +123,11 @@ fn main() -> eframe::Result<()> {
             }
         }
     }
-    let window = if launch.snapshot.is_some() {
+    let window = launch.window_size.unwrap_or(if launch.snapshot.is_some() {
         [1440.0, 900.0]
     } else {
         [1380.0, 880.0]
-    };
+    });
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size(window)
         .with_min_inner_size([980.0, 640.0])
@@ -418,6 +418,7 @@ impl NativeApp {
         }
         .with_links();
         app.show_faq_modal = matches!(launch.view, Some(View::Faq));
+        app.show_integrations = launch.modal.as_deref() == Some("integrations");
         if launch.onboarding {
             app.show_onboarding = true;
         }

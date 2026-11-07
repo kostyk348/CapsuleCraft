@@ -70,7 +70,13 @@ pub fn draw_integrations_modal(
             ui.painter()
                 .rect_filled(rect, 0.0, Color32::from_black_alpha(150));
 
-            let panel = Rect::from_center_size(rect.center(), vec2(680.0, 560.0));
+            // The dialog never exceeds the window: on short or unusual
+            // viewports the fixed 680x560 would clip its right edge — where
+            // every row keeps its action buttons.
+            let panel = Rect::from_center_size(
+                rect.center(),
+                vec2(680.0, 560.0).min(rect.size() - vec2(24.0, 24.0)),
+            );
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
@@ -141,7 +147,7 @@ pub fn draw_integrations_modal(
                     let _ = hud(ui, t(locale, Key::CustomModelHint), theme::faint());
                     ui.add_space(6.0);
                     for kind in CustomModelKind::ALL {
-                        if custom_model_row(ui, custom_models, kind, locale) {
+                        if custom_model_row(ui, custom_models, kind, locale).changed {
                             custom_changed = true;
                         }
                         ui.add_space(6.0);
@@ -165,21 +171,35 @@ pub fn draw_integrations_modal(
     action
 }
 
+/// Geometry of one "use my own model folder" row: the card frame and the two
+/// action buttons, so tests can assert the buttons stay inside the card even
+/// with a very long model path on the hud line. Non-test builds only use
+/// `changed`.
+#[allow(dead_code)]
+struct RowMetrics {
+    changed: bool,
+    frame: Rect,
+    pick: Option<Rect>,
+    clear: Option<Rect>,
+}
+
 /// One "use my own model folder" row: current path, pick, remove.
 fn custom_model_row(
     ui: &mut egui::Ui,
     models: &mut CustomModels,
     kind: CustomModelKind,
     locale: Locale,
-) -> bool {
+) -> RowMetrics {
     let mut changed = false;
     let current = models.slot(kind).map(str::to_string);
     let valid = current
         .as_deref()
         .map(|path| crate::ai::custom::validate(kind, std::path::Path::new(path)).is_ok())
         .unwrap_or(false);
+    let mut pick = None;
+    let mut clear = None;
 
-    Frame::new()
+    let frame = Frame::new()
         .fill(theme::wash())
         .corner_radius(theme::RADIUS)
         .stroke(theme::hairline())
@@ -201,20 +221,30 @@ fn custom_model_row(
                 );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if current.is_some()
-                        && text_button(ui, Some(Icon::Trash), t(locale, Key::CustomModelClear), false)
-                            .clicked()
+                        && {
+                            let response = text_button(
+                                ui,
+                                Some(Icon::Trash),
+                                t(locale, Key::CustomModelClear),
+                                false,
+                            );
+                            clear = Some(response.rect);
+                            response.clicked()
+                        }
                     {
                         models.set(kind, None);
                         changed = true;
                     }
-                    if text_button(
-                        ui,
-                        Some(Icon::Folder),
-                        t(locale, Key::CustomModelPick),
-                        false,
-                    )
-                    .clicked()
-                    {
+                    if {
+                        let response = text_button(
+                            ui,
+                            Some(Icon::Folder),
+                            t(locale, Key::CustomModelPick),
+                            false,
+                        );
+                        pick = Some(response.rect);
+                        response.clicked()
+                    } {
                         if let Some(dir) = rfd::FileDialog::new()
                             .set_title(t(locale, Key::CustomModelPick))
                             .pick_folder()
@@ -238,7 +268,12 @@ fn custom_model_row(
                 }
             }
         });
-    changed
+    RowMetrics {
+        changed,
+        frame: frame.response.rect,
+        pick,
+        clear,
+    }
 }
 
 fn component_card(ui: &mut egui::Ui, manager: &Manager, id: ComponentId, locale: Locale) {
@@ -538,6 +573,75 @@ mod tests {
             assert!(
                 matches!(action, IntegrationsAction::Close),
                 "click at {pos:?} did not close the modal"
+            );
+        }
+    }
+
+    /// Regression: the model path is printed on the row as an unclamped HUD
+    /// line, so a long folder path widened the whole card frame past the
+    /// scroll viewport — and the right-aligned pick/remove buttons visually
+    /// slid off the card ("кнопки с добавлением своей модели едут"). The row
+    /// must stay as wide as its viewport with the buttons inside the frame.
+    #[test]
+    fn long_model_path_keeps_the_row_and_buttons_in_place() {
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::Vec2::new(1200.0, 800.0),
+            )),
+            ..Default::default()
+        };
+        let mut custom_models = CustomModels::default();
+        let long_path = "/home/user/Загрузки/models/whisper/very/deep/nested/folder/that/goes/on/and/on/and/overflows/quantized-tiny/с-russian-буквами";
+        custom_models.set(CustomModelKind::Stt, Some(long_path.to_string()));
+
+        let mut metrics: Vec<RowMetrics> = Vec::new();
+        let sink = &mut metrics;
+        let mut out = ctx.run_pass(raw, |ctx| {
+            egui::Area::new(egui::Id::new("row-test"))
+                .fixed_pos(egui::Pos2::ZERO)
+                .show(ctx, |ui| {
+                    let mut column = ui.new_child(
+                        egui::UiBuilder::new()
+                            .max_rect(egui::Rect::from_min_size(
+                                egui::Pos2::ZERO,
+                                egui::Vec2::new(640.0, 600.0),
+                            ))
+                            .layout(egui::Layout::top_down(egui::Align::Min)),
+                    );
+                    for kind in CustomModelKind::ALL {
+                        sink.push(custom_model_row(&mut column, &mut custom_models, kind, Locale::En));
+                        column.add_space(6.0);
+                    }
+                });
+        });
+        // Headless: drop the texture updates instead of painting them.
+        out.textures_delta.clear();
+
+        let stt = &metrics[0];
+        // The card did not stretch past its viewport (640 wide).
+        assert!(
+            stt.frame.width() <= 641.0,
+            "card stretched to {} px by the long path",
+            stt.frame.width()
+        );
+        // Both buttons stayed inside the card, anchored to its right edge.
+        for (name, rect) in [("pick", stt.pick), ("clear", stt.clear)] {
+            let rect = rect.expect("button rect recorded");
+            assert!(
+                rect.right() <= stt.frame.right() + 1.0 && rect.left() >= stt.frame.left(),
+                "{name} button at {rect:?} left the card {:?}",
+                stt.frame
+            );
+        }
+        // The untouched rows keep their buttons on the right edge too.
+        for (name, row) in [("tts", &metrics[1]), ("ocr", &metrics[2])] {
+            let rect = row.pick.expect("pick rect recorded");
+            assert!(
+                (rect.right() - row.frame.right() + 10.0).abs() < 2.0,
+                "{name} pick button detached from the card edge: {rect:?} vs {:?}",
+                row.frame
             );
         }
     }
