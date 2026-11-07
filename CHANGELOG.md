@@ -3,6 +3,70 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.3.0] — 2026-11-07 — The canvas
+
+The board becomes a real diagram tool: an infinite pan/zoom field, arrow
+connectors, flowchart shapes, inline text editing, grid snapping and a
+minimap — plus a fix for the «уезжающие» buttons in Integrations.
+
+### Added
+- **Infinite canvas engine** (`native/src/blocks/canvas.rs`): elements live
+  in world coordinates behind a `CanvasView` transform (`screen = world ×
+  zoom + offset`). The wheel pans the field and claims the scroll so the
+  page stays still; Ctrl+wheel / pinch zoom (0.2×–4×) anchored under the
+  cursor, exact even when the limit clamps the gesture. The grid switches
+  one ladder step per octave of zoom so its screen pitch stays legible
+  (28–57 px). Marquee selection, rubber-band drafting and the minimap all
+  live in world space. The viewport persists in `data.view`; a
+  fit-to-content button recomputes it from the elements' bounding box.
+- **Arrow connectors**: a selected node grows a connector port on its right
+  edge; dragging from it drafts an arrow that drops on any other node. An
+  arrow stores only `from`/`to`/`label` — endpoints are recomputed from the
+  node rects every frame, so moving a node moves its arrows for free, and
+  the `.eml` schema stays flat. Connectors exit through the shape border
+  (ray-to-rect intersection; diamonds use their exact L1 edge), land with a
+  filled arrowhead, and carry an optional midpoint label with a halo.
+  Clicking near a segment selects the arrow; deleting a node prunes its
+  arrows (`prune_elements`). Undo covers arrow creation, moves and deletes.
+- **Inline text editing** — the long-standing gap: canvas text could not be
+  edited at all. Double-click on a node (or an arrow) opens an overlay
+  `TextEdit` right on the element; focus is requested once, Escape or focus
+  loss saves and closes.
+- **Flowchart shapes**: diamond (decision) and rounded (terminator/pill)
+  join sticky/rectangle/text with their own anchor geometry and rendering,
+  plus toolbar buttons («Ромб», «Скруглённый»).
+- **Snap to grid**: the «Сетка»/«Snap» toolbar toggle (persisted in
+  `data.snap`) makes group drags land on a 20-unit grid — half the zoom-1
+  grid pitch, always aligned to the visible lines.
+- **Minimap**: bottom-right once two or more nodes exist — content box,
+  node rectangles, current viewport outline, click/drag to navigate.
+  Arrows are excluded from marquee, bbox, fit and minimap scale (they have
+  no rect of their own).
+- **Dialog screenshots**: `--modal integrations` opens a modal on startup
+  and `--window-size 980x640` targets the app's minimum window, extending
+  the deterministic `--snapshot` tooling to dialogs.
+
+### Fixed
+- **Integrations**: a long custom-model folder path was printed as an
+  unclamped HUD line, stretched its card past the scroll viewport and
+  visually dragged the right-aligned «Выбрать папку»/«Убрать» buttons off
+  the card. `hud()` now re-layouts with a trailing `..` ellipsis when the
+  line does not fit (binary-searched prefix, extra layout pass only on
+  overflow) — the same latent overflow closes at every other hud call site
+  (requirement lists, sizes, paths, mail headers). The dialog itself is
+  clamped to the window, so short viewports can no longer clip its right
+  edge where every row keeps its buttons
+  (`native/src/widgets/controls.rs`, `native/src/modals/integrations.rs`).
+
+### Tests
+`cargo test` in `native/`: **248 passing** (was 233). New: world/screen
+round-trip, anchored zoom with clamping, corrupt-view fallback, fit-view
+bounds, grid ladder, rect/diamond anchors, edge hit-test with endpoint
+clamping, dangling-arrow pruning, arrow-free bbox, topmost-node hit, snap
+rounding, hud width clamp, row/button containment under a 140-char path,
+`--modal`/`--window-size` parsing. Marquee tests now also assert arrows
+stay excluded.
+
 ## [2.2.1] — 2026-11-06 — The editor keeps its promises
 
 Three block-editor upgrades the interface already hinted at — plus the grip
