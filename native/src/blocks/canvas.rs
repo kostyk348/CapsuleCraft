@@ -50,10 +50,7 @@ impl CanvasView {
         };
         let x = view.get("x").and_then(Value::as_f64).unwrap_or(0.0) as f32;
         let y = view.get("y").and_then(Value::as_f64).unwrap_or(0.0) as f32;
-        let zoom = view
-            .get("zoom")
-            .and_then(Value::as_f64)
-            .unwrap_or(1.0) as f32;
+        let zoom = view.get("zoom").and_then(Value::as_f64).unwrap_or(1.0) as f32;
         if !x.is_finite() || !y.is_finite() || !zoom.is_finite() || zoom <= 0.0 {
             return Self::identity();
         }
@@ -163,8 +160,8 @@ pub fn canvas_fit_view(elements: &[Value], canvas_size: Vec2) -> CanvasView {
     }
 }
 
-pub fn canvas_element(kind: &str, index: usize, locale: Locale) -> Value {
-    let offset = (index % 6) as f64 * 18.0;
+/// Builds an element whose top-left sits at the world position `at`.
+pub fn canvas_element_at(kind: &str, at: Pos2, locale: Locale) -> Value {
     let (width, height, text) = match kind {
         "text" => (180.0, 28.0, t(locale, Key::CanvasAddText).to_string()),
         "sticky" => (150.0, 90.0, t(locale, Key::CanvasAddSticky).to_string()),
@@ -176,13 +173,42 @@ pub fn canvas_element(kind: &str, index: usize, locale: Locale) -> Value {
     json!({
         "id": format!("el_{}", now_nanos()),
         "type": kind,
-        "x": 24.0 + offset,
-        "y": 24.0 + offset,
+        "x": at.x as f64,
+        "y": at.y as f64,
         "width": width,
         "height": height,
         "text": text,
         "color": "",
     })
+}
+
+/// Where a toolbar-added node lands: the center of the visible field, so the
+/// button's result is always on screen no matter how far the board was panned
+/// or zoomed (a fixed spawn point near the world origin made additions vanish
+/// whenever the viewport had moved away). A small cascade keeps consecutive
+/// adds from stacking exactly on top of each other.
+pub fn spawn_position(view: &CanvasView, canvas_rect: Option<Rect>, count: usize) -> Pos2 {
+    let rect = canvas_rect.unwrap_or_else(|| Rect::from_min_size(Pos2::ZERO, vec2(640.0, 360.0)));
+    let center = view.screen_to_world(rect.center());
+    let cascade = (count % 8) as f32 * 16.0;
+    pos2(center.x + cascade, center.y + cascade)
+}
+
+/// Undo-snapshot, spawn at the visible center, append, flag the change.
+fn add_element(
+    ui: &mut Ui,
+    view: &CanvasView,
+    rect_key: egui::Id,
+    kind: &str,
+    elements: &mut Vec<Value>,
+    block_id: &str,
+    locale: Locale,
+) -> bool {
+    push_undo(ui, block_id, elements);
+    let rect = ui.data(|d| d.get_temp(rect_key));
+    let at = spawn_position(view, rect, elements.len());
+    elements.push(canvas_element_at(kind, at, locale));
+    true
 }
 
 fn undo_key(block_id: &str) -> egui::Id {
@@ -343,8 +369,7 @@ fn edge_id_at(elements: &[Value], pos: Pos2, tol: f32) -> Option<String> {
         .iter()
         .filter(|element| node_kind(element) == "arrow")
         .find(|edge| {
-            edge_endpoints(elements, edge)
-                .is_some_and(|(a, b)| seg_dist(pos, a, b) <= tol)
+            edge_endpoints(elements, edge).is_some_and(|(a, b)| seg_dist(pos, a, b) <= tol)
         })
         .map(element_id)
 }
@@ -397,6 +422,7 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let mut snap_changed = false;
+    let rect_key = egui::Id::new(("canvas-rect", block_id.clone()));
 
     Frame::new()
         .fill(theme::sunken())
@@ -415,36 +441,72 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                         changed = true;
                     }
                     if text_button(ui, None, t(locale, Key::CanvasAddText), false).clicked() {
-                        push_undo(ui, &block_id, &elements);
-                        elements.push(canvas_element("text", elements.len(), locale));
-                        changed = true;
+                        changed |= add_element(
+                            ui,
+                            &view,
+                            rect_key,
+                            "text",
+                            &mut elements,
+                            &block_id,
+                            locale,
+                        );
                     }
                     if text_button(ui, Some(Icon::Doc), t(locale, Key::CanvasAddPage), false)
                         .clicked()
                     {
-                        push_undo(ui, &block_id, &elements);
-                        elements.push(canvas_element("page", elements.len(), locale));
-                        changed = true;
+                        changed |= add_element(
+                            ui,
+                            &view,
+                            rect_key,
+                            "page",
+                            &mut elements,
+                            &block_id,
+                            locale,
+                        );
                     }
                     if text_button(ui, None, t(locale, Key::CanvasAddRounded), false).clicked() {
-                        push_undo(ui, &block_id, &elements);
-                        elements.push(canvas_element("rounded", elements.len(), locale));
-                        changed = true;
+                        changed |= add_element(
+                            ui,
+                            &view,
+                            rect_key,
+                            "rounded",
+                            &mut elements,
+                            &block_id,
+                            locale,
+                        );
                     }
                     if text_button(ui, None, t(locale, Key::CanvasAddDiamond), false).clicked() {
-                        push_undo(ui, &block_id, &elements);
-                        elements.push(canvas_element("diamond", elements.len(), locale));
-                        changed = true;
+                        changed |= add_element(
+                            ui,
+                            &view,
+                            rect_key,
+                            "diamond",
+                            &mut elements,
+                            &block_id,
+                            locale,
+                        );
                     }
                     if text_button(ui, None, t(locale, Key::CanvasAddRect), false).clicked() {
-                        push_undo(ui, &block_id, &elements);
-                        elements.push(canvas_element("rectangle", elements.len(), locale));
-                        changed = true;
+                        changed |= add_element(
+                            ui,
+                            &view,
+                            rect_key,
+                            "rectangle",
+                            &mut elements,
+                            &block_id,
+                            locale,
+                        );
                     }
                     if text_button(ui, None, t(locale, Key::CanvasAddSticky), false).clicked() {
-                        push_undo(ui, &block_id, &elements);
-                        elements.push(canvas_element("sticky", elements.len(), locale));
-                        changed = true;
+                        changed |= add_element(
+                            ui,
+                            &view,
+                            rect_key,
+                            "sticky",
+                            &mut elements,
+                            &block_id,
+                            locale,
+                        );
                     }
                     if text_button(ui, Some(Icon::Undo), t(locale, Key::CanvasUndo), false)
                         .clicked()
@@ -476,6 +538,9 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                 vec2(ui.available_width(), canvas_height),
                 Sense::click_and_drag(),
             );
+            // Remembered for the toolbar above: next frame's add-buttons spawn
+            // the new node at this rect's center (see `spawn_position`).
+            ui.data_mut(|d| d.insert_temp(rect_key, canvas_rect));
             let painter = ui.painter_at(canvas_rect);
             painter.rect_filled(canvas_rect, theme::RADIUS, theme::bg());
             painter.rect_stroke(
@@ -607,7 +672,9 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                     .interact_pointer_pos()
                     .unwrap_or(canvas_rect.min)
                     - canvas_rect.min.to_vec2();
-                ui.data_mut(|data| data.insert_temp(marquee_key, Some(view.screen_to_world(local))));
+                ui.data_mut(|data| {
+                    data.insert_temp(marquee_key, Some(view.screen_to_world(local)))
+                });
             }
             let mut marquee_now: Option<Rect> = None;
             let mut marquee_done: Option<Rect> = None;
@@ -750,7 +817,7 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                         egui::CornerRadius::same((4.0 * view.zoom).round() as u8)
                     } else if kind == "rounded" {
                         egui::CornerRadius::same(
-                            (screen_rect.height() * 0.5).min(18.0 * view.zoom) as u8,
+                            (screen_rect.height() * 0.5).min(18.0 * view.zoom) as u8
                         )
                     } else {
                         theme::RADIUS
@@ -812,17 +879,13 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                         painter.circle_filled(port_center, 5.0, theme::fade(theme::accent(), 0.7));
                     }
                     if port.drag_started() {
-                        let local = port
-                            .interact_pointer_pos()
-                            .unwrap_or(port_center)
+                        let local = port.interact_pointer_pos().unwrap_or(port_center)
                             - canvas_rect.min.to_vec2();
                         edge_draft = Some((id.clone(), view.screen_to_world(local)));
                     }
                     if port.dragged() {
                         if let Some(draft) = edge_draft.as_mut() {
-                            let local = port
-                                .interact_pointer_pos()
-                                .unwrap_or(port_center)
+                            let local = port.interact_pointer_pos().unwrap_or(port_center)
                                 - canvas_rect.min.to_vec2();
                             draft.1 = view.screen_to_world(local);
                         }
@@ -907,7 +970,10 @@ pub fn draw_canvas_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool
                     let font = FontId::new((10.0 * view.zoom).max(6.0), FontFamily::Proportional);
                     let label_rect = Rect::from_center_size(
                         mid,
-                        vec2(label.len() as f32 * (font.size * 0.62) + 8.0, font.size + 4.0),
+                        vec2(
+                            label.len() as f32 * (font.size * 0.62) + 8.0,
+                            font.size + 4.0,
+                        ),
                     );
                     painter.rect_filled(label_rect, 3.0, theme::fade(theme::bg(), 0.85));
                     painter.text(
@@ -1395,7 +1461,7 @@ mod page_node_tests {
     /// The page node exists, is a node (not an arrow) and carries its title.
     #[test]
     fn page_element_factory_produces_a_node() {
-        let el = canvas_element("page", 0, crate::i18n::Locale::En);
+        let el = canvas_element_at("page", egui::pos2(24.0, 24.0), crate::i18n::Locale::En);
         assert!(is_node(&el));
         assert_eq!(el.get("type").and_then(Value::as_str), Some("page"));
         assert_eq!(el.get("width").and_then(Value::as_f64), Some(170.0));
@@ -1446,5 +1512,110 @@ mod page_node_tests {
                 .and_then(Value::as_str),
             Some("page")
         );
+    }
+}
+
+#[cfg(test)]
+mod spawn_tests {
+    use super::*;
+
+    fn rect() -> Rect {
+        Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0))
+    }
+
+    /// Regression: toolbar adds used to land at a fixed spot near the world
+    /// origin, so after panning (or on a board whose saved view sits far
+    /// away) the new node appeared off-screen — «добавил, а его не видно».
+    /// Whatever the view, the spawn rect must cover the viewport center.
+    #[test]
+    fn spawn_lands_in_the_visible_field() {
+        let views = [
+            CanvasView::identity(),
+            CanvasView {
+                offset: vec2(-5000.0, -3000.0),
+                zoom: 1.0,
+            },
+            CanvasView {
+                offset: vec2(1200.0, 80.0),
+                zoom: 0.5,
+            },
+            CanvasView {
+                offset: vec2(-200.0, -200.0),
+                zoom: 2.0,
+            },
+        ];
+        for view in views {
+            let viewport_world = Rect::from_min_max(
+                view.screen_to_world(rect().min),
+                view.screen_to_world(rect().max),
+            );
+            for count in 0..12 {
+                let at = spawn_position(&view, Some(rect()), count);
+                let el = canvas_element_at("sticky", at, crate::i18n::Locale::En);
+                assert!(
+                    viewport_world.intersects(element_rect(&el)),
+                    "view {view:?} count {count}: spawn {at:?} is off-screen"
+                );
+            }
+        }
+    }
+
+    /// Consecutive adds cascade instead of stacking exactly, but every
+    /// cascade step stays within one node size of the center.
+    #[test]
+    fn consecutive_spawns_cascade_but_stay_close() {
+        let view = CanvasView::identity();
+        let mut previous: Option<Pos2> = None;
+        for count in 0..8 {
+            let at = spawn_position(&view, Some(rect()), count);
+            assert!(
+                (at - rect().center()).length() < 160.0,
+                "count {count}: spawn {at:?} drifted too far from the center"
+            );
+            if let Some(prev) = previous {
+                assert_ne!(at, prev, "count {count}: spawn stacked on the previous one");
+            }
+            previous = Some(at);
+        }
+    }
+
+    /// After a real draw pass the toolbar must find last frame's canvas rect
+    /// under the key it reads (the storage half of the hand-off).
+    #[test]
+    fn draw_pass_publishes_the_canvas_rect() {
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1000.0, 800.0),
+            )),
+            ..Default::default()
+        };
+        let mut block = json!({
+            "id": "spawn-canvas",
+            "type": "interactive_canvas",
+            "data": {"elements": [], "height": 400.0}
+        });
+        let mut out = ctx.run_pass(raw, |ctx| {
+            egui::Area::new(egui::Id::new("spawn-canvas-test"))
+                .fixed_pos(egui::Pos2::ZERO)
+                .show(ctx, |ui| {
+                    let _ = draw_canvas_block(ui, &mut block, crate::i18n::Locale::En);
+                });
+        });
+        out.textures_delta.clear();
+        let stored = ctx.data(|d| {
+            d.get_temp::<Rect>(egui::Id::new(("canvas-rect", "spawn-canvas".to_string())))
+        });
+        let rect = stored.expect("canvas rect must be published for the toolbar");
+        assert!((rect.height() - 400.0).abs() < 1.0, "rect {rect:?}");
+    }
+
+    /// The positioned factory honours `at` verbatim.
+    #[test]
+    fn factory_builds_at_the_given_position() {
+        let el = canvas_element_at("sticky", egui::pos2(60.0, 60.0), crate::i18n::Locale::En);
+        assert_eq!(el.get("x").and_then(Value::as_f64), Some(60.0));
+        assert_eq!(el.get("type").and_then(Value::as_str), Some("sticky"));
     }
 }
