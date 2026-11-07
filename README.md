@@ -250,6 +250,21 @@ Releases carry **native builds only** — no web/Tauri installers. The Linux
 **AppImage / .deb**, Windows **setup.exe**, and macOS **.dmg** are the app,
 period: no browser engine, no webview libraries.
 
+#### Where your data lives
+
+Components (the OCR/STT/TTS engines and the 1.75 GB OCR model), the active
+vault pointer and recent vaults go to the **data root**: `%APPDATA%\com.capsuleos.app`
+(Windows), `$XDG_DATA_HOME/com.capsuleos.app` or `~/.local/share/com.capsuleos.app`
+(Linux/macOS). Settings (theme, zoom, custom model folders) go to the **config
+root**: `~/.config/capsuleos` or `$XDG_CONFIG_HOME/capsuleos`. Both are
+independent of where the AppImage, .deb or portable binary lives — an update
+never touches your engines or models. Portable runs can relocate either root:
+
+```bash
+CAPSULECRAFT_DATA_DIR=/mnt/usb/capsulecraft-data ./CapsuleCraft_amd64.AppImage
+CAPSULECRAFT_CONFIG_DIR=/mnt/usb/capsulecraft-config ./CapsuleCraft_amd64.AppImage
+```
+
 > First launch shows an empty vault, the **onboarding tour** (12 bilingual
 > steps — skip it freely, it never nags again and lives in ⌘K) and the
 > built-in **FAQ**. Press `F1`, use the `ⓘ FAQ` button or ⌘K → FAQ. No demo

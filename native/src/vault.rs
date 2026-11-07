@@ -193,13 +193,33 @@ impl Vault {
 }
 
 pub fn app_data_dir() -> PathBuf {
-    if let Ok(appdata) = std::env::var("APPDATA") {
+    resolve_data_dir(
+        std::env::var("CAPSULECRAFT_DATA_DIR").ok(),
+        std::env::var("APPDATA").ok(),
+        std::env::var("XDG_DATA_HOME").ok(),
+        std::env::var("HOME").ok(),
+    )
+}
+
+/// The data root resolution, parameterized so tests never touch the process
+/// environment. Priority: explicit override → Windows APPDATA → XDG_DATA_HOME
+/// → HOME (platform layout) → absolute temp dir (never a CWD-relative path).
+fn resolve_data_dir(
+    override_dir: Option<String>,
+    appdata: Option<String>,
+    xdg_data_home: Option<String>,
+    home: Option<String>,
+) -> PathBuf {
+    if let Some(dir) = override_dir.filter(|d| !d.trim().is_empty()) {
+        return PathBuf::from(dir);
+    }
+    if let Some(appdata) = appdata {
         return PathBuf::from(appdata).join("com.capsuleos.app");
     }
-    if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
+    if let Some(data_home) = xdg_data_home {
         return PathBuf::from(data_home).join("com.capsuleos.app");
     }
-    if let Ok(home) = std::env::var("HOME") {
+    if let Some(home) = home {
         #[cfg(target_os = "macos")]
         {
             return PathBuf::from(home)
@@ -215,7 +235,13 @@ pub fn app_data_dir() -> PathBuf {
                 .join("com.capsuleos.app");
         }
     }
-    PathBuf::from("com.capsuleos.app")
+    // No APPDATA / XDG_DATA_HOME / HOME at all (exotic launchers, stripped
+    // containers). The old last resort was a RELATIVE path, which silently
+    // resolved against the process CWD — an AppImage started from different
+    // folders wrote the OCR model to a different, arbitrary location and
+    // never found it again on the next launch. An absolute temp dir is the
+    // only honest answer; the env override above is the real escape hatch.
+    std::env::temp_dir().join("com.capsuleos.app")
 }
 
 pub fn active_vault_file() -> PathBuf {
@@ -600,5 +626,35 @@ mod tests {
         assert!(vault.capsules.iter().any(|c| c.file_name == "docs/doc_guide.eml"));
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn data_dir_prefers_the_explicit_override() {
+        let dir = resolve_data_dir(
+            Some("/srv/capsulecraft".into()),
+            Some("C:\\AppData".into()),
+            Some("/xdg/data".into()),
+            Some("/home/user".into()),
+        );
+        assert_eq!(dir, PathBuf::from("/srv/capsulecraft"));
+        // A blank override is ignored, not treated as a real path.
+        let dir = resolve_data_dir(
+            Some("   ".into()),
+            None,
+            Some("/xdg/data".into()),
+            Some("/home/user".into()),
+        );
+        assert_eq!(dir, PathBuf::from("/xdg/data/com.capsuleos.app"));
+    }
+
+    #[test]
+    fn data_dir_without_home_is_absolute() {
+        // Regression: the old last resort was the RELATIVE
+        // "com.capsuleos.app", which resolved against the process CWD — an
+        // AppImage launched from different folders wrote the 1.75 GB OCR
+        // model to a different place on every launch.
+        let dir = resolve_data_dir(None, None, None, None);
+        assert!(dir.is_absolute(), "relative fallback: {dir:?}");
+        assert!(dir.ends_with("com.capsuleos.app"));
     }
 }

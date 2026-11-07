@@ -222,6 +222,9 @@ struct NativeApp {
     show_imap_modal: bool,
     imap_config: sync_imap::ImapConfig,
     imap_status: sync_imap::SyncStatus,
+    /// Result of the background sync thread, if one is running.
+    imap_job: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
+    imap_last_sync: Option<Instant>,
     show_cothink_modal: bool,
     show_faq_modal: bool,
     cothink_mode: cothinker::CoThinkMode,
@@ -385,6 +388,8 @@ impl NativeApp {
             show_imap_modal: false,
             imap_config,
             imap_status: sync_imap::SyncStatus::Idle,
+            imap_job: None,
+            imap_last_sync: None,
             show_cothink_modal: false,
             show_faq_modal: false,
             cothink_mode: cothinker::CoThinkMode::Critique,
@@ -854,6 +859,13 @@ impl NativeApp {
                 }
                 ai::stt::SttPhase::Running => {}
             }
+        }
+
+        // IMAP sync: drain the background thread and keep auto_sync ticking.
+        self.poll_imap_sync();
+        self.maybe_autosync();
+        if self.imap_job.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
 
         // OCR: stream engine progress into the status card, then land the
@@ -2717,30 +2729,78 @@ impl NativeApp {
         }
     }
 
+    /// Runs IMAP sync in the background: the network round-trip (TLS connect,
+    /// folder scan, body fetches) takes seconds to minutes, and v2.3 ran it
+    /// on the UI thread — the whole interface froze mid-sync. The result
+    /// lands through a channel polled in [`Self::poll_imap_sync`].
     fn trigger_imap_sync(&mut self) {
         if !self.imap_config.enabled {
             self.show_imap_modal = true;
             return;
         }
+        if self.imap_job.is_some() {
+            self.toast(t(self.locale, Key::ImapSyncing));
+            return;
+        }
 
         self.imap_status = sync_imap::SyncStatus::Syncing;
+        self.imap_last_sync = Some(Instant::now());
         let engine =
             sync_imap::ImapSyncEngine::new(self.imap_config.clone(), self.vault.dir.clone());
-        match engine.run_sync() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("imap-sync".into())
+            .spawn(move || {
+                let _ = tx.send(engine.run_sync());
+            })
+            .map_err(|e| format!("spawn sync: {e}"))
+            .ok();
+        self.imap_job = Some(rx);
+    }
+
+    /// Drains the background sync channel and lands the outcome on the UI
+    /// thread: status pill, toast, vault reload.
+    fn poll_imap_sync(&mut self) {
+        let Some(rx) = &self.imap_job else {
+            return;
+        };
+        let result = match rx.try_recv() {
+            Ok(result) => result,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err("sync thread died".into()),
+        };
+        self.imap_job = None;
+        match result {
             Ok(msg) => {
                 self.imap_status = sync_imap::SyncStatus::Success(msg.clone());
                 self.toast(msg);
                 self.reload();
             }
             Err(err) => {
-                let err_msg = err.clone();
-                self.imap_status = sync_imap::SyncStatus::Error(err);
-                self.toast(format!(
-                    "{}: {err_msg}",
-                    t(self.locale, Key::ImapErrorToast)
-                ));
+                self.imap_status = sync_imap::SyncStatus::Error(err.clone());
+                self.toast(format!("{}: {err}", t(self.locale, Key::ImapErrorToast)));
             }
         }
+    }
+
+    /// `auto_sync`: sync once shortly after startup, then every 15 minutes
+    /// while the setting stays on. Manual "Sync Now" ignores this entirely.
+    fn maybe_autosync(&mut self) {
+        if !self.imap_config.enabled || !self.imap_config.auto_sync {
+            return;
+        }
+        if self.imap_job.is_some() {
+            return;
+        }
+        let interval = Duration::from_secs(15 * 60);
+        if self
+            .imap_last_sync
+            .map(|t| t.elapsed() < interval)
+            .unwrap_or(false)
+        {
+            return;
+        }
+        self.trigger_imap_sync();
     }
 
     fn execute_cothink(&mut self) {
