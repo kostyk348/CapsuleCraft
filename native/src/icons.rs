@@ -1,7 +1,7 @@
 //! Small line icons painted with egui's painter, so the shell does not depend
 //! on a default widget font for glyphs.
 
-use egui::{pos2, Color32, Painter, Pos2, Rect, Shape, Stroke};
+use egui::{pos2, vec2, Color32, Painter, Pos2, Rect, Shape, Stroke};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
@@ -44,6 +44,7 @@ pub enum Icon {
     Speaker,
     Chip,
     Image,
+    Pen,
 }
 
 fn at(rect: Rect, x: f32, y: f32) -> Pos2 {
@@ -245,6 +246,25 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             let tip = at(rect, 0.78, 0.52);
             line(&[(0.64, 0.4), (0.78, 0.52), (0.66, 0.66)]);
             let _ = tip;
+        }
+        Icon::Pen => {
+            // Diagonal pencil: two parallel shaft lines meeting a short tip.
+            let tip = pos2(rect.right(), rect.bottom());
+            let back = pos2(
+                rect.left() + rect.width() * 0.22,
+                rect.top() + rect.height() * 0.22,
+            );
+            let dir = vec2(tip.x - back.x, tip.y - back.y).normalized();
+            let n = vec2(-dir.y, dir.x) * rect.width() * 0.16;
+            p.add(Shape::line(
+                vec![back + n, tip + n * 0.4, tip - n * 0.4, back - n, back + n],
+                stroke,
+            ));
+            let edge = pos2(
+                rect.left() + rect.width() * 0.40,
+                rect.top() + rect.height() * 0.40,
+            );
+            p.add(Shape::line(vec![back, edge], stroke));
         }
         Icon::Undo => {
             // Mirrored Reload: arc sweeping the other way, arrowhead on the left.

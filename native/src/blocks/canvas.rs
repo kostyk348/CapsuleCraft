@@ -220,6 +220,69 @@ fn image_attachment<'a>(element: &Value, attachments: &'a [Attachment]) -> Optio
         .find(|attachment| attachment.cid == cid && attachment.mime_type.starts_with("image/"))
 }
 
+/// Bounding box of a freehand stroke, from its absolute world points.
+fn ink_bbox(points: &[Pos2]) -> Rect {
+    let Some(first) = points.first() else {
+        return Rect::NOTHING;
+    };
+    let (mut min, mut max) = (*first, *first);
+    for p in points.iter().skip(1) {
+        min = min.min(*p);
+        max = max.max(*p);
+    }
+    Rect::from_min_max(min, max)
+}
+
+fn round10(v: f32) -> f64 {
+    ((v * 10.0).round() / 10.0) as f64
+}
+
+/// Builds an ink element: the bbox goes to x/y/width/height (so drag, marquee
+/// and fit treat a stroke like any other element), the points are stored
+/// relative to the bbox origin and rounded to 0.1 to keep the JSON compact.
+fn ink_element(id: String, points_abs: &[Pos2]) -> Value {
+    let bbox = ink_bbox(points_abs);
+    let points: Vec<Value> = points_abs
+        .iter()
+        .map(|p| json!([round10(p.x - bbox.left()), round10(p.y - bbox.top()),]))
+        .collect();
+    json!({
+        "id": id,
+        "type": "ink",
+        "x": round10(bbox.left()),
+        "y": round10(bbox.top()),
+        "width": round10(bbox.width().max(1.0)),
+        "height": round10(bbox.height().max(1.0)),
+        "points": points,
+        "color": "",
+        "text": "",
+    })
+}
+
+/// Absolute world points of an ink element, in stroke order.
+fn ink_points(element: &Value) -> Vec<Pos2> {
+    let rect = element_rect(element);
+    element
+        .get("points")
+        .and_then(Value::as_array)
+        .map(|points| {
+            points
+                .iter()
+                .filter_map(|p| {
+                    let pair = p.as_array()?;
+                    Some(
+                        rect.min
+                            + vec2(
+                                pair.first()?.as_f64()? as f32,
+                                pair.get(1)?.as_f64()? as f32,
+                            ),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Undo-snapshot, spawn at the visible center, append, flag the change.
 fn add_element(
     ui: &mut Ui,
@@ -454,6 +517,12 @@ pub fn draw_canvas_block(
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let mut snap_changed = false;
+    let mut pen_on = block
+        .get("data")
+        .and_then(|data| data.get("pen"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let mut pen_changed = false;
     let rect_key = egui::Id::new(("canvas-rect", block_id.clone()));
 
     Frame::new()
@@ -581,6 +650,14 @@ pub fn draw_canvas_block(
                             element["cid"] = json!(format!("cid:{cid}"));
                         }
                     }
+                    // Freehand: while the pen is on, a drag on the empty
+                    // field draws a stroke instead of pulling a marquee.
+                    if text_button(ui, Some(Icon::Pen), t(locale, Key::CanvasDraw), pen_on)
+                        .clicked()
+                    {
+                        pen_on = !pen_on;
+                        pen_changed = true;
+                    }
                     if text_button(ui, None, t(locale, Key::CanvasAddRounded), false).clicked() {
                         changed |= add_element(
                             ui,
@@ -639,6 +716,7 @@ pub fn draw_canvas_block(
 
             let selection_key = egui::Id::new(("canvas-selection", block_id.clone()));
             let marquee_key = egui::Id::new(("canvas-marquee", block_id.clone()));
+            let ink_key = egui::Id::new(("canvas-ink", block_id.clone()));
             let pan_key = egui::Id::new(("canvas-pan", block_id.clone()));
             let edit_key = egui::Id::new(("canvas-edit", block_id.clone()));
             let edit_focus_key = egui::Id::new(("canvas-edit-focus", block_id.clone()));
@@ -784,7 +862,11 @@ pub fn draw_canvas_block(
 
             // The marquee lives in world coordinates so it stays honest at
             // any zoom; it is drawn back on screen through the same transform.
-            if canvas_resp.drag_started_by(PointerButton::Primary) && !pan_mode && !space_held {
+            if canvas_resp.drag_started_by(PointerButton::Primary)
+                && !pan_mode
+                && !space_held
+                && !pen_on
+            {
                 let local = canvas_resp
                     .interact_pointer_pos()
                     .unwrap_or(canvas_rect.min)
@@ -795,7 +877,7 @@ pub fn draw_canvas_block(
             }
             let mut marquee_now: Option<Rect> = None;
             let mut marquee_done: Option<Rect> = None;
-            if canvas_resp.dragged_by(PointerButton::Primary) && !pan_mode {
+            if canvas_resp.dragged_by(PointerButton::Primary) && !pan_mode && !pen_on {
                 if let Some(origin) = marquee_origin {
                     let local = canvas_resp
                         .interact_pointer_pos()
@@ -807,7 +889,8 @@ pub fn draw_canvas_block(
                         origin.max(cursor_world),
                     ));
                 }
-            } else if marquee_origin.is_some() && !pan_mode && canvas_resp.drag_stopped() {
+            } else if marquee_origin.is_some() && !pan_mode && !pen_on && canvas_resp.drag_stopped()
+            {
                 if let Some(origin) = marquee_origin {
                     let local = canvas_resp
                         .interact_pointer_pos()
@@ -823,6 +906,55 @@ pub fn draw_canvas_block(
                     if screen.width() + screen.height() > 8.0 {
                         marquee_done = Some(marquee);
                     }
+                }
+            }
+            // --- freehand: collect the stroke while the pen drag lasts ---
+            if pen_on && canvas_resp.drag_started_by(PointerButton::Primary) && !space_held {
+                ui.data_mut(|data| data.insert_temp(ink_key, Vec::<[f32; 2]>::new()));
+            }
+            if pen_on && canvas_resp.dragged_by(PointerButton::Primary) {
+                if let Some(local) = canvas_resp.interact_pointer_pos() {
+                    let world = view.screen_to_world(local - canvas_rect.min.to_vec2());
+                    let mut stroke = ui
+                        .data(|data| data.get_temp::<Vec<[f32; 2]>>(ink_key))
+                        .unwrap_or_default();
+                    // Decimate: a point only when the cursor moved far enough
+                    // on screen, so a slow wiggle does not bloat the JSON.
+                    let far_enough = match stroke.last() {
+                        Some(last) => (world - pos2(last[0], last[1])).length() * view.zoom > 1.5,
+                        None => true,
+                    };
+                    if far_enough {
+                        stroke.push([world.x, world.y]);
+                        ui.data_mut(|data| data.insert_temp(ink_key, stroke));
+                    }
+                }
+            }
+            if pen_on && canvas_resp.drag_stopped() {
+                let stroke: Vec<[f32; 2]> =
+                    ui.data(|data| data.get_temp(ink_key)).unwrap_or_default();
+                ui.data_mut(|data| data.remove_temp::<Vec<[f32; 2]>>(ink_key));
+                if !stroke.is_empty() {
+                    push_undo(ui, &block_id, &elements);
+                    let points: Vec<Pos2> = stroke.iter().map(|p| pos2(p[0], p[1])).collect();
+                    elements.push(ink_element(format!("el_{}", now_nanos()), &points));
+                    next_selection.clear();
+                    changed = true;
+                }
+            }
+            if pen_on {
+                // Live preview of the stroke being drawn.
+                let draft: Vec<[f32; 2]> =
+                    ui.data(|data| data.get_temp(ink_key)).unwrap_or_default();
+                let screen: Vec<Pos2> = draft
+                    .iter()
+                    .map(|p| canvas_rect.min + view.world_to_screen(pos2(p[0], p[1])).to_vec2())
+                    .collect();
+                let width = (2.0 * view.zoom).max(1.0);
+                if screen.len() > 1 {
+                    painter.add(Shape::line(screen, Stroke::new(width, theme::ink())));
+                } else if let Some(p) = screen.first() {
+                    painter.circle_filled(*p, width, theme::ink());
                 }
             }
             if let Some(marquee) = marquee_now.or(marquee_done) {
@@ -901,7 +1033,7 @@ pub fn draw_canvas_block(
                         if let Some(attachment) = image_attachment(&elements[index], attachments) {
                             *op = Some(BlockOp::OpenViewer(attachment.cid.clone()));
                         }
-                    } else {
+                    } else if kind != "ink" {
                         edit_id = Some(id.clone());
                         edit_wants_focus = true;
                     }
@@ -981,6 +1113,24 @@ pub fn draw_canvas_block(
                             egui::StrokeKind::Inside,
                         );
                     }
+                } else if kind == "ink" {
+                    // Freehand stroke: a polyline through the element's
+                    // points; a single-click stroke renders as a dot.
+                    let mut screen: Vec<Pos2> = ink_points(&elements[index])
+                        .iter()
+                        .map(|p| canvas_rect.min + view.world_to_screen(*p).to_vec2())
+                        .collect();
+                    let width = (2.0 * view.zoom).max(1.0);
+                    let color = if is_selected {
+                        theme::accent_ink()
+                    } else {
+                        theme::ink()
+                    };
+                    if screen.len() > 1 {
+                        painter.add(Shape::line(screen, Stroke::new(width, color)));
+                    } else if let Some(p) = screen.pop() {
+                        painter.circle_filled(p, width, color);
+                    }
                 } else if kind == "diamond" {
                     let c = screen_rect.center();
                     painter.add(Shape::convex_polygon(
@@ -1052,7 +1202,7 @@ pub fn draw_canvas_block(
                 // The connector port sits on the right edge of a selected
                 // node; dragging from it drafts an arrow to whatever node
                 // the drop lands on.
-                if is_selected && !pan_mode {
+                if is_selected && !pan_mode && kind != "image" && kind != "ink" {
                     let port_center = pos2(screen_rect.right(), screen_rect.center().y);
                     let port = ui.interact(
                         Rect::from_center_size(port_center, vec2(16.0, 16.0)),
@@ -1388,6 +1538,10 @@ pub fn draw_canvas_block(
     }
     if snap_changed {
         block["data"]["snap"] = json!(snap);
+        changed = true;
+    }
+    if pen_changed {
+        block["data"]["pen"] = json!(pen_on);
         changed = true;
     }
     if let Some(target) = navigate {
@@ -1926,6 +2080,106 @@ mod image_node_tests {
                             ui,
                             &mut block,
                             std::slice::from_ref(&attachment),
+                            crate::i18n::Locale::En,
+                            &mut op,
+                        );
+                    });
+            });
+            out.textures_delta.clear();
+        }
+    }
+}
+
+#[cfg(test)]
+mod ink_tests {
+    use super::*;
+
+    /// The bbox spans the stroke's points; empty and single-point strokes
+    /// degrade sanely.
+    #[test]
+    fn ink_bbox_spans_points() {
+        let rect = ink_bbox(&[pos2(10.0, 30.0), pos2(40.0, 5.0), pos2(25.0, 60.0)]);
+        assert_eq!(rect.min, pos2(10.0, 5.0));
+        assert_eq!(rect.max, pos2(40.0, 60.0));
+        assert_eq!(ink_bbox(&[]), Rect::NOTHING);
+        let single = ink_bbox(&[pos2(3.0, 4.0)]);
+        assert_eq!(single.min, pos2(3.0, 4.0));
+        assert_eq!(single.max, pos2(3.0, 4.0));
+    }
+
+    /// The element keeps the bbox in x/y/width/height and the points
+    /// relative to its origin; reconstructing the absolute points from the
+    /// element matches the input (0.1 rounding tolerance).
+    #[test]
+    fn ink_element_stores_relative_points() {
+        let pts = vec![pos2(10.0, 30.0), pos2(40.0, 5.0), pos2(25.0, 60.0)];
+        let el = ink_element("el_1".into(), &pts);
+        assert_eq!(el.get("type").and_then(Value::as_str), Some("ink"));
+        assert_eq!(el.get("x").and_then(Value::as_f64), Some(10.0));
+        assert_eq!(el.get("y").and_then(Value::as_f64), Some(5.0));
+        assert_eq!(el.get("width").and_then(Value::as_f64), Some(30.0));
+        assert_eq!(el.get("height").and_then(Value::as_f64), Some(55.0));
+        let back = ink_points(&el);
+        assert_eq!(back.len(), 3);
+        for (a, b) in pts.iter().zip(&back) {
+            assert!((a.x - b.x).abs() < 0.06, "x: {a} vs {b}");
+            assert!((a.y - b.y).abs() < 0.06, "y: {a} vs {b}");
+        }
+    }
+
+    /// A single-click stroke gets a 1x1 bbox; the point stays at the origin.
+    #[test]
+    fn ink_dot_element() {
+        let el = ink_element("el_2".into(), &[pos2(7.0, 9.0)]);
+        assert_eq!(el.get("width").and_then(Value::as_f64), Some(1.0));
+        assert_eq!(el.get("height").and_then(Value::as_f64), Some(1.0));
+        assert_eq!(ink_points(&el), vec![pos2(7.0, 9.0)]);
+    }
+
+    /// Ink elements are plain JSON: a serialize/parse cycle keeps the stroke.
+    #[test]
+    fn ink_element_survives_json_roundtrip() {
+        let el = ink_element("el_3".into(), &[pos2(0.0, 0.0), pos2(15.5, 20.25)]);
+        let parsed: Value = serde_json::from_str(&el.to_string()).expect("valid json");
+        assert_eq!(ink_points(&parsed).len(), 2);
+    }
+
+    /// A board with strokes (polyline and dot, pen flag on and off) draws
+    /// headlessly without panicking.
+    #[test]
+    fn ink_draws_headlessly() {
+        let ctx = egui::Context::default();
+        for pen in [false, true] {
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1000.0, 800.0),
+                )),
+                ..Default::default()
+            };
+            let mut block = json!({
+                "id": "ink-canvas",
+                "type": "interactive_canvas",
+                "data": {
+                    "pen": pen,
+                    "elements": [
+                        {"id":"s1","type":"ink","x":10.0,"y":10.0,"width":80.0,
+                         "height":40.0,"color":"","text":"",
+                         "points":[[0.0,0.0],[40.0,20.0],[80.0,0.0]]},
+                        {"id":"d1","type":"ink","x":5.0,"y":5.0,"width":1.0,
+                         "height":1.0,"color":"","text":"","points":[[0.0,0.0]]}
+                    ]
+                }
+            });
+            let mut op: Option<BlockOp> = None;
+            let mut out = ctx.run_pass(raw, |ctx| {
+                egui::Area::new(egui::Id::new("ink-canvas-test"))
+                    .fixed_pos(egui::Pos2::ZERO)
+                    .show(ctx, |ui| {
+                        let _ = draw_canvas_block(
+                            ui,
+                            &mut block,
+                            &[],
                             crate::i18n::Locale::En,
                             &mut op,
                         );

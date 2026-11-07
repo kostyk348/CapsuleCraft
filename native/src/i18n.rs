@@ -311,6 +311,7 @@ strings! {
     CanvasAddText => ("Текст", "Text"),
     CanvasAddPage => ("Страница", "Page node"),
     CanvasAddImage => ("Картинка", "Image"),
+    CanvasDraw => ("Рисовать", "Draw"),
     PageModePage => ("Страница", "Page"),
     PageModeCanvas => ("Канвас", "Canvas"),
     CanvasReset => ("Сброс вида", "Reset view"),
