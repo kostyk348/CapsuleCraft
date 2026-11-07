@@ -332,6 +332,7 @@ npx vitest run      # 172 tests
 
 | Version | What | When |
 |---|---|---|
+| **v2.5.0** | Image nodes on the canvas: «Картинка» on the toolbar picks from the capsule's pictures or a file, the node references the attachment by cid (one copy of the bytes), letterboxed rendering with a quiet placeholder, double-click opens the viewer; page mode and block canvas share the ops. Tests 259 → 263 | 2026-11-07 |
 | **v2.4.1** | Canvas toolbar adds spawn at the visible center (were pinned near the world origin — off-screen after panning: «при добавлении через кнопку нестабильно показывает»), +16 px cascade for consecutive adds; tests 255 → 259 | 2026-11-07 |
 | **v2.4.0** | Page mode «Страница \| Канвас»: every page toggles between the block editor and a full-height canvas (v2.3 engine: pan/zoom, arrows, shapes, snap, minimap); diagrams persist as `page-canvas.json` inside the same `.eml`; page-link nodes open/create pages like `[[wiki-links]]`; IMAP sync off the UI thread, duplicate-proof downloads (content hashing + Message-Id names), working auto_sync; honest data dirs with `CAPSULECRAFT_DATA_DIR` / `CAPSULECRAFT_CONFIG_DIR` overrides | 2026-11-07 |
 | **v2.3.0** | The canvas engine: node boards with pan/zoom, snapping, minimap and undo; sticky notes, shapes, arrows and free text as first-class canvas elements; the planning Gantt and the board share one zooming field language | 2026-11-07 |
