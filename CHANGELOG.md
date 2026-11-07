@@ -3,6 +3,52 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.4.0] — 2026-11-07 — The page becomes the canvas
+
+The promised page-mode switch lands: every page is now **«Страница |
+Канвас»** — and sync finally runs like a service, not like a freeze.
+
+### Added
+- **Page mode** (`native/src/views/document_view.rs`): a per-page toggle in
+  the document header switches between the block editor and one
+  full-height canvas driven by the v2.3 engine — pan/zoom, arrows, shapes,
+  snap, minimap. The diagram persists inside the same `.eml` as a
+  `page-canvas.json` JSON part (the `canvas_state.json` mechanism,
+  generalized): no schema changes, no sidecar files, absent on ordinary
+  pages, never shown as an attachment.
+- **Page nodes** (`native/src/blocks/canvas.rs`): a canvas element that is
+  a wiki-link in disguise — accent border, a title you type on it, and
+  clicking an already-selected node opens the target page through the
+  existing title resolution, offering to create it when the title does not
+  exist (the same flow as a clicked `[[link]]`).
+
+### Fixed
+- **IMAP sync** (`native/src/sync_imap.rs`): the network round-trip moved
+  off the UI thread (v2.3 froze the whole interface mid-sync); downloads
+  are duplicate-proof — bodies are content-hashed against the vault and
+  downloads are named after the normalized Message-Id with a
+  UIDVALIDITY-qualified fallback, so folder resets no longer collide
+  silently and already-synced messages are reported honestly
+  («+2 downloaded, +1 uploaded, 3 already in sync»); `auto_sync` finally
+  works — sync once after startup and every 15 minutes while enabled
+  (the flag was stored and never read).
+- **Data directories** (`native/src/vault.rs`): `app_data_dir()` never
+  returns a relative path again — the old last resort resolved against the
+  process CWD, so an AppImage launched from different folders wrote the
+  1.75 GB OCR model and the component catalog to a different arbitrary
+  place on every launch and re-downloaded next time. New portable
+  overrides: `CAPSULECRAFT_DATA_DIR` (data root: components, models, vault
+  pointer) and `CAPSULECRAFT_CONFIG_DIR` (settings root). README documents
+  both roots.
+
+### Tests
+`cargo test` in `native/`: **255 passing** (was 248). New: page-canvas
+round-trip (including "not an attachment" and "absent on ordinary
+pages"), page-node factory, headless full-page canvas draw, download
+naming across folder resets, filesystem-safe names, body digests, and
+the data-dir priority chain (override → APPDATA → XDG → HOME → absolute
+temp).
+
 ## [2.3.0] — 2026-11-07 — The canvas
 
 The board becomes a real diagram tool: an infinite pan/zoom field, arrow
