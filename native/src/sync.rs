@@ -199,8 +199,14 @@ mod tests {
         let plan = plan_sync(&scan_dir(&vault), &scan_dir(&remote));
         let (pushed, pulled) = apply_plan(&vault, &remote, &plan);
         assert_eq!((pushed, pulled), (1, 1));
-        assert_eq!(std::fs::read_to_string(remote.join("a.eml")).unwrap(), "local only");
-        assert_eq!(std::fs::read_to_string(vault.join("c.eml")).unwrap(), "remote only");
+        assert_eq!(
+            std::fs::read_to_string(remote.join("a.eml")).unwrap(),
+            "local only"
+        );
+        assert_eq!(
+            std::fs::read_to_string(vault.join("c.eml")).unwrap(),
+            "remote only"
+        );
 
         // Second run: both sides agree, nothing moves.
         let plan = plan_sync(&scan_dir(&vault), &scan_dir(&remote));

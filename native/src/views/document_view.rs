@@ -228,8 +228,7 @@ pub fn draw_document(
                     // A per-page view toggle kept in egui state. Canvas mode
                     // replaces the block list with one full-page canvas
                     // stored in the capsule as page-canvas.json.
-                    let mode_id =
-                        egui::Id::new(("page-canvas-mode", capsule.message_id.clone()));
+                    let mode_id = egui::Id::new(("page-canvas-mode", capsule.message_id.clone()));
                     let mut canvas_mode = ui
                         .ctx()
                         .data_mut(|data| data.get_temp::<bool>(mode_id).unwrap_or(false));
@@ -238,12 +237,8 @@ pub fn draw_document(
                         ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                             let page_active = !canvas_mode;
                             let canvas_clicked = if canvas_mode {
-                                crate::primary_button(
-                                    ui,
-                                    t(locale, Key::PageModeCanvas),
-                                    24.0,
-                                )
-                                .clicked()
+                                crate::primary_button(ui, t(locale, Key::PageModeCanvas), 24.0)
+                                    .clicked()
                             } else {
                                 crate::secondary_button(
                                     ui,
@@ -267,22 +262,20 @@ pub fn draw_document(
                             };
                             if canvas_clicked && !canvas_mode {
                                 canvas_mode = true;
-                                ui.ctx()
-                                    .data_mut(|data| data.insert_temp(mode_id, true));
+                                ui.ctx().data_mut(|data| data.insert_temp(mode_id, true));
                             }
                             if page_clicked && canvas_mode {
                                 canvas_mode = false;
-                                ui.ctx()
-                                    .data_mut(|data| data.insert_temp(mode_id, false));
+                                ui.ctx().data_mut(|data| data.insert_temp(mode_id, false));
                             }
                         });
                     });
                     ui.add_space(10.0);
 
                     if canvas_mode {
-                        let mut data = capsule.page_canvas.clone().unwrap_or_else(|| {
-                            serde_json::json!({ "elements": [], "snap": false })
-                        });
+                        let mut data = capsule.page_canvas.clone().unwrap_or_else(
+                            || serde_json::json!({ "elements": [], "snap": false }),
+                        );
                         // Full-page: fill the visible viewport height.
                         if let Some(obj) = data.as_object_mut() {
                             obj.insert(
@@ -346,281 +339,282 @@ pub fn draw_document(
                         }
                         ui.add_space(24.0);
                     } else {
-                    let mut block_op: Option<(usize, BlockOp)> = None;
-                    let block_count = capsule.blocks.len();
-                    let first_row_top = ui.cursor().top();
-                    for index in 0..block_count {
-                        let mut block = capsule.blocks[index].clone();
-                        let kind = block_type(&block).to_string();
+                        let mut block_op: Option<(usize, BlockOp)> = None;
+                        let block_count = capsule.blocks.len();
+                        let first_row_top = ui.cursor().top();
+                        for index in 0..block_count {
+                            let mut block = capsule.blocks[index].clone();
+                            let kind = block_type(&block).to_string();
 
-                        // Eliminate duplicate title: if block 0 is an H1 with identical subject text, skip rendering it.
-                        if index == 0 && is_duplicate_heading(&block, &capsule.subject) {
-                            continue;
-                        }
-
-                        let block_id = block.get("id").and_then(Value::as_str).unwrap_or("");
-                        let highlighted = highlight == Some(block_id);
-                        let highlight_top = ui.cursor().top();
-                        let (changed, op) = draw_block_row(
-                            ui,
-                            &mut block,
-                            index,
-                            block_count,
-                            &mut capsule.attachments,
-                            locale,
-                        );
-                        if highlighted {
-                            // Scroll the fresh OCR paragraph into view and
-                            // stroke it — the block announces itself instead
-                            // of quietly appearing somewhere at the bottom.
-                            let rect = Rect::from_min_max(
-                                pos2(ui.min_rect().left(), highlight_top),
-                                pos2(ui.min_rect().right(), ui.min_rect().bottom()),
-                            );
-                            ui.scroll_to_rect(rect, Some(Align::Center));
-                            ui.painter().rect_stroke(
-                                rect.expand(5.0),
-                                6.0,
-                                Stroke::new(1.5, theme::accent()),
-                                egui::StrokeKind::Inside,
-                            );
-                        }
-                        if changed {
-                            capsule.blocks[index] = block;
-                            action.changed = true;
-                        }
-                        if op.is_some() {
-                            block_op = op.map(|op| (index, op));
-                        }
-                        ui.add_space(match kind.as_str() {
-                            "heading" => 20.0,
-                            "todo_list" => 16.0,
-                            "callout" => 16.0,
-                            "unsupported" => 12.0,
-                            _ => 10.0,
-                        });
-                    }
-
-                    if let Some((index, op)) = block_op {
-                        match op {
-                            BlockOp::Delete => {
-                                // One stray click must not vaporise content:
-                                // the shell shows the confirm modal first.
-                                action.delete_block = Some(index);
+                            // Eliminate duplicate title: if block 0 is an H1 with identical subject text, skip rendering it.
+                            if index == 0 && is_duplicate_heading(&block, &capsule.subject) {
+                                continue;
                             }
-                            BlockOp::Up if index > 0 => {
-                                capsule.blocks.swap(index, index - 1);
+
+                            let block_id = block.get("id").and_then(Value::as_str).unwrap_or("");
+                            let highlighted = highlight == Some(block_id);
+                            let highlight_top = ui.cursor().top();
+                            let (changed, op) = draw_block_row(
+                                ui,
+                                &mut block,
+                                index,
+                                block_count,
+                                &mut capsule.attachments,
+                                locale,
+                            );
+                            if highlighted {
+                                // Scroll the fresh OCR paragraph into view and
+                                // stroke it — the block announces itself instead
+                                // of quietly appearing somewhere at the bottom.
+                                let rect = Rect::from_min_max(
+                                    pos2(ui.min_rect().left(), highlight_top),
+                                    pos2(ui.min_rect().right(), ui.min_rect().bottom()),
+                                );
+                                ui.scroll_to_rect(rect, Some(Align::Center));
+                                ui.painter().rect_stroke(
+                                    rect.expand(5.0),
+                                    6.0,
+                                    Stroke::new(1.5, theme::accent()),
+                                    egui::StrokeKind::Inside,
+                                );
+                            }
+                            if changed {
+                                capsule.blocks[index] = block;
                                 action.changed = true;
                             }
-                            BlockOp::Down if index + 1 < capsule.blocks.len() => {
-                                capsule.blocks.swap(index, index + 1);
-                                action.changed = true;
+                            if op.is_some() {
+                                block_op = op.map(|op| (index, op));
                             }
-                            BlockOp::Duplicate => {
-                                // A copy lands right below with a fresh id so
-                                // links, todos and code state stay independent.
-                                if let Some(block) = capsule.blocks.get(index) {
-                                    let mut copy = block.clone();
-                                    if let Some(obj) = copy.as_object_mut() {
-                                        obj.insert(
-                                            "id".to_string(),
-                                            json!(crate::mime::new_block_id("paragraph")),
-                                        );
+                            ui.add_space(match kind.as_str() {
+                                "heading" => 20.0,
+                                "todo_list" => 16.0,
+                                "callout" => 16.0,
+                                "unsupported" => 12.0,
+                                _ => 10.0,
+                            });
+                        }
+
+                        if let Some((index, op)) = block_op {
+                            match op {
+                                BlockOp::Delete => {
+                                    // One stray click must not vaporise content:
+                                    // the shell shows the confirm modal first.
+                                    action.delete_block = Some(index);
+                                }
+                                BlockOp::Up if index > 0 => {
+                                    capsule.blocks.swap(index, index - 1);
+                                    action.changed = true;
+                                }
+                                BlockOp::Down if index + 1 < capsule.blocks.len() => {
+                                    capsule.blocks.swap(index, index + 1);
+                                    action.changed = true;
+                                }
+                                BlockOp::Duplicate => {
+                                    // A copy lands right below with a fresh id so
+                                    // links, todos and code state stay independent.
+                                    if let Some(block) = capsule.blocks.get(index) {
+                                        let mut copy = block.clone();
+                                        if let Some(obj) = copy.as_object_mut() {
+                                            obj.insert(
+                                                "id".to_string(),
+                                                json!(crate::mime::new_block_id("paragraph")),
+                                            );
+                                        }
+                                        capsule.blocks.insert(index + 1, copy);
+                                        action.changed = true;
                                     }
-                                    capsule.blocks.insert(index + 1, copy);
+                                }
+                                BlockOp::Reorder { from, to } => {
+                                    if let Some(insert) = crate::blocks::reorder_insert_index(
+                                        from,
+                                        to,
+                                        capsule.blocks.len(),
+                                    ) {
+                                        let moved = capsule.blocks.remove(from);
+                                        capsule.blocks.insert(insert, moved);
+                                        action.changed = true;
+                                    }
+                                }
+                                BlockOp::SetLevel(level) => {
+                                    if let Some(block) = capsule.blocks.get_mut(index) {
+                                        block["data"]["level"] = json!(level);
+                                        action.changed = true;
+                                    }
+                                }
+                                BlockOp::TransformTo(target) => {
+                                    if let Some(block) = capsule.blocks.get_mut(index) {
+                                        crate::blocks::transform_block(block, target, locale);
+                                        action.changed = true;
+                                    }
+                                }
+                                BlockOp::InsertBelow(kind, text) => {
+                                    let mut new_b = kind.block(locale);
+                                    if !text.is_empty() {
+                                        crate::mime::set_block_text(&mut new_b, text);
+                                    }
+                                    if index + 1 <= capsule.blocks.len() {
+                                        capsule.blocks.insert(index + 1, new_b);
+                                    } else {
+                                        capsule.blocks.push(new_b);
+                                    }
                                     action.changed = true;
                                 }
-                            }
-                            BlockOp::Reorder { from, to } => {
-                                if let Some(insert) =
-                                    crate::blocks::reorder_insert_index(from, to, capsule.blocks.len())
-                                {
-                                    let moved = capsule.blocks.remove(from);
-                                    capsule.blocks.insert(insert, moved);
-                                    action.changed = true;
-                                }
-                            }
-                            BlockOp::SetLevel(level) => {
-                                if let Some(block) = capsule.blocks.get_mut(index) {
-                                    block["data"]["level"] = json!(level);
-                                    action.changed = true;
-                                }
-                            }
-                            BlockOp::TransformTo(target) => {
-                                if let Some(block) = capsule.blocks.get_mut(index) {
-                                    crate::blocks::transform_block(block, target, locale);
-                                    action.changed = true;
-                                }
-                            }
-                            BlockOp::InsertBelow(kind, text) => {
-                                let mut new_b = kind.block(locale);
-                                if !text.is_empty() {
-                                    crate::mime::set_block_text(&mut new_b, text);
-                                }
-                                if index + 1 <= capsule.blocks.len() {
-                                    capsule.blocks.insert(index + 1, new_b);
-                                } else {
-                                    capsule.blocks.push(new_b);
-                                }
-                                action.changed = true;
-                            }
-                            BlockOp::AttachAudio {
-                                name,
-                                cid,
-                                mime,
-                                b64,
-                                size,
-                            } => {
-                                capsule.attachments.push(crate::mime::Attachment {
+                                BlockOp::AttachAudio {
                                     name,
                                     cid,
-                                    mime_type: mime,
-                                    content: String::new(),
-                                    size_bytes: size,
-                                    raw_b64: Some(b64),
-                                });
-                                action.changed = true;
-                            }
-                            BlockOp::AttachImage {
-                                name,
-                                cid,
-                                mime,
-                                b64,
-                                size,
-                            } => {
-                                // Same cid means "replace these bytes": picking
-                                // the same picture twice must not duplicate the
-                                // attachment.
-                                let attachment = crate::mime::Attachment {
-                                    name,
-                                    cid: cid.clone(),
-                                    mime_type: mime,
-                                    content: String::new(),
-                                    size_bytes: size,
-                                    raw_b64: Some(b64),
-                                };
-                                match capsule
-                                    .attachments
-                                    .iter_mut()
-                                    .find(|existing| existing.cid == cid)
-                                {
-                                    Some(existing) => *existing = attachment,
-                                    None => capsule.attachments.push(attachment),
+                                    mime,
+                                    b64,
+                                    size,
+                                } => {
+                                    capsule.attachments.push(crate::mime::Attachment {
+                                        name,
+                                        cid,
+                                        mime_type: mime,
+                                        content: String::new(),
+                                        size_bytes: size,
+                                        raw_b64: Some(b64),
+                                    });
+                                    action.changed = true;
                                 }
-                                action.changed = true;
-                            }
-                            BlockOp::OpenViewer(cid) => {
-                                if let Some(attachment) =
-                                    capsule.attachments.iter().find(|a| a.cid == cid)
-                                {
-                                    if let Some(bytes) = attachment_bytes(attachment) {
-                                        action.attachments.push(AttachmentAction::View {
-                                            name: attachment.name.clone(),
-                                            mime: attachment.mime_type.clone(),
-                                            bytes,
-                                        });
+                                BlockOp::AttachImage {
+                                    name,
+                                    cid,
+                                    mime,
+                                    b64,
+                                    size,
+                                } => {
+                                    // Same cid means "replace these bytes": picking
+                                    // the same picture twice must not duplicate the
+                                    // attachment.
+                                    let attachment = crate::mime::Attachment {
+                                        name,
+                                        cid: cid.clone(),
+                                        mime_type: mime,
+                                        content: String::new(),
+                                        size_bytes: size,
+                                        raw_b64: Some(b64),
+                                    };
+                                    match capsule
+                                        .attachments
+                                        .iter_mut()
+                                        .find(|existing| existing.cid == cid)
+                                    {
+                                        Some(existing) => *existing = attachment,
+                                        None => capsule.attachments.push(attachment),
+                                    }
+                                    action.changed = true;
+                                }
+                                BlockOp::OpenViewer(cid) => {
+                                    if let Some(attachment) =
+                                        capsule.attachments.iter().find(|a| a.cid == cid)
+                                    {
+                                        if let Some(bytes) = attachment_bytes(attachment) {
+                                            action.attachments.push(AttachmentAction::View {
+                                                name: attachment.name.clone(),
+                                                mime: attachment.mime_type.clone(),
+                                                bytes,
+                                            });
+                                        }
                                     }
                                 }
+                                BlockOp::RequestTranscribe(cid) => {
+                                    action.transcribe = Some(cid);
+                                }
+                                BlockOp::SplitParagraph {
+                                    before,
+                                    target_kind,
+                                    target_level,
+                                    target_text,
+                                    after,
+                                } => {
+                                    let mut new_blocks = Vec::new();
+                                    if !before.is_empty() {
+                                        let mut b_before = BlockKind::Text.block(locale);
+                                        crate::mime::set_block_text(&mut b_before, before);
+                                        new_blocks.push(b_before);
+                                    }
+                                    let mut b_target = target_kind.block(locale);
+                                    crate::mime::set_block_text(&mut b_target, target_text);
+                                    if let Some(lvl) = target_level {
+                                        b_target["data"]["level"] = json!(lvl);
+                                    }
+                                    new_blocks.push(b_target);
+                                    if !after.is_empty() {
+                                        let mut b_after = BlockKind::Text.block(locale);
+                                        crate::mime::set_block_text(&mut b_after, after);
+                                        new_blocks.push(b_after);
+                                    }
+                                    capsule.blocks.splice(index..=index, new_blocks);
+                                    action.changed = true;
+                                }
+                                _ => {}
                             }
-                            BlockOp::RequestTranscribe(cid) => {
-                                action.transcribe = Some(cid);
-                            }
-                            BlockOp::SplitParagraph {
-                                before,
-                                target_kind,
-                                target_level,
-                                target_text,
-                                after,
-                            } => {
-                                let mut new_blocks = Vec::new();
-                                if !before.is_empty() {
-                                    let mut b_before = BlockKind::Text.block(locale);
-                                    crate::mime::set_block_text(&mut b_before, before);
-                                    new_blocks.push(b_before);
-                                }
-                                let mut b_target = target_kind.block(locale);
-                                crate::mime::set_block_text(&mut b_target, target_text);
-                                if let Some(lvl) = target_level {
-                                    b_target["data"]["level"] = json!(lvl);
-                                }
-                                new_blocks.push(b_target);
-                                if !after.is_empty() {
-                                    let mut b_after = BlockKind::Text.block(locale);
-                                    crate::mime::set_block_text(&mut b_after, after);
-                                    new_blocks.push(b_after);
-                                }
-                                capsule.blocks.splice(index..=index, new_blocks);
+                        }
+
+                        // While a grip drag is live, a pointer lifted above the
+                        // first rendered row (over the title) means "drop at the
+                        // very top" — gap 0, unreachable by row hit-testing when
+                        // block 0 is skipped as a duplicate heading.
+                        crate::blocks::nudge_drag_to_top(ui, first_row_top);
+
+                        // Alt+↑ / Alt+↓ moves the block last hovered. Independent
+                        // of the grip, the popup and the pointer, so reordering
+                        // stays possible even when a drag release is eaten.
+                        if let Some((hovered_index, up)) =
+                            crate::blocks::keyboard_move_request(ui, block_count)
+                        {
+                            let target = if up {
+                                hovered_index.checked_sub(1)
+                            } else if hovered_index + 1 < block_count {
+                                Some(hovered_index + 1)
+                            } else {
+                                None
+                            };
+                            if let Some(target) = target {
+                                capsule.blocks.swap(hovered_index, target);
+                                crate::blocks::set_last_hovered_block(ui, target);
                                 action.changed = true;
                             }
-                            _ => {}
                         }
-                    }
-
-                    // While a grip drag is live, a pointer lifted above the
-                    // first rendered row (over the title) means "drop at the
-                    // very top" — gap 0, unreachable by row hit-testing when
-                    // block 0 is skipped as a duplicate heading.
-                    crate::blocks::nudge_drag_to_top(ui, first_row_top);
-
-                    // Alt+↑ / Alt+↓ moves the block last hovered. Independent
-                    // of the grip, the popup and the pointer, so reordering
-                    // stays possible even when a drag release is eaten.
-                    if let Some((hovered_index, up)) =
-                        crate::blocks::keyboard_move_request(ui, block_count)
-                    {
-                        let target = if up {
-                            hovered_index.checked_sub(1)
-                        } else if hovered_index + 1 < block_count {
-                            Some(hovered_index + 1)
-                        } else {
-                            None
-                        };
-                        if let Some(target) = target {
-                            capsule.blocks.swap(hovered_index, target);
-                            crate::blocks::set_last_hovered_block(ui, target);
-                            action.changed = true;
-                        }
-                    }
-
                     }
                     if !canvas_mode {
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        ui.add_space(2.0);
-                        if let Some(kind) = add_block_menu(ui, locale) {
-                            capsule.blocks.push(kind.block(locale));
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(2.0);
+                            if let Some(kind) = add_block_menu(ui, locale) {
+                                capsule.blocks.push(kind.block(locale));
+                                action.changed = true;
+                            }
+                            ui.add_space(4.0);
+                            let _ = hud(ui, t(locale, Key::SlashHint), theme::faint());
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if icon_button(
+                                    ui,
+                                    Icon::Speaker,
+                                    t(locale, Key::SpeakPage),
+                                    true,
+                                    false,
+                                )
+                                .clicked()
+                                {
+                                    action.speak = true;
+                                }
+                            });
+                        });
+                        ui.add_space(18.0);
+                        links_panel(ui, link_context, locale, &mut action);
+                        ui.add_space(18.0);
+                        // Inline previews above the management rows: the page
+                        // shows its attached documents, not just their names.
+                        if inline_previews(ui, capsule, previews, pdfium, locale, &mut action) {
+                            ui.add_space(14.0);
+                        }
+                        let (changed, attachment_actions) = attachments_editor(ui, capsule, locale);
+                        if changed {
                             action.changed = true;
                         }
-                        ui.add_space(4.0);
-                        let _ = hud(ui, t(locale, Key::SlashHint), theme::faint());
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            if icon_button(
-                                ui,
-                                Icon::Speaker,
-                                t(locale, Key::SpeakPage),
-                                true,
-                                false,
-                            )
-                            .clicked()
-                            {
-                                action.speak = true;
-                            }
-                        });
-                    });
-                    ui.add_space(18.0);
-                    links_panel(ui, link_context, locale, &mut action);
-                    ui.add_space(18.0);
-                    // Inline previews above the management rows: the page
-                    // shows its attached documents, not just their names.
-                    if inline_previews(ui, capsule, previews, pdfium, locale, &mut action) {
-                        ui.add_space(14.0);
-                    }
-                    let (changed, attachment_actions) = attachments_editor(ui, capsule, locale);
-                    if changed {
-                        action.changed = true;
-                    }
-                    action.attachments.extend(attachment_actions);
-                    ui.add_space(90.0);
+                        action.attachments.extend(attachment_actions);
+                        ui.add_space(90.0);
                     }
                 }
             });

@@ -39,9 +39,13 @@ impl SttJobs {
         wav_bytes: Vec<u8>,
         language: whisper::Language,
     ) -> Result<(), String> {
-        self.start_with(model_dir, cid, wav_bytes, language, |model_dir, wav, language| {
-            whisper::transcribe(&model_dir, &wav, language)
-        })
+        self.start_with(
+            model_dir,
+            cid,
+            wav_bytes,
+            language,
+            |model_dir, wav, language| whisper::transcribe(&model_dir, &wav, language),
+        )
     }
 
     /// The seam behind `start`: the worker closure is injectable so tests can
@@ -57,9 +61,7 @@ impl SttJobs {
         worker: F,
     ) -> Result<(), String>
     where
-        F: FnOnce(PathBuf, Vec<u8>, whisper::Language) -> Result<String, String>
-            + Send
-            + 'static,
+        F: FnOnce(PathBuf, Vec<u8>, whisper::Language) -> Result<String, String> + Send + 'static,
     {
         let mut jobs = self.inner.lock().map_err(|_| "stt lock poisoned")?;
         if jobs.get(cid) == Some(&SttPhase::Running) {

@@ -964,9 +964,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
         std::fs::create_dir_all(dir).unwrap();
 
-        let block = |kind: &str, data: serde_json::Value| {
-            json!({ "id": new_block_id(kind), "type": kind, "data": data })
-        };
+        let block = |kind: &str, data: serde_json::Value| json!({ "id": new_block_id(kind), "type": kind, "data": data });
         let para = |text: &str| block("paragraph", json!({ "text": text }));
         let heading = |text: &str| block("heading", json!({ "text": text, "level": 2 }));
         let todos = |items: Vec<(&str, &str, Option<&str>)>| {
@@ -1140,10 +1138,15 @@ mod tests {
         let raw = assemble_eml(&capsule);
         assert!(raw.contains("page-canvas.json"));
         let parsed = parse_eml(&raw, "test.eml", 0);
-        let canvas = parsed.page_canvas.expect("page canvas survived the round trip");
+        let canvas = parsed
+            .page_canvas
+            .expect("page canvas survived the round trip");
         assert_eq!(
-            canvas.get("elements").and_then(|e| e.get(0))
-                .and_then(|e| e.get("text")).and_then(Value::as_str),
+            canvas
+                .get("elements")
+                .and_then(|e| e.get(0))
+                .and_then(|e| e.get("text"))
+                .and_then(Value::as_str),
             Some("Архитектура")
         );
         assert!(canvas.get("snap").and_then(Value::as_bool).unwrap_or(false));

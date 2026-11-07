@@ -35,6 +35,10 @@ pub struct Launch {
     /// Open a modal on startup (`--modal integrations`) — screenshots of the
     /// dialogs without any window-manager automation.
     pub modal: Option<String>,
+    /// Replace the vault with N synthetic stress pages and open the graph.
+    pub stress_graph: Option<usize>,
+    /// Initial graph view zoom (`--zoom 0.2` reaches the cluster LOD band).
+    pub zoom: Option<f32>,
     /// Window size override in logical points (`--window-size 980x640`),
     /// snapshot-only: lets a capture target the app's minimum window.
     pub window_size: Option<[f32; 2]>,
@@ -97,6 +101,15 @@ pub fn parse(args: &[String]) -> Launch {
             "--scroll" => launch.scroll = take_value(&mut index).and_then(|v| v.parse().ok()),
             "--mcp" => launch.mcp = true,
             "--modal" => launch.modal = take_value(&mut index).map(|v| v.trim().to_lowercase()),
+            // `--stress-graph N`: swap the vault for N synthetic pages across
+            // many folders and open the graph view — the scale harness for
+            // screenshots and smoke runs (no files are written).
+            "--stress-graph" => {
+                launch.stress_graph = take_value(&mut index).and_then(|v| v.parse().ok());
+            }
+            "--zoom" => {
+                launch.zoom = take_value(&mut index).and_then(|v| v.parse().ok());
+            }
             "--window-size" => {
                 launch.window_size = take_value(&mut index).and_then(|v| parse_window_size(&v))
             }
@@ -281,7 +294,12 @@ mod tests {
 
     #[test]
     fn parses_modal_and_window_size_flags() {
-        let launch = parse(&args(&["--modal", "Integrations", "--window-size", "980x640"]));
+        let launch = parse(&args(&[
+            "--modal",
+            "Integrations",
+            "--window-size",
+            "980x640",
+        ]));
         assert_eq!(launch.modal.as_deref(), Some("integrations"));
         assert_eq!(launch.window_size, Some([980.0, 640.0]));
         // Inline spelling and the capital X both work.

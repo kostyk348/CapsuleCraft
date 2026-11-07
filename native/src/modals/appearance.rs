@@ -89,22 +89,15 @@ pub fn draw_appearance(show: bool, locale: Locale, ctx: &egui::Context) -> Appea
                 body.horizontal(|ui| {
                     for preset in chunk {
                         let selected = preset.id == current;
-                        let (card, response) = ui.allocate_exact_size(
-                            vec2(250.0, 54.0),
-                            Sense::click(),
-                        );
+                        let (card, response) =
+                            ui.allocate_exact_size(vec2(250.0, 54.0), Sense::click());
                         let stroke = if selected {
                             Stroke::new(2.0, theme::accent_color())
                         } else {
                             Stroke::new(1.0, theme::line())
                         };
-                        ui.painter().rect(
-                            card,
-                            6.0,
-                            preset.bg,
-                            stroke,
-                            egui::StrokeKind::Inside,
-                        );
+                        ui.painter()
+                            .rect(card, 6.0, preset.bg, stroke, egui::StrokeKind::Inside);
                         // Swatches: page, controls, accent of THAT theme.
                         for (i, colour) in [preset.controls, preset.sunken, preset.accent]
                             .iter()
@@ -152,8 +145,7 @@ pub fn draw_appearance(show: bool, locale: Locale, ctx: &egui::Context) -> Appea
                     theme::accent_color() != theme::preset().accent
                 };
                 // First chip: reset to the theme's own accent.
-                let (rect, response) =
-                    ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
+                let (rect, response) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
                 ui.painter().rect(
                     rect,
                     5.0,
@@ -182,8 +174,7 @@ pub fn draw_appearance(show: bool, locale: Locale, ctx: &egui::Context) -> Appea
                 }
                 ui.add_space(2.0);
                 for colour in ACCENTS {
-                    let (rect, response) =
-                        ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
+                    let (rect, response) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
                     let selected = theme::accent_color() == colour;
                     ui.painter().rect_filled(rect, 5.0, colour);
                     if selected {

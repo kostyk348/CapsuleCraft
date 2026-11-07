@@ -269,7 +269,11 @@ pub fn text_button(ui: &mut Ui, icon: Option<Icon>, label: &str, active: bool) -
     if hovered || active {
         ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
     }
-    let ink = if hovered { theme::ink() } else { theme::muted() };
+    let ink = if hovered {
+        theme::ink()
+    } else {
+        theme::muted()
+    };
     let mut x = rect.left() + 8.0;
     if let Some(icon) = icon {
         icons::paint(

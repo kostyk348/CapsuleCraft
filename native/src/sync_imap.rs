@@ -335,7 +335,9 @@ impl ImapSyncEngine {
         let _ = session.logout();
 
         if skipped > 0 {
-            Ok(format!("Synced: +{pulled} downloaded, +{pushed} uploaded, {skipped} already in sync"))
+            Ok(format!(
+                "Synced: +{pulled} downloaded, +{pushed} uploaded, {skipped} already in sync"
+            ))
         } else {
             Ok(format!("Synced: +{pulled} downloaded, +{pushed} uploaded"))
         }

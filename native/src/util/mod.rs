@@ -44,7 +44,9 @@ pub fn truncate_to_width(ui: &Ui, text: &str, font: FontId, max_width: f32) -> S
     for ch in text.chars() {
         let mut test = result.clone();
         test.push(ch);
-        let test_g = ui.painter().layout_no_wrap(test, font.clone(), theme::ink());
+        let test_g = ui
+            .painter()
+            .layout_no_wrap(test, font.clone(), theme::ink());
         if test_g.size().x > target_w {
             break;
         }

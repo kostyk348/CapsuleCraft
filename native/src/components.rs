@@ -858,7 +858,9 @@ mod tests {
         let amy = ComponentId::TtsVoiceAmy;
         let files = amy.files(Platform::LinuxX64);
         assert!(
-            files[0].url.ends_with("vits-piper-en_US-amy-medium.tar.bz2"),
+            files[0]
+                .url
+                .ends_with("vits-piper-en_US-amy-medium.tar.bz2"),
             "{}",
             files[0].url
         );

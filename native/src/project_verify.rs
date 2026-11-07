@@ -39,7 +39,11 @@ fn collect_eml_files(dir: &Path, base_dir: &Path, out: &mut Vec<(PathBuf, String
         let path = entry.path();
         if path.is_dir() {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if name.starts_with('.') || name == "node_modules" || name == "target" || name == "build" {
+            if name.starts_with('.')
+                || name == "node_modules"
+                || name == "target"
+                || name == "build"
+            {
                 continue;
             }
             collect_eml_files(&path, base_dir, out);
@@ -149,7 +153,11 @@ pub fn verify_project_vault(target_path: &Path) -> Result<VerificationReport, St
     for c in &capsules {
         for block in &c.blocks {
             // Extract text fields from block
-            let text = if let Some(txt) = block.get("data").and_then(|d| d.get("text")).and_then(|t| t.as_str()) {
+            let text = if let Some(txt) = block
+                .get("data")
+                .and_then(|d| d.get("text"))
+                .and_then(|t| t.as_str())
+            {
                 txt
             } else if let Some(txt) = block.get("text").and_then(|t| t.as_str()) {
                 txt
@@ -175,10 +183,9 @@ pub fn verify_project_vault(target_path: &Path) -> Result<VerificationReport, St
                 if resolved {
                     report.resolved_links += 1;
                 } else {
-                    report.broken_links.push(format!(
-                        "Broken link in '{}': [[{}]]",
-                        c.subject, target
-                    ));
+                    report
+                        .broken_links
+                        .push(format!("Broken link in '{}': [[{}]]", c.subject, target));
                 }
             }
         }
@@ -194,8 +201,14 @@ pub fn run_cli_verify(target_path: &Path) -> i32 {
 
     match verify_project_vault(target_path) {
         Ok(report) => {
-            println!("  Capsules checked:  {} ({} valid)", report.total_capsules, report.valid_capsules);
-            println!("  Wiki-links parsed: {} ({} resolved)", report.total_links, report.resolved_links);
+            println!(
+                "  Capsules checked:  {} ({} valid)",
+                report.total_capsules, report.valid_capsules
+            );
+            println!(
+                "  Wiki-links parsed: {} ({} resolved)",
+                report.total_links, report.resolved_links
+            );
 
             if !report.broken_links.is_empty() {
                 println!("\n⚠️ Broken Wiki-links ({}):", report.broken_links.len());
@@ -208,7 +221,10 @@ pub fn run_cli_verify(target_path: &Path) -> i32 {
             }
 
             if !report.broken_parents.is_empty() {
-                println!("\n⚠️ Broken Parent Hierarchies ({}):", report.broken_parents.len());
+                println!(
+                    "\n⚠️ Broken Parent Hierarchies ({}):",
+                    report.broken_parents.len()
+                );
                 for parent in &report.broken_parents {
                     println!("    - {parent}");
                 }

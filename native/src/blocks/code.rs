@@ -188,7 +188,11 @@ pub fn draw_code_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
                     } else {
                         t(locale, Key::CodeOutput)
                     },
-                    if is_error { theme::bad() } else { theme::faint() },
+                    if is_error {
+                        theme::bad()
+                    } else {
+                        theme::faint()
+                    },
                 );
                 ui.add_space(3.0);
                 ui.add(
@@ -196,7 +200,11 @@ pub fn draw_code_block(ui: &mut Ui, block: &mut Value, locale: Locale) -> bool {
                         RichText::new(output)
                             .family(theme::mono())
                             .size(11.5)
-                            .color(if is_error { theme::bad() } else { theme::muted() }),
+                            .color(if is_error {
+                                theme::bad()
+                            } else {
+                                theme::muted()
+                            }),
                     )
                     .wrap(),
                 );

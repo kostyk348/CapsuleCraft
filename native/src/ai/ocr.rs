@@ -60,7 +60,10 @@ fn isq_from_env() -> Option<u8> {
 }
 
 fn isq_from_env_checked(raw: &str) -> Option<u8> {
-    raw.trim().parse::<u8>().ok().filter(|q| (2..=8).contains(q))
+    raw.trim()
+        .parse::<u8>()
+        .ok()
+        .filter(|q| (2..=8).contains(q))
 }
 
 /// Cheap pre-flight so a broken install fails in milliseconds with a
@@ -88,15 +91,18 @@ pub fn preflight(model_dir: &Path) -> Result<(), String> {
     }
     let config = std::fs::read_to_string(model_dir.join("config.json"))
         .map_err(|e| format!("cannot read OCR config.json: {e}"))?;
-    let doc: serde_json::Value =
-        serde_json::from_str(&config).map_err(|e| format!("OCR config.json is not valid JSON: {e}"))?;
+    let doc: serde_json::Value = serde_json::from_str(&config)
+        .map_err(|e| format!("OCR config.json is not valid JSON: {e}"))?;
     let model_type = doc["model_type"].as_str().unwrap_or("<none>").to_string();
     let _ = writeln!(
         std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(engine_log_path(model_dir))
-            .unwrap_or_else(|_| std::fs::File::create(std::env::temp_dir().join("capsuleos-mistralrs.log")).expect("temp log")),
+            .unwrap_or_else(|_| std::fs::File::create(
+                std::env::temp_dir().join("capsuleos-mistralrs.log")
+            )
+            .expect("temp log")),
         "==== preflight {} ====: model_type = {model_type}",
         chrono::Utc::now().to_rfc3339()
     );
@@ -108,10 +114,7 @@ fn read_log_tail(path: &Path, lines: usize) -> String {
     let Ok(content) = std::fs::read_to_string(path) else {
         return String::new();
     };
-    let collected: Vec<&str> = content
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .collect();
+    let collected: Vec<&str> = content.lines().filter(|l| !l.trim().is_empty()).collect();
     if collected.is_empty() {
         return String::new();
     }
@@ -161,12 +164,19 @@ impl OcrEngine {
         preflight(model_dir)?;
         let args = serve_args(port, model_dir);
         let mut command = Command::new(engine_bin);
-        command.args(&args).stdin(Stdio::null()).stdout(Stdio::null());
+        command
+            .args(&args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null());
         // The engine log lands next to the model dir (the components root).
         // v2.1.0 discarded stderr entirely, so an engine that died during the
         // cold load left only "exited before readiness" with no reason.
         let log_path = engine_log_path(model_dir);
-        if let Ok(mut log) = fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+        if let Ok(mut log) = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
             let _ = writeln!(log, "==== spawn {} ====", chrono::Utc::now().to_rfc3339());
             command.stderr(Stdio::from(log));
         }
@@ -319,7 +329,8 @@ pub fn resolve_paths(
         "mistralrs"
     };
     let engine_bin = crate::components::find_file(&engine_dir, Path::new(engine_name))?;
-    let model_dir = custom.unwrap_or_else(|| components.dir(crate::components::ComponentId::OcrModel));
+    let model_dir =
+        custom.unwrap_or_else(|| components.dir(crate::components::ComponentId::OcrModel));
     Some((engine_bin, model_dir))
 }
 
@@ -447,7 +458,10 @@ mod tests {
         let m = quantized.iter().position(|a| a == "-m").unwrap();
         let sub = quantized.iter().position(|a| a == "multimodal").unwrap();
         assert_eq!(quantized[isq + 1], "8");
-        assert!(sub < isq && isq > m, "isq belongs to the model arg group after the subcommand");
+        assert!(
+            sub < isq && isq > m,
+            "isq belongs to the model arg group after the subcommand"
+        );
         // Out-of-range values are ignored at the env layer.
         assert_eq!(isq_from_env_checked("12"), None);
         assert_eq!(isq_from_env_checked("0"), None);
@@ -520,11 +534,7 @@ mod tests {
         std::fs::write(tmp.join("config.json"), b"{not json").unwrap();
         assert!(preflight(&tmp).is_err());
         // Valid config passes.
-        std::fs::write(
-            tmp.join("config.json"),
-            br#"{"model_type": "qwen3_5"}"#
-        )
-        .unwrap();
+        std::fs::write(tmp.join("config.json"), br#"{"model_type": "qwen3_5"}"#).unwrap();
         assert!(preflight(&tmp).is_ok());
         let _ = std::fs::remove_dir_all(&tmp);
     }

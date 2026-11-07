@@ -803,9 +803,11 @@ pub fn draw_canvas_block(
                             || (i.modifiers.ctrl && i.key_pressed(egui::Key::Num0)),
                         vec2(
                             (i.key_pressed(egui::Key::ArrowRight) as i32
-                                - i.key_pressed(egui::Key::ArrowLeft) as i32) as f32,
+                                - i.key_pressed(egui::Key::ArrowLeft) as i32)
+                                as f32,
                             (i.key_pressed(egui::Key::ArrowDown) as i32
-                                - i.key_pressed(egui::Key::ArrowUp) as i32) as f32,
+                                - i.key_pressed(egui::Key::ArrowUp) as i32)
+                                as f32,
                         ) * 60.0,
                     )
                 });
@@ -1453,10 +1455,7 @@ pub fn draw_canvas_block(
                             view.screen_to_world(pos2(canvas_rect.width(), canvas_rect.height())),
                         );
                         mm_painter.rect_stroke(
-                            Rect::from_min_max(
-                                to_mm(visible_world.min),
-                                to_mm(visible_world.max),
-                            ),
+                            Rect::from_min_max(to_mm(visible_world.min), to_mm(visible_world.max)),
                             1.0,
                             Stroke::new(1.0, theme::accent()),
                             egui::StrokeKind::Inside,
@@ -1735,7 +1734,10 @@ mod tests {
             "width": 150.0, "height": 90.0, "label": "", "color": ""
         })];
         let opened = canvas_open_view(&far, CanvasView::identity(), vec2(800.0, 600.0));
-        assert!(opened != CanvasView::identity(), "must fit off-screen content");
+        assert!(
+            opened != CanvasView::identity(),
+            "must fit off-screen content"
+        );
         assert_eq!(
             canvas_open_view(&far, opened, vec2(800.0, 600.0)),
             opened,
