@@ -13,7 +13,7 @@ pub mod todo;
 
 pub use audio::draw_audio_block;
 pub use callout::draw_callout_block;
-pub use canvas::{canvas_element, draw_canvas_block};
+pub use canvas::{canvas_element_at, draw_canvas_block};
 pub use code::draw_code_block;
 pub use grid::{draw_grid_block, parse_csv, to_csv};
 pub use image::draw_image_block;
