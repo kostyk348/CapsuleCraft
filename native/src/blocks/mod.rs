@@ -39,7 +39,10 @@ pub enum BlockOp {
     Down,
     /// Drag-and-drop reorder: the block at `from` moves to the gap `to`
     /// (0..=len) of the *current* list. No-op when it lands where it was.
-    Reorder { from: usize, to: usize },
+    Reorder {
+        from: usize,
+        to: usize,
+    },
     Delete,
     SetLevel(u8),
     TransformTo(BlockKind),
@@ -410,14 +413,6 @@ pub fn draw_block_row(
     // Drag state shared by all rows: set by drag_started on the grip, the
     // insertion gap is updated by whichever row the pointer is over.
     let drag_id = egui::Id::new("capsule-block-drag");
-    if !ui.input(|i| i.pointer.any_down())
-        && ui
-            .data(|d| d.get_temp::<BlockDrag>(drag_id))
-            .is_some()
-    {
-        // Stale state (drag interrupted by a modal or lost): drop it.
-        ui.data_mut(|d| d.remove_temp::<BlockDrag>(drag_id));
-    }
 
     let handle_rect = Rect::from_min_size(pos2(row_top.x, row_top.y + 3.0), vec2(14.0, 18.0));
     let handle = ui
@@ -429,7 +424,15 @@ pub fn draw_block_row(
         .on_hover_cursor(CursorIcon::Grab)
         .on_hover_text(t(locale, Key::BlockGripHint));
     if handle.drag_started() {
-        ui.data_mut(|d| d.insert_temp(drag_id, BlockDrag { from: index, to: index + 1 }));
+        ui.data_mut(|d| {
+            d.insert_temp(
+                drag_id,
+                BlockDrag {
+                    from: index,
+                    to: index + 1,
+                },
+            )
+        });
     }
     let mut drag: Option<BlockDrag> = ui.data(|d| d.get_temp::<BlockDrag>(drag_id));
     if let Some(d) = drag.as_mut() {
@@ -479,6 +482,13 @@ pub fn draw_block_row(
         ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
     }
 
+    // Stale state only: the landing above had its chance on the release
+    // frame; a drag interrupted by a modal or a lost pointer is dropped
+    // on the first frame with the button up.
+    if drag.is_some() && !ui.input(|i| i.pointer.any_down()) {
+        ui.data_mut(|d| d.remove_temp::<BlockDrag>(drag_id));
+    }
+
     icons::paint(
         ui.painter(),
         Rect::from_center_size(handle_rect.center(), vec2(12.0, 12.0)),
@@ -496,7 +506,11 @@ pub fn draw_block_row(
         let plus_rect =
             Rect::from_min_size(pos2(row_top.x + 13.0, row_top.y + 3.0), vec2(13.0, 18.0));
         let plus = ui
-            .interact(plus_rect, egui::Id::new(("block-plus", index)), Sense::click())
+            .interact(
+                plus_rect,
+                egui::Id::new(("block-plus", index)),
+                Sense::click(),
+            )
             .on_hover_cursor(CursorIcon::PointingHand)
             .on_hover_text(t(locale, Key::InsertBelow));
         icons::paint(
@@ -1336,5 +1350,120 @@ mod tests {
         transform_block(&mut block, BlockKind::Text, Locale::En);
         assert_eq!(block["type"], "paragraph");
         assert_eq!(block["data"]["text"], "Original text");
+    }
+}
+
+#[cfg(test)]
+mod drag_reorder_tests {
+    use super::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    /// Drives a real pointer drag — press on block 0's grip, move over
+    /// block 2, release — through egui's event pipeline and asserts the
+    /// emitted `BlockOp::Reorder` plus the resulting block order.
+    /// Regression for the dead drag: the stale-state cleanup used to wipe
+    /// the drag state on the release frame, before the landing check ran.
+    #[test]
+    fn grip_drag_emits_reorder() {
+        let ctx = egui::Context::default();
+        let blocks = Rc::new(RefCell::new(vec![
+            json!({"id":"b0","type":"text","data":{"text":"first"}}),
+            json!({"id":"b1","type":"text","data":{"text":"second"}}),
+            json!({"id":"b2","type":"text","data":{"text":"third"}}),
+        ]));
+        let op_slot: Rc<RefCell<Option<BlockOp>>> = Rc::new(RefCell::new(None));
+        let vertical_id: Rc<RefCell<Option<egui::Id>>> = Rc::new(RefCell::new(None));
+
+        let run = |events: Vec<egui::Event>| {
+            let blocks = blocks.clone();
+            let op_slot = op_slot.clone();
+            let vertical_id = vertical_id.clone();
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(800.0, 600.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let mut out = ctx.run_pass(raw, |ctx| {
+                egui::Area::new(egui::Id::new("drag-harness"))
+                    .fixed_pos(egui::Pos2::ZERO)
+                    .show(ctx, |ui| {
+                        ui.vertical(|ui| {
+                            *vertical_id.borrow_mut() = Some(ui.id());
+                            let count = blocks.borrow().len();
+                            for index in 0..count {
+                                let mut block = blocks.borrow_mut();
+                                let (_, op) = draw_block_row(
+                                    ui,
+                                    &mut block[index],
+                                    index,
+                                    count,
+                                    &mut [],
+                                    Locale::En,
+                                );
+                                if op.is_some() {
+                                    *op_slot.borrow_mut() = op;
+                                }
+                            }
+                        });
+                    });
+            });
+            out.textures_delta.clear();
+        };
+
+        // Pass 0: no events — harvest the grip rects.
+        run(vec![]);
+        let vid = vertical_id.borrow().expect("harness drew rows");
+        let handle_id = |i: usize| vid.with(("block-menu", i));
+        let rect0 = ctx
+            .read_response(handle_id(0))
+            .expect("grip 0 response")
+            .rect;
+        let rect2 = ctx
+            .read_response(handle_id(2))
+            .expect("grip 2 response")
+            .rect;
+
+        // Hover the grip of block 0, press, drag over block 2, release.
+        run(vec![egui::Event::PointerMoved(rect0.center())]);
+        run(vec![egui::Event::PointerButton {
+            pos: rect0.center(),
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        }]);
+        run(vec![egui::Event::PointerMoved(pos2(
+            rect2.center().x + 200.0,
+            rect2.top() + 4.0,
+        ))]);
+        run(vec![egui::Event::PointerButton {
+            pos: pos2(rect2.center().x + 200.0, rect2.top() + 4.0),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        }]);
+
+        let op = op_slot.borrow().clone();
+        assert!(
+            matches!(op, Some(BlockOp::Reorder { from: 0, to: 2 })),
+            "expected Reorder{{0,2}}, got {op:?}"
+        );
+        // Apply the op the way document_view does: 0 -> insert index 1.
+        if let Some(BlockOp::Reorder { from, to }) = op {
+            if let Some(insert) = reorder_insert_index(from, to, 3) {
+                let mut blocks = blocks.borrow_mut();
+                let moved = blocks.remove(from);
+                blocks.insert(insert, moved);
+            }
+        }
+        let ids: Vec<String> = blocks
+            .borrow()
+            .iter()
+            .map(|b| b["id"].as_str().unwrap_or("").to_string())
+            .collect();
+        assert_eq!(ids, vec!["b1", "b0", "b2"], "block order after the drag");
     }
 }
