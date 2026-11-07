@@ -14,7 +14,7 @@ const MARKER_END: &str = "<!-- capsulecraft-end -->";
 /// Content template for the standard Agent Skill.
 fn skill_template(project_name: &str) -> String {
     format!(
-r#"---
+        r#"---
 name: capsulecraft
 description: Read, query, and update the CapsuleCraft project knowledge base and tasks for {project_name}.
 ---
@@ -52,7 +52,7 @@ If MCP is not active, you can read the knowledge base directly from the filesyst
 /// Marker block injected into AGENTS.md / CLAUDE.md / GEMINI.md.
 fn agent_marker_block(project_name: &str) -> String {
     format!(
-r#"{MARKER_START}
+        r#"{MARKER_START}
 ## CapsuleCraft Knowledge Base & MCP Integration
 This project `{project_name}` has an active CapsuleCraft knowledge base in `.capsule/`.
 - Project Overview: `.capsule/index.eml`
@@ -70,14 +70,20 @@ pub fn scaffold_agent_skill(project_root: &Path, project_name: &str) -> Result<(
     let skill_content = skill_template(project_name);
 
     // 1. Write open-standard skill: .agents/skills/capsulecraft/SKILL.md
-    let agents_skill_dir = project_root.join(".agents").join("skills").join("capsulecraft");
+    let agents_skill_dir = project_root
+        .join(".agents")
+        .join("skills")
+        .join("capsulecraft");
     fs::create_dir_all(&agents_skill_dir)
         .map_err(|e| format!("Cannot create .agents skill dir: {e}"))?;
     fs::write(agents_skill_dir.join("SKILL.md"), &skill_content)
         .map_err(|e| format!("Cannot write .agents/skills/capsulecraft/SKILL.md: {e}"))?;
 
     // 2. Write Antigravity skill: .gemini/skills/capsulecraft/SKILL.md
-    let gemini_skill_dir = project_root.join(".gemini").join("skills").join("capsulecraft");
+    let gemini_skill_dir = project_root
+        .join(".gemini")
+        .join("skills")
+        .join("capsulecraft");
     fs::create_dir_all(&gemini_skill_dir)
         .map_err(|e| format!("Cannot create .gemini skill dir: {e}"))?;
     fs::write(gemini_skill_dir.join("SKILL.md"), &skill_content)
@@ -106,10 +112,7 @@ pub fn scaffold_agent_skill(project_root: &Path, project_name: &str) -> Result<(
     // If none existed, create a clean AGENTS.md
     if !updated_any {
         let agents_md = project_root.join("AGENTS.md");
-        let initial_content = format!(
-            "# Agent Guidelines for {project_name}\n\n{}\n",
-            marker_text
-        );
+        let initial_content = format!("# Agent Guidelines for {project_name}\n\n{}\n", marker_text);
         let _ = fs::write(agents_md, initial_content);
     }
 
@@ -118,7 +121,8 @@ pub fn scaffold_agent_skill(project_root: &Path, project_name: &str) -> Result<(
 
 /// Replace text between markers if already present, or append to end.
 fn inject_or_replace_marker(content: &str, marker_block: &str) -> String {
-    if let (Some(start_pos), Some(end_pos)) = (content.find(MARKER_START), content.find(MARKER_END)) {
+    if let (Some(start_pos), Some(end_pos)) = (content.find(MARKER_START), content.find(MARKER_END))
+    {
         if start_pos < end_pos {
             let full_end = end_pos + MARKER_END.len();
             let mut res = String::new();
@@ -144,7 +148,8 @@ mod tests {
     #[test]
     fn test_inject_or_replace_marker() {
         let initial = "# My Project\n\nSome custom agent rules.\n";
-        let marker = "<!-- capsulecraft-start -->\nCapsuleCraft integration\n<!-- capsulecraft-end -->";
+        let marker =
+            "<!-- capsulecraft-start -->\nCapsuleCraft integration\n<!-- capsulecraft-end -->";
 
         // First injection: appends
         let res1 = inject_or_replace_marker(initial, marker);
@@ -172,8 +177,12 @@ mod tests {
         let res = scaffold_agent_skill(&temp_dir, "test-app");
         assert!(res.is_ok());
 
-        assert!(temp_dir.join(".agents/skills/capsulecraft/SKILL.md").is_file());
-        assert!(temp_dir.join(".gemini/skills/capsulecraft/SKILL.md").is_file());
+        assert!(temp_dir
+            .join(".agents/skills/capsulecraft/SKILL.md")
+            .is_file());
+        assert!(temp_dir
+            .join(".gemini/skills/capsulecraft/SKILL.md")
+            .is_file());
 
         let claude_md = fs::read_to_string(temp_dir.join("CLAUDE.md")).unwrap();
         assert!(claude_md.contains("# Claude instructions"));

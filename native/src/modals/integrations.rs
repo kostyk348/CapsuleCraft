@@ -220,18 +220,16 @@ fn custom_model_row(
                         .color(theme::ink()),
                 );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if current.is_some()
-                        && {
-                            let response = text_button(
-                                ui,
-                                Some(Icon::Trash),
-                                t(locale, Key::CustomModelClear),
-                                false,
-                            );
-                            clear = Some(response.rect);
-                            response.clicked()
-                        }
-                    {
+                    if current.is_some() && {
+                        let response = text_button(
+                            ui,
+                            Some(Icon::Trash),
+                            t(locale, Key::CustomModelClear),
+                            false,
+                        );
+                        clear = Some(response.rect);
+                        response.clicked()
+                    } {
                         models.set(kind, None);
                         changed = true;
                     }
@@ -611,7 +609,12 @@ mod tests {
                             .layout(egui::Layout::top_down(egui::Align::Min)),
                     );
                     for kind in CustomModelKind::ALL {
-                        sink.push(custom_model_row(&mut column, &mut custom_models, kind, Locale::En));
+                        sink.push(custom_model_row(
+                            &mut column,
+                            &mut custom_models,
+                            kind,
+                            Locale::En,
+                        ));
                         column.add_space(6.0);
                     }
                 });

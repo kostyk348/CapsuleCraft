@@ -567,7 +567,10 @@ pub fn draw_block_row(
 
     icons::paint(
         ui.painter(),
-        Rect::from_center_size(pos2(row_top.x + 7.0, row_rect.top() + 12.0), vec2(12.0, 12.0)),
+        Rect::from_center_size(
+            pos2(row_top.x + 7.0, row_rect.top() + 12.0),
+            vec2(12.0, 12.0),
+        ),
         Icon::Grip,
         if hovered || handle.hovered() {
             theme::muted()
@@ -586,23 +589,18 @@ pub fn draw_block_row(
             pos2(row_rect.right() - bar_w - 4.0, row_rect.top()),
             vec2(bar_w, btn),
         );
+        ui.painter().rect_filled(bar_rect, 6.0, theme::chrome());
         ui.painter()
-            .rect_filled(bar_rect, 6.0, theme::chrome());
-        ui.painter().rect_stroke(
-            bar_rect,
-            6.0,
-            theme::hairline(),
-            egui::StrokeKind::Inside,
-        );
+            .rect_stroke(bar_rect, 6.0, theme::hairline(), egui::StrokeKind::Inside);
         let slots: [(&str, Icon, bool, Key, BlockOp); 3] = [
+            ("up", Icon::ArrowUp, index > 0, Key::MoveUp, BlockOp::Up),
             (
-                "up",
-                Icon::ArrowUp,
-                index > 0,
-                Key::MoveUp,
-                BlockOp::Up,
+                "dup",
+                Icon::Copy,
+                true,
+                Key::DuplicateBlock,
+                BlockOp::Duplicate,
             ),
-            ("dup", Icon::Copy, true, Key::DuplicateBlock, BlockOp::Duplicate),
             (
                 "down",
                 Icon::ArrowDown,
@@ -1787,13 +1785,7 @@ mod drag_reorder_tests {
         };
         ctx.run_pass(raw, |ctx| {
             egui::Area::new(egui::Id::new("nudge-harness")).show(ctx, |ui| {
-                set_block_drag_state(
-                    ui,
-                    BlockDrag {
-                        from: 1,
-                        to: 2,
-                    },
-                );
+                set_block_drag_state(ui, BlockDrag { from: 1, to: 2 });
                 nudge_drag_to_top(ui, 100.0);
                 assert_eq!(
                     block_drag_state(ui),

@@ -354,6 +354,34 @@ struct OcrResult {
 }
 
 /// Localized stopwatch for the OCR status card: "42 с" / "2 мин 05 с".
+/// Synthetic vault for `--stress-graph N`: folder clusters of 500 chained
+/// pages each, cross-folder references and a tag per cluster. Nothing is
+/// written to disk — the in-memory capsules replace the vault for the run,
+/// which is how the graph is exercised (and screenshotted) at any scale.
+fn stress_capsules(count: usize) -> Vec<Capsule> {
+    const PER_FOLDER: usize = 500;
+    (0..count)
+        .map(|index| {
+            let folder = format!("g{}", index / PER_FOLDER);
+            let mut capsule = Capsule::blank(
+                format!("stress-{index}@capsulecraft.stress"),
+                format!("{folder}/page_{index}.eml"),
+                format!("Stress page {index} — cluster {}", index / PER_FOLDER),
+            );
+            if index % PER_FOLDER > 0 {
+                capsule.parent_id = Some(format!("stress-{}@capsulecraft.stress", index - 1));
+            }
+            if index >= PER_FOLDER {
+                capsule
+                    .references
+                    .push(format!("stress-{}@capsulecraft.stress", index - PER_FOLDER));
+            }
+            capsule.tags = vec![format!("#g{}", index / PER_FOLDER)];
+            capsule
+        })
+        .collect()
+}
+
 fn fmt_elapsed(elapsed: Duration, locale: Locale) -> String {
     let total = elapsed.as_secs();
     match locale {
@@ -383,6 +411,16 @@ impl NativeApp {
         vault::set_active_vault_dir(&dir);
         let imap_config = sync_imap::ImapConfig::load_from_vault(&dir);
         let vault = Vault::load(dir);
+        // --stress-graph: swap the loaded vault for synthetic pages (the
+        // real vault on disk stays untouched) and open the graph view.
+        let vault = match launch.stress_graph {
+            Some(count) => Vault {
+                dir: vault.dir,
+                capsules: stress_capsules(count),
+                load_errors: Vec::new(),
+            },
+            None => vault,
+        };
         let locale = launch.locale.unwrap_or_else(Locale::detect);
         // Session restore: unless the CLI pins a page/view explicitly, reopen
         // what the user had on the previous run (by Message-ID, so vault
@@ -414,16 +452,20 @@ impl NativeApp {
             status: t(locale, Key::Saved).to_string(),
             status_error: false,
             locale,
-            view: launch
-                .view
-                .filter(|value| !matches!(value, View::Faq))
-                .or_else(|| {
-                    ui_state
-                        .last_view
-                        .as_deref()
-                        .and_then(views::View::from_storage_key)
-                })
-                .unwrap_or(View::Page),
+            view: if launch.stress_graph.is_some() {
+                View::Graph
+            } else {
+                launch
+                    .view
+                    .filter(|value| !matches!(value, View::Faq))
+                    .or_else(|| {
+                        ui_state
+                            .last_view
+                            .as_deref()
+                            .and_then(views::View::from_storage_key)
+                    })
+                    .unwrap_or(View::Page)
+            },
             planning: PlanningState::default(),
             graph: GraphState::new(),
             mail: MailState::default(),
@@ -480,6 +522,11 @@ impl NativeApp {
         app.show_integrations = launch.modal.as_deref() == Some("integrations");
         if launch.onboarding {
             app.show_onboarding = true;
+        }
+        // `--zoom`: initial graph zoom — how docs screenshots reach the
+        // cluster-overview LOD band without scripting wheel events.
+        if let Some(zoom) = launch.zoom {
+            app.graph.zoom = zoom.clamp(0.02, 3.0);
         }
         // First-run auto-open: never inside tests (the overlay would eat
         // synthetic clicks) and never in --snapshot captures.

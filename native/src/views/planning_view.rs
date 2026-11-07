@@ -851,18 +851,19 @@ fn task_row(
     } else {
         theme::bad()
     };
-    let due_response = ui.add_sized(
-        vec2(84.0, 22.0),
-        TextEdit::singleline(&mut due)
-            .frame(Frame::NONE)
-            .margin(Margin::same(0))
-            .font(FontId::new(9.5, theme::mono()))
-            .text_color(due_color)
-            // A quiet em dash for «no date»; the full format lives in the
-            // hover tooltip — the 84 px cell clips «YYYY-MM-DD» to noise.
-            .hint_text("—"),
-    )
-    .on_hover_text(t(locale, Key::DueDateHint));
+    let due_response = ui
+        .add_sized(
+            vec2(84.0, 22.0),
+            TextEdit::singleline(&mut due)
+                .frame(Frame::NONE)
+                .margin(Margin::same(0))
+                .font(FontId::new(9.5, theme::mono()))
+                .text_color(due_color)
+                // A quiet em dash for «no date»; the full format lives in the
+                // hover tooltip — the 84 px cell clips «YYYY-MM-DD» to noise.
+                .hint_text("—"),
+        )
+        .on_hover_text(t(locale, Key::DueDateHint));
     if due_response.changed() {
         item.due = if due.trim().is_empty() {
             None

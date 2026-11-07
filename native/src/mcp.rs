@@ -1308,7 +1308,11 @@ impl McpHandler {
         let project_root = if let Some(p) = path_arg {
             PathBuf::from(p)
         } else if crate::vault::is_project_vault(&self.vault.dir) {
-            self.vault.dir.parent().unwrap_or(&self.vault.dir).to_path_buf()
+            self.vault
+                .dir
+                .parent()
+                .unwrap_or(&self.vault.dir)
+                .to_path_buf()
         } else {
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
         };
@@ -1346,12 +1350,18 @@ impl McpHandler {
             .find(|c| c.tags.iter().any(|t| t == "overview") || c.file_name == "index.eml");
 
         let Some(index) = index_capsule else {
-            return Err("No project overview found in this vault. Run 'project_ingest' first.".to_string());
+            return Err(
+                "No project overview found in this vault. Run 'project_ingest' first.".to_string(),
+            );
         };
 
         let mut overview_text = String::new();
         for b in &index.blocks {
-            if let Some(t) = b.get("data").and_then(|d| d.get("text")).and_then(Value::as_str) {
+            if let Some(t) = b
+                .get("data")
+                .and_then(|d| d.get("text"))
+                .and_then(Value::as_str)
+            {
                 overview_text.push_str(t);
                 overview_text.push_str("\n\n");
             }
@@ -1978,7 +1988,9 @@ mod tests {
         })
         .to_string();
 
-        let resp = handler.handle_message(&ingest_req).expect("ingest response");
+        let resp = handler
+            .handle_message(&ingest_req)
+            .expect("ingest response");
         let val: Value = serde_json::from_str(&resp).unwrap();
         assert_eq!(val["id"], 101);
         let text_content = val["result"]["content"][0]["text"].as_str().unwrap();
@@ -1998,12 +2010,17 @@ mod tests {
         })
         .to_string();
 
-        let resp_over = handler.handle_message(&overview_req).expect("overview response");
+        let resp_over = handler
+            .handle_message(&overview_req)
+            .expect("overview response");
         let val_over: Value = serde_json::from_str(&resp_over).unwrap();
         assert_eq!(val_over["id"], 102);
         let over_text = val_over["result"]["content"][0]["text"].as_str().unwrap();
         let over_json: Value = serde_json::from_str(over_text).unwrap();
-        assert!(over_json["overview"].as_str().unwrap().contains("agent-brain"));
+        assert!(over_json["overview"]
+            .as_str()
+            .unwrap()
+            .contains("agent-brain"));
         assert_eq!(over_json["modules_count"], 1);
 
         let _ = fs::remove_dir_all(&proj_dir);

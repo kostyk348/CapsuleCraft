@@ -424,6 +424,13 @@ strings! {
     OpenInEditor => ("Открыть в редакторе", "Open in editor"),
     Nodes => ("узлов", "nodes"),
     Edges => ("связей", "edges"),
+    GraphClusters => ("кластеров", "clusters"),
+    GraphClustersPanel => ("Кластеры", "Clusters"),
+    GraphBandClusters => ("Обзор кластеров", "Cluster overview"),
+    GraphBandDensity => ("Плотность", "Density"),
+    GraphBandPages => ("Страницы", "Pages"),
+    GraphLayingOut => ("Считаем раскладку", "Laying out"),
+    GraphRootCluster => ("Корень хранилища", "Vault root"),
     PageParent => ("страница", "page"),
     Reply => ("ответ", "reply"),
     Reference => ("ссылка", "reference"),
@@ -869,9 +876,21 @@ mod tests {
 
     #[test]
     fn word_plural_forms() {
-        assert_eq!(plural(Locale::Ru, 1, Key::WordOne, Key::WordFew, Key::WordMany), "1 слово");
-        assert_eq!(plural(Locale::Ru, 3, Key::WordOne, Key::WordFew, Key::WordMany), "3 слова");
-        assert_eq!(plural(Locale::Ru, 61, Key::WordOne, Key::WordFew, Key::WordMany), "61 слово");
-        assert_eq!(plural(Locale::En, 7, Key::WordOne, Key::WordFew, Key::WordMany), "7 words");
+        assert_eq!(
+            plural(Locale::Ru, 1, Key::WordOne, Key::WordFew, Key::WordMany),
+            "1 слово"
+        );
+        assert_eq!(
+            plural(Locale::Ru, 3, Key::WordOne, Key::WordFew, Key::WordMany),
+            "3 слова"
+        );
+        assert_eq!(
+            plural(Locale::Ru, 61, Key::WordOne, Key::WordFew, Key::WordMany),
+            "61 слово"
+        );
+        assert_eq!(
+            plural(Locale::En, 7, Key::WordOne, Key::WordFew, Key::WordMany),
+            "7 words"
+        );
     }
 }

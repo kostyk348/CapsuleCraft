@@ -200,7 +200,11 @@ pub fn detect_project_meta(root: &Path) -> (String, ProjectKind) {
             for line in content.lines() {
                 let trimmed = line.trim();
                 if trimmed.starts_with("name:") {
-                    let name = trimmed.trim_start_matches("name:").trim().trim_matches('"').trim_matches('\'');
+                    let name = trimmed
+                        .trim_start_matches("name:")
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'');
                     if !name.is_empty() {
                         return (name.to_string(), ProjectKind::Flutter);
                     }
@@ -232,27 +236,117 @@ pub fn is_code_file(path: &Path) -> bool {
     // Exclude binary, media, archives, and build artifacts
     let is_binary_or_media = matches!(
         ext.as_str(),
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "ico" | "bmp" | "svg" | "tiff" |
-        "mp3" | "wav" | "ogg" | "flac" | "aac" | "m4a" |
-        "mp4" | "webm" | "mkv" | "avi" | "mov" |
-        "zip" | "tar" | "gz" | "7z" | "rar" | "bz2" | "xz" |
-        "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" |
-        "exe" | "dll" | "so" | "dylib" | "bin" | "wasm" | "obj" | "o" | "a" | "lib" | "class" |
-        "pyc" | "pyo" | "pyd" |
-        "lock" | "sum" | "ttf" | "otf" | "woff" | "woff2" | "eot" | "db" | "sqlite" | "eml"
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "webp"
+            | "ico"
+            | "bmp"
+            | "svg"
+            | "tiff"
+            | "mp3"
+            | "wav"
+            | "ogg"
+            | "flac"
+            | "aac"
+            | "m4a"
+            | "mp4"
+            | "webm"
+            | "mkv"
+            | "avi"
+            | "mov"
+            | "zip"
+            | "tar"
+            | "gz"
+            | "7z"
+            | "rar"
+            | "bz2"
+            | "xz"
+            | "pdf"
+            | "doc"
+            | "docx"
+            | "xls"
+            | "xlsx"
+            | "ppt"
+            | "pptx"
+            | "exe"
+            | "dll"
+            | "so"
+            | "dylib"
+            | "bin"
+            | "wasm"
+            | "obj"
+            | "o"
+            | "a"
+            | "lib"
+            | "class"
+            | "pyc"
+            | "pyo"
+            | "pyd"
+            | "lock"
+            | "sum"
+            | "ttf"
+            | "otf"
+            | "woff"
+            | "woff2"
+            | "eot"
+            | "db"
+            | "sqlite"
+            | "eml"
     );
     if is_binary_or_media {
         return false;
     }
     matches!(
         ext.as_str(),
-        "dart" | "rs" | "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" |
-        "py" | "pyw" | "go" | "cs" | "java" | "kt" | "kts" |
-        "c" | "cpp" | "cc" | "cxx" | "h" | "hpp" | "hh" | "hxx" |
-        "swift" | "rb" | "php" | "lua" | "zig" | "nim" | "scala" | "groovy" |
-        "sh" | "bash" | "zsh" | "ps1" | "bat" | "cmd" |
-        "vue" | "svelte" | "html" | "css" | "scss" | "sass" | "less" |
-        "sql" | "graphql" | "proto"
+        "dart"
+            | "rs"
+            | "ts"
+            | "tsx"
+            | "js"
+            | "jsx"
+            | "mjs"
+            | "cjs"
+            | "py"
+            | "pyw"
+            | "go"
+            | "cs"
+            | "java"
+            | "kt"
+            | "kts"
+            | "c"
+            | "cpp"
+            | "cc"
+            | "cxx"
+            | "h"
+            | "hpp"
+            | "hh"
+            | "hxx"
+            | "swift"
+            | "rb"
+            | "php"
+            | "lua"
+            | "zig"
+            | "nim"
+            | "scala"
+            | "groovy"
+            | "sh"
+            | "bash"
+            | "zsh"
+            | "ps1"
+            | "bat"
+            | "cmd"
+            | "vue"
+            | "svelte"
+            | "html"
+            | "css"
+            | "scss"
+            | "sass"
+            | "less"
+            | "sql"
+            | "graphql"
+            | "proto"
     )
 }
 
@@ -273,9 +367,22 @@ pub fn classify_subsystem(rel_path: &str) -> String {
         return "root".to_string();
     }
     let top = parts[0];
-    if (top == "crates" || top == "packages" || top == "modules" || top == "apps" || top == "services" || top == "plugins") && parts.len() >= 3 {
+    if (top == "crates"
+        || top == "packages"
+        || top == "modules"
+        || top == "apps"
+        || top == "services"
+        || top == "plugins")
+        && parts.len() >= 3
+    {
         format!("{}/{}", top, parts[1])
-    } else if top == "lib" && parts.len() >= 4 && (parts[1] == "features" || parts[1] == "modules" || parts[1] == "src" || parts[1] == "screens") {
+    } else if top == "lib"
+        && parts.len() >= 4
+        && (parts[1] == "features"
+            || parts[1] == "modules"
+            || parts[1] == "src"
+            || parts[1] == "screens")
+    {
         format!("{}/{}/{}", top, parts[1], parts[2])
     } else if parts.len() >= 3 {
         format!("{}/{}", top, parts[1])
@@ -464,7 +571,11 @@ pub fn parse_source_file(rel_path: &str, content: &str) -> ParsedModule {
         // 1. Python multiline triple quotes docstrings
         if lang == "python" && in_header_doc {
             if !in_python_doc && (trimmed.starts_with("\"\"\"") || trimmed.starts_with("'''")) {
-                let quote = if trimmed.starts_with("\"\"\"") { "\"\"\"" } else { "'''" };
+                let quote = if trimmed.starts_with("\"\"\"") {
+                    "\"\"\""
+                } else {
+                    "'''"
+                };
                 let rest = trimmed.trim_start_matches(quote);
                 if rest.ends_with(quote) && rest.len() >= quote.len() {
                     let inside = rest.trim_end_matches(quote).trim();
@@ -482,7 +593,10 @@ pub fn parse_source_file(rel_path: &str, content: &str) -> ParsedModule {
                 continue;
             } else if in_python_doc {
                 if trimmed.ends_with("\"\"\"") || trimmed.ends_with("'''") {
-                    let inside = trimmed.trim_end_matches("\"\"\"").trim_end_matches("'''").trim();
+                    let inside = trimmed
+                        .trim_end_matches("\"\"\"")
+                        .trim_end_matches("'''")
+                        .trim();
                     if !inside.is_empty() {
                         doc_lines.push(inside.to_string());
                     }
@@ -500,7 +614,11 @@ pub fn parse_source_file(rel_path: &str, content: &str) -> ParsedModule {
         if in_header_doc {
             if !in_block_comment && (trimmed.starts_with("/**") || trimmed.starts_with("/*!")) {
                 in_block_comment = true;
-                let rest = trimmed.trim_start_matches("/**").trim_start_matches("/*!").trim_end_matches("*/").trim();
+                let rest = trimmed
+                    .trim_start_matches("/**")
+                    .trim_start_matches("/*!")
+                    .trim_end_matches("*/")
+                    .trim();
                 if !rest.is_empty() {
                     doc_lines.push(rest.to_string());
                 }
@@ -511,7 +629,10 @@ pub fn parse_source_file(rel_path: &str, content: &str) -> ParsedModule {
                 continue;
             } else if in_block_comment {
                 if trimmed.ends_with("*/") {
-                    let rest = trimmed.trim_end_matches("*/").trim_start_matches('*').trim();
+                    let rest = trimmed
+                        .trim_end_matches("*/")
+                        .trim_start_matches('*')
+                        .trim();
                     if !rest.is_empty() {
                         doc_lines.push(rest.to_string());
                     }
@@ -523,15 +644,22 @@ pub fn parse_source_file(rel_path: &str, content: &str) -> ParsedModule {
                 i += 1;
                 continue;
             } else if trimmed.starts_with("///") || trimmed.starts_with("//!") {
-                let doc = trimmed.trim_start_matches("///").trim_start_matches("//!").trim();
+                let doc = trimmed
+                    .trim_start_matches("///")
+                    .trim_start_matches("//!")
+                    .trim();
                 doc_lines.push(doc.to_string());
                 i += 1;
                 continue;
-            } else if trimmed.starts_with("//") && doc_lines.is_empty() && trimmed.to_lowercase().contains("copyright") {
+            } else if trimmed.starts_with("//")
+                && doc_lines.is_empty()
+                && trimmed.to_lowercase().contains("copyright")
+            {
                 // skip license lines
                 i += 1;
                 continue;
-            } else if !trimmed.is_empty() && !trimmed.starts_with("//") && !trimmed.starts_with('#') {
+            } else if !trimmed.is_empty() && !trimmed.starts_with("//") && !trimmed.starts_with('#')
+            {
                 in_header_doc = false;
             }
         }
@@ -543,10 +671,18 @@ pub fn parse_source_file(rel_path: &str, content: &str) -> ParsedModule {
 
         // 4. Extract imports
         if trimmed.starts_with("use crate::") || trimmed.starts_with("use super::") {
-            let item = trimmed.trim_start_matches("use ").trim_end_matches(';').trim();
+            let item = trimmed
+                .trim_start_matches("use ")
+                .trim_end_matches(';')
+                .trim();
             module.imports.push(item.to_string());
         } else if trimmed.starts_with("import ") {
-            let clean = trimmed.trim_start_matches("import ").trim_end_matches(';').trim().trim_matches('\'').trim_matches('"');
+            let clean = trimmed
+                .trim_start_matches("import ")
+                .trim_end_matches(';')
+                .trim()
+                .trim_matches('\'')
+                .trim_matches('"');
             if !clean.is_empty() {
                 module.imports.push(clean.to_string());
             }
@@ -650,26 +786,29 @@ fn is_declaration_start(trimmed: &str, lang: &str) -> bool {
         }
         "go" => {
             if trimmed.starts_with("func ") {
-                trimmed.chars().nth(5).map_or(false, |c| c.is_ascii_uppercase())
+                trimmed
+                    .chars()
+                    .nth(5)
+                    .map_or(false, |c| c.is_ascii_uppercase())
             } else if trimmed.starts_with("type ") {
-                trimmed.chars().nth(5).map_or(false, |c| c.is_ascii_uppercase())
+                trimmed
+                    .chars()
+                    .nth(5)
+                    .map_or(false, |c| c.is_ascii_uppercase())
             } else {
                 false
             }
         }
         "dart" => {
             (trimmed.starts_with("class ") && !trimmed.starts_with("class _"))
-                || (trimmed.starts_with("abstract class ") && !trimmed.starts_with("abstract class _"))
+                || (trimmed.starts_with("abstract class ")
+                    && !trimmed.starts_with("abstract class _"))
                 || (trimmed.starts_with("enum ") && !trimmed.starts_with("enum _"))
                 || (trimmed.starts_with("mixin ") && !trimmed.starts_with("mixin _"))
                 || (trimmed.starts_with("extension ") && !trimmed.starts_with("extension _"))
         }
-        "csharp" | "java" => {
-            trimmed.starts_with("public ")
-        }
-        _ => {
-            trimmed.starts_with("pub ") || trimmed.starts_with("export ")
-        }
+        "csharp" | "java" => trimmed.starts_with("public "),
+        _ => trimmed.starts_with("pub ") || trimmed.starts_with("export "),
     }
 }
 
@@ -700,7 +839,13 @@ fn accumulate_declaration(lines: &[&str], start_idx: usize, lang: &str) -> (Stri
     let mut clean = if lang == "python" {
         joined.trim_end_matches(':').trim().to_string()
     } else {
-        joined.split('{').next().unwrap_or(&joined).trim_end_matches(';').trim().to_string()
+        joined
+            .split('{')
+            .next()
+            .unwrap_or(&joined)
+            .trim_end_matches(';')
+            .trim()
+            .to_string()
     };
 
     // Compact multiple internal spaces into single space
@@ -715,7 +860,10 @@ fn accumulate_declaration(lines: &[&str], start_idx: usize, lang: &str) -> (Stri
 /// and non-destructive user content preservation.
 pub fn ingest_project(project_root: &Path, vault_dir: &Path) -> Result<IngestSummary, String> {
     if !project_root.is_dir() {
-        return Err(format!("Project root does not exist: {}", project_root.display()));
+        return Err(format!(
+            "Project root does not exist: {}",
+            project_root.display()
+        ));
     }
 
     fs::create_dir_all(vault_dir)
@@ -839,13 +987,22 @@ pub fn ingest_project(project_root: &Path, vault_dir: &Path) -> Result<IngestSum
                     .and_then(|d| d.lines().next())
                     .map(|s| s.to_string());
 
-                subsystems.entry(sub.clone()).or_default().push(SubsystemModuleRef {
-                    rel_path: rel_path.clone(),
-                    doc_preview: doc_preview.clone(),
-                });
+                subsystems
+                    .entry(sub.clone())
+                    .or_default()
+                    .push(SubsystemModuleRef {
+                        rel_path: rel_path.clone(),
+                        doc_preview: doc_preview.clone(),
+                    });
 
-                let module_capsule = build_module_capsule(&project_name, &sub_msg_id, &root_msg_id, &module);
-                let was_new = write_capsule_preserving(vault_dir, &rel_capsule_file, module_capsule, &project_name)?;
+                let module_capsule =
+                    build_module_capsule(&project_name, &sub_msg_id, &root_msg_id, &module);
+                let was_new = write_capsule_preserving(
+                    vault_dir,
+                    &rel_capsule_file,
+                    module_capsule,
+                    &project_name,
+                )?;
                 if was_new {
                     capsules_created += 1;
                 } else {
@@ -889,7 +1046,12 @@ pub fn ingest_project(project_root: &Path, vault_dir: &Path) -> Result<IngestSum
                 let hash = compute_fast_hash(content.as_bytes());
                 let doc = parse_markdown_file(&rel_path, &content, &project_name);
                 let doc_capsule = build_doc_capsule(&project_name, &root_msg_id, &doc);
-                let was_new = write_capsule_preserving(vault_dir, &rel_capsule_file, doc_capsule, &project_name)?;
+                let was_new = write_capsule_preserving(
+                    vault_dir,
+                    &rel_capsule_file,
+                    doc_capsule,
+                    &project_name,
+                )?;
                 if was_new {
                     capsules_created += 1;
                 } else {
@@ -943,7 +1105,8 @@ pub fn ingest_project(project_root: &Path, vault_dir: &Path) -> Result<IngestSum
             slugify(&project_name),
             slugify(sub_name)
         );
-        let sub_capsule = build_subsystem_capsule(&project_name, &root_msg_id, sub_name, &sub_msg_id, mods);
+        let sub_capsule =
+            build_subsystem_capsule(&project_name, &root_msg_id, sub_name, &sub_msg_id, mods);
         let sub_file = format!("subsystems/subsystem_{}.eml", slugify(sub_name));
         let was_new = write_capsule_preserving(vault_dir, &sub_file, sub_capsule, &project_name)?;
         if was_new {
@@ -974,7 +1137,8 @@ pub fn ingest_project(project_root: &Path, vault_dir: &Path) -> Result<IngestSum
     // 6. Update Tasks & Debt Capsule
     if !all_todos.is_empty() {
         let tasks_capsule = build_tasks_capsule(&project_name, &root_msg_id, &all_todos);
-        let was_new = write_capsule_preserving(vault_dir, "tasks_todo.eml", tasks_capsule, &project_name)?;
+        let was_new =
+            write_capsule_preserving(vault_dir, "tasks_todo.eml", tasks_capsule, &project_name)?;
         if was_new {
             capsules_created += 1;
         } else {
@@ -1018,7 +1182,13 @@ pub fn is_system_block(block: &Value) -> bool {
 pub fn extract_user_state(
     existing: &Capsule,
     project_name: &str,
-) -> (Vec<Value>, Vec<Attachment>, Vec<String>, Option<String>, Option<String>) {
+) -> (
+    Vec<Value>,
+    Vec<Attachment>,
+    Vec<String>,
+    Option<String>,
+    Option<String>,
+) {
     let user_blocks: Vec<Value> = existing
         .blocks
         .iter()
@@ -1055,7 +1225,13 @@ pub fn extract_user_state(
 
     let custom_parent = existing.parent_id.clone();
 
-    (user_blocks, user_attachments, user_tags, custom_status, custom_parent)
+    (
+        user_blocks,
+        user_attachments,
+        user_tags,
+        custom_status,
+        custom_parent,
+    )
 }
 
 /// Write a generated capsule to vault, non-destructively preserving existing user blocks,
@@ -1132,7 +1308,13 @@ pub fn write_capsule_preserving(
 
 fn slugify(text: &str) -> String {
     text.chars()
-        .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
         .collect::<String>()
         .trim_matches('_')
         .to_string()
@@ -1244,7 +1426,11 @@ fn build_root_capsule(
 
         let mut docs_md = String::from("Indexed project documentation & guides:\n\n");
         for d in docs {
-            docs_md.push_str(&format!("- [[{}]] (`{}`)\n", doc_subject(project_name, &d.title), d.rel_path));
+            docs_md.push_str(&format!(
+                "- [[{}]] (`{}`)\n",
+                doc_subject(project_name, &d.title),
+                d.rel_path
+            ));
         }
         blocks.push(json!({
             "id": new_block_id("paragraph"),
@@ -1276,7 +1462,11 @@ fn build_root_capsule(
         in_reply_to: None,
         parent_id: None,
         references: Vec::new(),
-        tags: vec!["project".to_string(), slugify(project_name), "overview".to_string()],
+        tags: vec![
+            "project".to_string(),
+            slugify(project_name),
+            "overview".to_string(),
+        ],
         status: "Active".to_string(),
         file_name: "index.eml".to_string(),
         blocks,
@@ -1340,11 +1530,19 @@ fn build_subsystem_capsule(
     let mut list_md = String::new();
     for m in modules {
         let desc = if let Some(peek) = &m.doc_preview {
-            if !peek.is_empty() { format!(" — *{peek}*") } else { String::new() }
+            if !peek.is_empty() {
+                format!(" — *{peek}*")
+            } else {
+                String::new()
+            }
         } else {
             String::new()
         };
-        list_md.push_str(&format!("- [[{}]] (`{}`){desc}\n", module_subject(project_name, &m.rel_path), m.rel_path));
+        list_md.push_str(&format!(
+            "- [[{}]] (`{}`){desc}\n",
+            module_subject(project_name, &m.rel_path),
+            m.rel_path
+        ));
     }
     blocks.push(json!({
         "id": new_block_id("paragraph"),
@@ -1364,7 +1562,11 @@ fn build_subsystem_capsule(
         in_reply_to: Some(root_id.to_string()),
         parent_id: Some(root_id.to_string()),
         references: vec![root_id.to_string()],
-        tags: vec!["project".to_string(), slugify(project_name), "subsystem".to_string()],
+        tags: vec![
+            "project".to_string(),
+            slugify(project_name),
+            "subsystem".to_string(),
+        ],
         status: "Active".to_string(),
         file_name: format!("subsystems/subsystem_{safe_slug}.eml"),
         blocks,
@@ -1379,11 +1581,7 @@ fn build_subsystem_capsule(
 }
 
 /// Construct documentation capsule.
-fn build_doc_capsule(
-    project_name: &str,
-    root_id: &str,
-    doc: &ParsedDoc,
-) -> Capsule {
+fn build_doc_capsule(project_name: &str, root_id: &str, doc: &ParsedDoc) -> Capsule {
     let now = Utc::now();
     let mut blocks = Vec::new();
 
@@ -1407,7 +1605,11 @@ fn build_doc_capsule(
 
     let safe_slug = slugify(&doc.rel_path);
     Capsule {
-        message_id: format!("<doc-{}-{}@capsuleos.local>", slugify(project_name), safe_slug),
+        message_id: format!(
+            "<doc-{}-{}@capsuleos.local>",
+            slugify(project_name),
+            safe_slug
+        ),
         subject: doc_subject(project_name, &doc.title),
         from: "CapsuleCraft Code Ingest <system@capsulecraft.local>".to_string(),
         to: "Vault <vault@capsuleos.local>".to_string(),
@@ -1416,7 +1618,11 @@ fn build_doc_capsule(
         in_reply_to: Some(root_id.to_string()),
         parent_id: Some(root_id.to_string()),
         references: vec![root_id.to_string()],
-        tags: vec!["project".to_string(), slugify(project_name), "docs".to_string()],
+        tags: vec![
+            "project".to_string(),
+            slugify(project_name),
+            "docs".to_string(),
+        ],
         status: "Active".to_string(),
         file_name: format!("docs/doc_{safe_slug}.eml"),
         blocks,
@@ -1483,7 +1689,11 @@ fn build_tasks_capsule(project_name: &str, parent_id: &str, todos: &[ExtractedTo
         in_reply_to: Some(parent_id.to_string()),
         parent_id: Some(parent_id.to_string()),
         references: vec![parent_id.to_string()],
-        tags: vec!["project".to_string(), slugify(project_name), "tasks".to_string()],
+        tags: vec![
+            "project".to_string(),
+            slugify(project_name),
+            "tasks".to_string(),
+        ],
         status: "Active".to_string(),
         file_name: "tasks_todo.eml".to_string(),
         blocks,
@@ -1634,7 +1844,11 @@ fn build_module_capsule(
         in_reply_to: Some(parent_id.to_string()),
         parent_id: Some(parent_id.to_string()),
         references: vec![root_id.to_string(), parent_id.to_string()],
-        tags: vec!["project".to_string(), slugify(project_name), "module".to_string()],
+        tags: vec![
+            "project".to_string(),
+            slugify(project_name),
+            "module".to_string(),
+        ],
         status: "Active".to_string(),
         file_name: format!("modules/module_{safe_slug}.eml"),
         blocks,
@@ -1760,7 +1974,10 @@ fn private_helper() {}
         assert_eq!(module.todos[0].kind, "TODO");
         assert_eq!(module.todos[0].text, "add crossfade support");
         assert_eq!(module.todos[1].kind, "FIXME");
-        assert_eq!(module.todos[1].text, "handle device disconnection gracefully");
+        assert_eq!(
+            module.todos[1].text,
+            "handle device disconnection gracefully"
+        );
 
         assert!(module
             .public_items
@@ -1813,8 +2030,12 @@ pub fn start_server() {}
         assert!(vault_dir.join(".index_state.json").is_file());
 
         // Agent skills created
-        assert!(project.join(".gemini/skills/capsulecraft/SKILL.md").is_file());
-        assert!(project.join(".agents/skills/capsulecraft/SKILL.md").is_file());
+        assert!(project
+            .join(".gemini/skills/capsulecraft/SKILL.md")
+            .is_file());
+        assert!(project
+            .join(".agents/skills/capsulecraft/SKILL.md")
+            .is_file());
 
         let index_eml = fs::read_to_string(vault_dir.join("index.eml")).unwrap();
         assert!(index_eml.contains("micro-service"));
@@ -1865,9 +2086,18 @@ pub async fn calculate_metrics(
     #[test]
     fn test_classify_subsystem() {
         assert_eq!(classify_subsystem("src/main.rs"), "src");
-        assert_eq!(classify_subsystem("crates/companion_app/src/main.rs"), "crates/companion_app");
-        assert_eq!(classify_subsystem("packages/ui/src/index.ts"), "packages/ui");
-        assert_eq!(classify_subsystem("lib/features/auth/login.dart"), "lib/features/auth");
+        assert_eq!(
+            classify_subsystem("crates/companion_app/src/main.rs"),
+            "crates/companion_app"
+        );
+        assert_eq!(
+            classify_subsystem("packages/ui/src/index.ts"),
+            "packages/ui"
+        );
+        assert_eq!(
+            classify_subsystem("lib/features/auth/login.dart"),
+            "lib/features/auth"
+        );
         assert_eq!(classify_subsystem("root_file.rs"), "root");
     }
 

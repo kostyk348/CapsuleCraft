@@ -54,14 +54,7 @@ pub fn draw_confirm_delete(
                     .color(theme::ink()),
             );
             body.add_space(6.0);
-            body.add(
-                Label::new(
-                    RichText::new(body_text)
-                        .size(12.0)
-                        .color(theme::muted()),
-                )
-                .wrap(),
-            );
+            body.add(Label::new(RichText::new(body_text).size(12.0).color(theme::muted())).wrap());
             body.add_space(14.0);
             body.horizontal(|ui| {
                 if primary_button(ui, t(locale, Key::Delete), 28.0).clicked() {

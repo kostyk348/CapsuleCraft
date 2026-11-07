@@ -76,7 +76,11 @@ pub fn draw_image_block(
                 ui.label(RichText::new(name).size(12.0).color(theme::ink()));
                 if let Some(attachment) = file {
                     ui.add_space(6.0);
-                    let _ = hud(ui, &crate::human_bytes(attachment.size_bytes), theme::faint());
+                    let _ = hud(
+                        ui,
+                        &crate::human_bytes(attachment.size_bytes),
+                        theme::faint(),
+                    );
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if text_button(ui, Some(Icon::Plus), t(locale, Key::ImageChoose), false)
@@ -280,7 +284,9 @@ pub fn draw_image_block(
 }
 
 /// File dialog → `(name, cid, mime, base64, size, width, height)`.
-pub(crate) fn pick_image(locale: Locale) -> Option<(String, String, String, String, usize, u32, u32)> {
+pub(crate) fn pick_image(
+    locale: Locale,
+) -> Option<(String, String, String, String, usize, u32, u32)> {
     let path = crate::util::dialog::FileDialog::new()
         .set_title(t(locale, Key::ImageChoose))
         .add_filter("images", &IMAGE_EXTENSIONS)
@@ -308,7 +314,11 @@ pub(crate) fn pick_image(locale: Locale) -> Option<(String, String, String, Stri
 
 /// Decode once per (cid) and keep the texture in egui's temp store: a page
 /// with ten photos must not decode ten JPEGs every frame.
-pub(crate) fn texture_for(ui: &Ui, cid: &str, attachment: &Attachment) -> Option<egui::TextureHandle> {
+pub(crate) fn texture_for(
+    ui: &Ui,
+    cid: &str,
+    attachment: &Attachment,
+) -> Option<egui::TextureHandle> {
     let key = ui.id().with(("image-block-texture", cid));
     if let Some(handle) = ui.data(|data| data.get_temp::<egui::TextureHandle>(key)) {
         return Some(handle);

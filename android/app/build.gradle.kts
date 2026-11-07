@@ -10,7 +10,7 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = 1
-        versionName = "2.9.1"
+        versionName = "2.10.0"
         ndk {
             // The Rust lib is built for arm64 by CI (cargo ndk); x86_64 can
             // be added for emulator runs.

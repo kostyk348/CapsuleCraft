@@ -361,7 +361,8 @@ pub enum Mode {
 static PRESET: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 static ACCENT: std::sync::RwLock<Option<Color32>> = std::sync::RwLock::new(None);
 /// f32 bits of the interface font scale (1.0 = stock).
-static FONT_SCALE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1.0f32.to_bits());
+static FONT_SCALE: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(1.0f32.to_bits());
 
 pub fn mode() -> Mode {
     if preset().dark {
@@ -460,7 +461,10 @@ pub fn load() {
                 set_preset(id);
             }
             if let Some(rgb) = doc["accent"].as_array() {
-                let vals: Vec<u8> = rgb.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect();
+                let vals: Vec<u8> = rgb
+                    .iter()
+                    .filter_map(|v| v.as_u64().map(|n| n as u8))
+                    .collect();
                 if vals.len() == 3 {
                     set_accent(Some(Color32::from_rgb(vals[0], vals[1], vals[2])));
                 }
@@ -661,9 +665,24 @@ fn visuals() -> Visuals {
     for (w, fill, stroke, fg) in [
         (&mut v.widgets.noninteractive, controls(), line(), muted()),
         (&mut v.widgets.inactive, controls(), line(), ink()),
-        (&mut v.widgets.hovered, wash_hover(), line_strong(), ink_strong()),
-        (&mut v.widgets.active, wash_hover(), line_strong(), ink_strong()),
-        (&mut v.widgets.open, wash_hover(), line_strong(), ink_strong()),
+        (
+            &mut v.widgets.hovered,
+            wash_hover(),
+            line_strong(),
+            ink_strong(),
+        ),
+        (
+            &mut v.widgets.active,
+            wash_hover(),
+            line_strong(),
+            ink_strong(),
+        ),
+        (
+            &mut v.widgets.open,
+            wash_hover(),
+            line_strong(),
+            ink_strong(),
+        ),
     ] {
         w.bg_fill = fill;
         w.weak_bg_fill = fill;
@@ -696,10 +715,19 @@ pub fn apply(ctx: &egui::Context) {
         let s = font_scale();
         style.text_styles = [
             (TextStyle::Heading, FontId::new(24.0 * s, display())),
-            (TextStyle::Body, FontId::new(14.0 * s, FontFamily::Proportional)),
+            (
+                TextStyle::Body,
+                FontId::new(14.0 * s, FontFamily::Proportional),
+            ),
             (TextStyle::Button, FontId::new(13.0 * s, medium())),
-            (TextStyle::Small, FontId::new(12.0 * s, FontFamily::Proportional)),
-            (TextStyle::Monospace, FontId::new(12.0 * s, FontFamily::Monospace)),
+            (
+                TextStyle::Small,
+                FontId::new(12.0 * s, FontFamily::Proportional),
+            ),
+            (
+                TextStyle::Monospace,
+                FontId::new(12.0 * s, FontFamily::Monospace),
+            ),
         ]
         .into();
     });

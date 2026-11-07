@@ -3,6 +3,57 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.10.0] — 2026-11-07 — A graph that survives 200k pages, and Android in the release
+
+The graph view was rebuilt for vault scale: it stays responsive and readable
+where the old renderer would have frozen and turned into pixel soup. The
+release artifact set gains a signed Android APK. Tests 291 → 304.
+
+### Added
+- **Cluster overview LOD** (zoomed far out): one colored bubble per vault
+  folder, sized by page count, with the folder→folder edges aggregated and
+  weighted; the largest clusters carry labels, and a legend panel lists the
+  top clusters (click to fly in). The overview fits the cluster cloud to the
+  screen, so it stays readable at any zoom in the band.
+- **Density LOD**: when thousands of nodes share the viewport, individual
+  dots collapse into screen-space density bins colored by cluster — 200k
+  pages render as a legible heat map instead of a stall. Hover names the
+  bin's cluster; double-click enters it.
+- **Pages LOD**: individual nodes return once the viewport holds few enough
+  of them; labels are capped per frame (most-connected first), edges are
+  drawn only between visible endpoints with a hard cap.
+- **Background layout for big vaults**: above 384 nodes the
+  Fruchterman–Reingold relaxation runs on a worker thread (Barnes–Hut
+  quadtree, O(n log n) per iteration) and streams snapshots into the canvas
+  — the UI paints immediately and sharpens as the layout converges, with a
+  progress chip. A vault edit invalidates in-flight snapshots.
+- **Layout persistence**: positions are cached by Message-ID in
+  `graph_layout.json` next to `ui_state.json`; a relaunch (or a new page)
+  starts from the saved layout instead of a bare spiral.
+- **Folder clusters + communities**: every page joins its folder's cluster;
+  label propagation over the link graph provides deterministic communities
+  for flat vaults and the cluster coloring.
+- **Signed Android APK in every release** (`CapsuleCraft_<v>_android_arm64.apk`):
+  the NativeActivity shell built with cargo-ndk and gradle `assembleRelease`,
+  hashed into `SHA256SUMS.txt` and enforced by the finalizer. The repo
+  carries its own release keystore (`android/keystore/README.md`) because no
+  Actions secret storage is available — the signature is build identity, not
+  security, and the job prefers `ANDROID_KEYSTORE_*` secrets when they
+  exist. Gradle falls back to the debug key for local builds.
+- `--stress-graph N` — swap the vault for N synthetic pages across many
+  folders and open the graph: the scale harness for screenshots and smoke
+  runs. `--zoom <f>` — initial graph zoom (docs screenshots reach the
+  cluster band without scripting wheel events).
+
+### Fixed
+- Zooming out no longer turns the graph into overlapping dots: the three
+  LOD bands (`graph::pick_mode`, unit-tested) hand over between cluster
+  bubbles, density bins and individual pages.
+- Repulsion above 384 nodes is Barnes–Hut instead of an O(n²) pass, so a
+  200k-page relayout is minutes of background work rather than a frozen UI.
+- The screenshot harness runs on `xvfb-run`-free Xvfb again (the QoL pass
+  relied on a wrapper that is not in CI).
+
 ## [2.9.1] — 2026-11-07 — Nine quality-of-life fixes from a critique pass
 
 A headless critique session (every view screenshotted, every flow read in

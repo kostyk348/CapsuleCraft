@@ -41,10 +41,8 @@ pub fn render_vault_menu_contents(
         .on_hover_text(vault.dir.display().to_string());
 
     let recent = crate::vault::get_recent_vaults();
-    let other_recent: Vec<std::path::PathBuf> = recent
-        .into_iter()
-        .filter(|p| p != &vault.dir)
-        .collect();
+    let other_recent: Vec<std::path::PathBuf> =
+        recent.into_iter().filter(|p| p != &vault.dir).collect();
     if !other_recent.is_empty() {
         menu_separator(ui);
         menu_header(ui, t(locale, Key::RecentVaults));
@@ -92,12 +90,7 @@ pub fn render_vault_menu_contents(
     }
 }
 
-pub fn draw_vault_dropdown(
-    ui: &mut Ui,
-    vault: &Vault,
-    locale: Locale,
-    action: &mut ShellAction,
-) {
+pub fn draw_vault_dropdown(ui: &mut Ui, vault: &Vault, locale: Locale, action: &mut ShellAction) {
     let button = vault_switcher(ui, vault);
     egui::Popup::menu(&button)
         .frame(popover_frame())
@@ -113,7 +106,9 @@ pub fn vault_switcher(ui: &mut Ui, vault: &Vault) -> Response {
     let full_name = format!("{prefix}{name}");
     let name = truncate_chars(&full_name, 30);
     let font = FontId::new(12.5, theme::medium());
-    let galley = ui.painter().layout_no_wrap(name.clone(), font, theme::ink());
+    let galley = ui
+        .painter()
+        .layout_no_wrap(name.clone(), font, theme::ink());
     let width = 12.0 + 14.0 + 8.0 + galley.size().x + 10.0 + 12.0;
     let (rect, response) = ui.allocate_exact_size(vec2(width, 28.0), Sense::click());
     if response.hovered() {
@@ -236,11 +231,17 @@ pub fn draw_sidebar(
             .map(|idx| vault.capsules[idx].message_id.clone())
             .collect();
         let has_subfolders = !subfolder_ids.is_empty();
-        let all_subfolders_collapsed = has_subfolders && subfolder_ids.iter().all(|id| collapsed.contains(id));
+        let all_subfolders_collapsed =
+            has_subfolders && subfolder_ids.iter().all(|id| collapsed.contains(id));
 
-        let fold_rect = Rect::from_center_size(pos2(rect.right() - 35.0, rect.center().y), vec2(22.0, 22.0));
+        let fold_rect =
+            Rect::from_center_size(pos2(rect.right() - 35.0, rect.center().y), vec2(22.0, 22.0));
         let fold_resp = header
-            .interact(fold_rect, header.scope_id().with("toggle-subfolders"), Sense::click())
+            .interact(
+                fold_rect,
+                header.scope_id().with("toggle-subfolders"),
+                Sense::click(),
+            )
             .on_hover_text(if all_subfolders_collapsed {
                 t(locale, Key::ExpandAllFolders)
             } else {
@@ -248,13 +249,23 @@ pub fn draw_sidebar(
             })
             .on_hover_cursor(egui::CursorIcon::PointingHand);
         if fold_resp.hovered() {
-            header.painter().rect_filled(fold_rect, theme::RADIUS, theme::wash());
+            header
+                .painter()
+                .rect_filled(fold_rect, theme::RADIUS, theme::wash());
         }
         icons::paint(
             header.painter(),
             Rect::from_center_size(fold_rect.center(), vec2(12.0, 12.0)),
-            if all_subfolders_collapsed { Icon::Folder } else { Icon::ChevronDown },
-            if fold_resp.hovered() { theme::ink() } else { theme::faint() },
+            if all_subfolders_collapsed {
+                Icon::Folder
+            } else {
+                Icon::ChevronDown
+            },
+            if fold_resp.hovered() {
+                theme::ink()
+            } else {
+                theme::faint()
+            },
         );
         if fold_resp.clicked() {
             if all_subfolders_collapsed {
@@ -271,19 +282,32 @@ pub fn draw_sidebar(
         // Project sync button
         let mut x_offset = 59.0;
         if is_project {
-            let sync_rect = Rect::from_center_size(pos2(rect.right() - x_offset, rect.center().y), vec2(22.0, 22.0));
+            let sync_rect = Rect::from_center_size(
+                pos2(rect.right() - x_offset, rect.center().y),
+                vec2(22.0, 22.0),
+            );
             let sync_resp = header
-                .interact(sync_rect, header.scope_id().with("sync-project"), Sense::click())
+                .interact(
+                    sync_rect,
+                    header.scope_id().with("sync-project"),
+                    Sense::click(),
+                )
                 .on_hover_text(t(locale, Key::SyncProjectTooltip))
                 .on_hover_cursor(egui::CursorIcon::PointingHand);
             if sync_resp.hovered() {
-                header.painter().rect_filled(sync_rect, theme::RADIUS, theme::wash());
+                header
+                    .painter()
+                    .rect_filled(sync_rect, theme::RADIUS, theme::wash());
             }
             icons::paint(
                 header.painter(),
                 Rect::from_center_size(sync_rect.center(), vec2(12.0, 12.0)),
                 Icon::Reload,
-                if sync_resp.hovered() { theme::ink() } else { theme::faint() },
+                if sync_resp.hovered() {
+                    theme::ink()
+                } else {
+                    theme::faint()
+                },
             );
             if sync_resp.clicked() {
                 action.sync_project = true;
@@ -291,8 +315,10 @@ pub fn draw_sidebar(
             x_offset += 24.0;
         }
 
-        let collapse_rect =
-            Rect::from_center_size(pos2(rect.right() - x_offset, rect.center().y), vec2(22.0, 22.0));
+        let collapse_rect = Rect::from_center_size(
+            pos2(rect.right() - x_offset, rect.center().y),
+            vec2(22.0, 22.0),
+        );
         let collapse = header
             .interact(
                 collapse_rect,
@@ -424,7 +450,11 @@ pub fn draw_sidebar(
                             Align2::CENTER_CENTER,
                             text,
                             FontId::new(11.0, theme::mono()),
-                            if hovered { theme::accent() } else { theme::faint() },
+                            if hovered {
+                                theme::accent()
+                            } else {
+                                theme::faint()
+                            },
                         );
                     }
 
@@ -527,7 +557,11 @@ pub fn draw_sidebar(
         format!(
             "{} .eml · {}",
             vault.capsules.len(),
-            i18n::page_range(locale, selected.map(|index| index + 1), vault.capsules.len())
+            i18n::page_range(
+                locale,
+                selected.map(|index| index + 1),
+                vault.capsules.len()
+            )
         )
     } else {
         format!(
@@ -570,7 +604,14 @@ pub fn draw_sidebar(
             if icon_button(ui, Icon::Folder, t(locale, Key::ChangeFolder), true, false).clicked() {
                 action.open_vault = true;
             }
-            if icon_button(ui, Icon::Reload, t(locale, Key::SyncFolderHint), true, false).clicked()
+            if icon_button(
+                ui,
+                Icon::Reload,
+                t(locale, Key::SyncFolderHint),
+                true,
+                false,
+            )
+            .clicked()
             {
                 action.sync_folder = true;
             }
@@ -603,8 +644,16 @@ fn vault_card(ui: &mut Ui, vault: &Vault) -> Response {
         theme::accent_ink(),
     );
     let (name, is_project) = crate::vault::get_vault_display_info(&vault.dir);
-    let subtext = if is_project { "Project .capsule" } else { "Local .eml folder" };
-    let display_title = if is_project { format!("📦 {name}") } else { name };
+    let subtext = if is_project {
+        "Project .capsule"
+    } else {
+        "Local .eml folder"
+    };
+    let display_title = if is_project {
+        format!("📦 {name}")
+    } else {
+        name
+    };
     let truncated_name = truncate_chars(&display_title, 24);
     ui.painter().text(
         pos2(tile.right() + 10.0, rect.center().y - 7.0),
@@ -661,12 +710,13 @@ fn search_box(ui: &mut Ui, search: &mut String, locale: Locale) -> Response {
     // One-click clear instead of backspacing through the whole query; Esc
     // clears too while the field is focused.
     if !search.is_empty() {
-        let clear_rect = Rect::from_center_size(
-            pos2(rect.right() - 14.0, rect.center().y),
-            vec2(18.0, 18.0),
+        let clear_rect =
+            Rect::from_center_size(pos2(rect.right() - 14.0, rect.center().y), vec2(18.0, 18.0));
+        let clear = ui.interact(
+            clear_rect,
+            egui::Id::new("sidebar_search_clear"),
+            Sense::click(),
         );
-        let clear =
-            ui.interact(clear_rect, egui::Id::new("sidebar_search_clear"), Sense::click());
         icons::paint(
             ui.painter(),
             clear_rect.shrink(5.0),
@@ -684,9 +734,7 @@ fn search_box(ui: &mut Ui, search: &mut String, locale: Locale) -> Response {
             .on_hover_text(t(locale, Key::ClearSearch))
             .on_hover_cursor(egui::CursorIcon::PointingHand);
     }
-    if response.has_focus()
-        && !search.is_empty()
-        && ui.input(|i| i.key_pressed(egui::Key::Escape))
+    if response.has_focus() && !search.is_empty() && ui.input(|i| i.key_pressed(egui::Key::Escape))
     {
         search.clear();
     }

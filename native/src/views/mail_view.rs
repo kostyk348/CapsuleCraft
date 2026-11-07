@@ -614,7 +614,11 @@ fn attachments(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                         theme::muted(),
                     );
                     ui.add_space(18.0);
-                    ui.label(RichText::new(&attachment.name).size(12.0).color(theme::ink()));
+                    ui.label(
+                        RichText::new(&attachment.name)
+                            .size(12.0)
+                            .color(theme::ink()),
+                    );
                     ui.label(
                         RichText::new(format!(
                             "{} · {}",

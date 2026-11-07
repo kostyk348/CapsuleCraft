@@ -22,7 +22,11 @@ fn collect_vault_eml_files(dir: &Path, base_dir: &Path, out: &mut Vec<(PathBuf, 
         if path.is_dir() {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             // Skip hidden folders (.git, .capsule_backup, etc.) and build caches
-            if name.starts_with('.') || name == "node_modules" || name == "target" || name == "build" {
+            if name.starts_with('.')
+                || name == "node_modules"
+                || name == "target"
+                || name == "build"
+            {
                 continue;
             }
             collect_vault_eml_files(&path, base_dir, out);
@@ -304,7 +308,10 @@ pub fn add_recent_vault(dir: &std::path::Path) {
     list.insert(0, dir.to_path_buf());
     list.truncate(10);
 
-    let strings: Vec<String> = list.iter().map(|p| p.to_string_lossy().to_string()).collect();
+    let strings: Vec<String> = list
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
     if let Ok(json) = serde_json::to_string_pretty(&strings) {
         let _ = fs::create_dir_all(app_data_dir());
         let _ = fs::write(recent_vaults_file(), json);
@@ -352,10 +359,7 @@ pub fn get_vault_display_info(path: &std::path::Path) -> (String, bool) {
             .unwrap_or("Project");
         (parent_name.to_string(), true)
     } else {
-        let folder_name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("vault");
+        let folder_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("vault");
         (folder_name.to_string(), false)
     }
 }
@@ -622,9 +626,21 @@ mod tests {
         fs::create_dir_all(&modules_dir).unwrap();
         fs::create_dir_all(&docs_dir).unwrap();
 
-        let cap1 = Capsule::blank("<root-index@capsuleos.local>".into(), "index.eml".into(), "Root".into());
-        let cap2 = Capsule::blank("<mod-main@capsuleos.local>".into(), "modules/module_main.eml".into(), "Module Main".into());
-        let cap3 = Capsule::blank("<doc-guide@capsuleos.local>".into(), "docs/doc_guide.eml".into(), "Doc Guide".into());
+        let cap1 = Capsule::blank(
+            "<root-index@capsuleos.local>".into(),
+            "index.eml".into(),
+            "Root".into(),
+        );
+        let cap2 = Capsule::blank(
+            "<mod-main@capsuleos.local>".into(),
+            "modules/module_main.eml".into(),
+            "Module Main".into(),
+        );
+        let cap3 = Capsule::blank(
+            "<doc-guide@capsuleos.local>".into(),
+            "docs/doc_guide.eml".into(),
+            "Doc Guide".into(),
+        );
 
         fs::write(dir.join("index.eml"), assemble_eml(&cap1)).unwrap();
         fs::write(modules_dir.join("module_main.eml"), assemble_eml(&cap2)).unwrap();
@@ -633,8 +649,14 @@ mod tests {
         let vault = Vault::load(dir.clone());
         assert_eq!(vault.capsules.len(), 3);
         assert!(vault.capsules.iter().any(|c| c.file_name == "index.eml"));
-        assert!(vault.capsules.iter().any(|c| c.file_name == "modules/module_main.eml"));
-        assert!(vault.capsules.iter().any(|c| c.file_name == "docs/doc_guide.eml"));
+        assert!(vault
+            .capsules
+            .iter()
+            .any(|c| c.file_name == "modules/module_main.eml"));
+        assert!(vault
+            .capsules
+            .iter()
+            .any(|c| c.file_name == "docs/doc_guide.eml"));
 
         let _ = fs::remove_dir_all(&dir);
     }

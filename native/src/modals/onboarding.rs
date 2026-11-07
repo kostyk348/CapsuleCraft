@@ -249,7 +249,9 @@ pub fn draw_onboarding(
                                 OnboardingAction::Next
                             };
                         }
-                        if !last && secondary_button(ui, None, t(locale, Key::OnbBack), 28.0).clicked() {
+                        if !last
+                            && secondary_button(ui, None, t(locale, Key::OnbBack), 28.0).clicked()
+                        {
                             action = OnboardingAction::Prev;
                         }
                         ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
@@ -320,10 +322,7 @@ mod tests {
 
     #[test]
     fn done_flag_round_trips() {
-        let dir = std::env::temp_dir().join(format!(
-            "capsule-onboarding-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("capsule-onboarding-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         assert!(!is_done(&dir));
         assert!(!is_done(&dir.join("absent"))); // missing dir => not done, no panic
