@@ -155,14 +155,19 @@ impl ImapSyncEngine {
             self.config.folder.trim()
         };
 
-        if let Err(_) = session.select(folder) {
+        let mailbox = if let Ok(mailbox) = session.select(folder) {
+            mailbox
+        } else {
             session
                 .create(folder)
                 .map_err(|e| format!("Failed to create folder '{folder}': {e}"))?;
             session
                 .select(folder)
-                .map_err(|e| format!("Failed to select folder '{folder}': {e}"))?;
-        }
+                .map_err(|e| format!("Failed to select folder '{folder}': {e}"))?
+        };
+        // Folder resets (recreate, server migration) restart the uid counter;
+        // download names must not collide across resets.
+        let uidvalidity = mailbox.uid_validity.unwrap_or(0);
 
         // 1. Scan remote messages
         // Fetch UID, ENVELOPE, INTERNALDATE
@@ -193,6 +198,8 @@ impl ImapSyncEngine {
 
         // 2. Scan local capsules
         let mut local_files: Vec<(PathBuf, String, Option<String>, i64)> = Vec::new();
+        let mut local_bodies: HashSet<u64> = HashSet::new();
+        let mut local_names: HashSet<String> = HashSet::new();
         if let Ok(entries) = fs::read_dir(&self.vault_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -206,6 +213,7 @@ impl ImapSyncEngine {
                         .and_then(|n| n.to_str())
                         .unwrap_or("")
                         .to_string();
+                    local_names.insert(file_name.clone());
 
                     let modified = fs::metadata(&path)
                         .and_then(|m| m.modified())
@@ -214,6 +222,10 @@ impl ImapSyncEngine {
                         .map(|d| d.as_millis() as i64)
                         .unwrap_or(0);
 
+                    if let Ok(bytes) = fs::read(&path) {
+                        local_bodies.insert(body_digest(&bytes));
+                    }
+
                     // Extract Message-ID from first few lines of local .eml
                     let message_id = extract_local_message_id(&path);
                     local_files.push((path, file_name, message_id, modified));
@@ -221,8 +233,9 @@ impl ImapSyncEngine {
             }
         }
 
-        let mut pushed = 0;
         let mut pulled = 0;
+        let mut pushed = 0;
+        let mut skipped = 0;
 
         // 3. Match and download new/incoming capsules from server
         // Map local Message-IDs
@@ -239,27 +252,59 @@ impl ImapSyncEngine {
         for remote in &remote_messages {
             if let Some(msg_id) = &remote.message_id {
                 let norm = normalize_message_id(msg_id);
-                if !local_by_msg_id.contains_key(&norm) {
+                if !local_by_msg_id.contains_key(&norm)
+                    && !local_names.contains(&download_file_name(
+                        uidvalidity,
+                        remote.uid,
+                        Some(msg_id),
+                    ))
+                {
                     remote_uids_to_fetch.push(remote.uid);
                 }
             } else {
-                // If remote has no Message-ID envelope, fetch to see if it's a valid email note
-                remote_uids_to_fetch.push(remote.uid);
+                // Without an envelope Message-Id the file name is the only
+                // cheap identity; the body hash below catches the rest.
+                if !local_names.contains(&download_file_name(uidvalidity, remote.uid, None)) {
+                    remote_uids_to_fetch.push(remote.uid);
+                } else {
+                    skipped += 1;
+                }
             }
         }
 
         // Fetch missing bodies
         for uid in remote_uids_to_fetch {
+            let envelope = remote_messages.iter().find(|r| r.uid == uid);
+            let file_name = download_file_name(
+                uidvalidity,
+                uid,
+                envelope.and_then(|r| r.message_id.as_deref()),
+            );
+            if local_names.contains(&file_name) {
+                skipped += 1;
+                continue;
+            }
             if let Ok(fetches) = session.uid_fetch(uid.to_string(), "BODY[]") {
                 for fetch in fetches.iter() {
                     if let Some(body) = fetch.body() {
-                        let file_name = format!("capsule_imap_{uid}.eml");
+                        // The duplicate flood of v2.3: a capsule already in
+                        // the vault (same bytes, any name — uploaded by a
+                        // previous sync without a Message-Id, or renamed by
+                        // the user) was appended again on every sync because
+                        // only file names were compared. Content decides now.
+                        if local_bodies.contains(&body_digest(body)) {
+                            skipped += 1;
+                            break;
+                        }
                         let path = self.vault_dir.join(&file_name);
                         if !path.exists() {
-                            if let Ok(_) = fs::write(&path, body) {
+                            if fs::write(&path, body).is_ok() {
+                                local_names.insert(file_name.clone());
+                                local_bodies.insert(body_digest(body));
                                 pulled += 1;
                             }
                         }
+                        break;
                     }
                 }
             }
@@ -289,7 +334,11 @@ impl ImapSyncEngine {
 
         let _ = session.logout();
 
-        Ok(format!("Synced: +{pulled} downloaded, +{pushed} uploaded"))
+        if skipped > 0 {
+            Ok(format!("Synced: +{pulled} downloaded, +{pushed} uploaded, {skipped} already in sync"))
+        } else {
+            Ok(format!("Synced: +{pulled} downloaded, +{pushed} uploaded"))
+        }
     }
 }
 
@@ -314,6 +363,42 @@ pub fn normalize_message_id(id: &str) -> String {
     id.trim().trim_matches(&['<', '>'][..]).trim().to_string()
 }
 
+/// File name a downloaded remote message gets in the vault.
+///
+/// Message-Id-bearing messages are named after the id, so the same message
+/// keeps its file identity across folder resets (UIDVALIDITY changes, folder
+/// recreation). Messages without one fall back to uid-qualified names — the
+/// bare `capsule_imap_{uid}.eml` of v2.3 collided after any folder reset and
+/// then silently blocked re-downloads (`path.exists()` said "already here").
+pub fn download_file_name(uidvalidity: u32, uid: u32, message_id: Option<&str>) -> String {
+    match message_id.map(normalize_message_id) {
+        Some(id) if !id.is_empty() => {
+            let safe: String = id
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || matches!(c, '@' | '.' | '-' | '_') {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            format!("capsule_{safe}.eml")
+        }
+        _ => format!("capsule_imap_{uidvalidity}_{uid}.eml"),
+    }
+}
+
+/// A content digest used to recognize "this exact body is already in the
+/// vault". Only compared within one sync run, so the std hasher suffices.
+pub fn body_digest(bytes: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.len().hash(&mut hasher);
+    bytes.hash(&mut hasher);
+    hasher.finish()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +416,40 @@ mod tests {
         assert_eq!(cfg.port, 993);
         assert_eq!(cfg.folder, "CapsuleCraft");
         assert!(!cfg.enabled);
+    }
+
+    #[test]
+    fn download_names_survive_folder_resets() {
+        // A Message-Id names the file, so the same message keeps its identity
+        // after a UIDVALIDITY change.
+        let a = download_file_name(111, 5, Some("<a@b.com>"));
+        let b = download_file_name(999, 9, Some("<a@b.com>"));
+        assert_eq!(a, b);
+        assert!(a.starts_with("capsule_a@b.com.eml"), "{a}");
+        // Without one, the uid pair (uidvalidity, uid) keeps names unique.
+        let c = download_file_name(111, 5, None);
+        let d = download_file_name(999, 5, None);
+        assert_ne!(c, d);
+        assert_eq!(c, "capsule_imap_111_5.eml");
+    }
+
+    #[test]
+    fn download_names_are_filesystem_safe() {
+        let name = download_file_name(1, 2, Some("<weird/id with spaces@host>"));
+        assert!(!name.contains('/') && !name.contains(' '), "{name}");
+        assert!(name.ends_with(".eml"));
+        // An empty id behaves like "no id".
+        assert_eq!(
+            download_file_name(7, 8, Some("   ")),
+            "capsule_imap_7_8.eml"
+        );
+    }
+
+    #[test]
+    fn body_digest_separates_bodies() {
+        let a = b"Message-ID: <x@y>\r\n\r\nhello".to_vec();
+        let b = b"Message-ID: <x@y>\r\n\r\nhello ".to_vec();
+        assert_eq!(body_digest(&a), body_digest(&a));
+        assert_ne!(body_digest(&a), body_digest(&b));
     }
 }

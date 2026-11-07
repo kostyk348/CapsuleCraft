@@ -71,6 +71,12 @@ impl Locale {
 }
 
 pub fn settings_dir() -> Option<PathBuf> {
+    // AppImage / portable override, mirroring vault::app_data_dir().
+    if let Ok(dir) = std::env::var("CAPSULECRAFT_CONFIG_DIR") {
+        if !dir.trim().is_empty() {
+            return Some(PathBuf::from(dir));
+        }
+    }
     if let Ok(appdata) = std::env::var("APPDATA") {
         return Some(PathBuf::from(appdata).join("com.capsuleos.app"));
     }
