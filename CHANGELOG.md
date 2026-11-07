@@ -3,6 +3,74 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.9.0] — 2026-11-07 — Blocks that move, a canvas that navigates, sync that starts
+
+### Fixed
+- **Android CI build (E0601)**: the crate was bin-only, but a NativeActivity
+  loads the app as a shared library — and the bin target has no `main` under
+  `target_os = "android"`. The same `src/main.rs` is now also a `[lib]`
+  target with `crate-type = ["cdylib"]`; the Android job builds
+  `cargo ndk … --lib` (→ `libcapsuleos_native.so`, the name the manifest
+  expects) and the desktop release builds pin `--bin capsuleos-native`.
+- **The topmost reorder gap was unreachable** (blocks/mod.rs): when block 0
+  is skipped as a duplicate page heading, dragging any block upward
+  dead-ended at gap 1 — the pointer over the title area never updated the
+  drag target. A pointer lifted above the first rendered row now snaps the
+  insertion gap to 0, so «выше всех» finally works on every page.
+
+### Added
+- **Block moving, three independent ways** (blocks, document view):
+  a **hover toolbar** at the row's top-right — ↑ move, ⧉ duplicate, ↓ move,
+  one visible click each; the **grip is a full-height gutter strip** instead
+  of a 14×18 dot; **Alt+↑/↓** moves the block the pointer last hovered,
+  Notion-style, working even when a popup or the pointer race eats a
+  release. **Duplicate** also lives in the grip menu; the copy gets a fresh
+  id so todos and links stay independent.
+- **Canvas navigation** (blocks/canvas.rs): a reopened canvas with its
+  content off the first screen **jumps to the content once** instead of
+  showing an empty grid (`canvas_open_view`, tested); keyboard navigation
+  while the pointer is over the field — `+`/`=`/`−` zoom, `Home`/`Ctrl+0`
+  fit, arrows scroll; the **minimap appears with any content** (it needed
+  two nodes before) and its viewport frame is clipped to the map, so a
+  panned-away board no longer spills rectangles past the frame.
+- **Folder sync between devices** (native/src/sync.rs): two-way merge of
+  the vault with any folder another device mirrors — Dropbox, Nextcloud,
+  Syncthing, a USB drive. Last-writer-wins per page by mtime with a 2 s
+  clock-slack allowance; one-sided pages copy to the side that lacks them.
+  The plan is a pure, tested function; applying it is plain file copies.
+  UI: «Синхронизировать» in the sidebar footer — plain click syncs with the
+  remembered folder, Shift picks a new one; the toast reports
+  `+pushed / −pulled`. Five tests cover the plan, the apply and the scan.
+- **Android scaffold** (docs/android.md): the same egui binary builds as a
+  NativeActivity — `android_main` hands the app-private data dir to the
+  vault, `android/` holds a minimal gradle project with no Java code of our
+  own, and `.github/workflows/android.yml` builds a debug APK in CI.
+
+### Docs
+- **Promo set redone around the real icon** (assets/promo): two banners —
+  the Habr one (RU, native-shell focus) and the X/Twitter one (EN,
+  icon-forward) — built from the original 1254×1254 Nova icon art
+  (`nova_icon_1254.png`, the same icon the README has carried since v2.7.0),
+  not from a generated stand-in. The generated neon capsule art and the
+  square banner are gone; `scripts/make_promo_v4.py` regenerates the set.
+
+### Tests
+- Blocks: a real-pointer toolbar duplicate test, an Alt+arrow keyboard test
+  and a gap-0 nudge test join the grip-drag regression (286 total).
+- Canvas: `canvas_open_view` fits off-screen content once and never re-fits
+  a deliberately moved view.
+
+### Removed
+- **The legacy web engine, entirely.** `src/` (React frontend, vitest
+  suite), `src-tauri/` (Tauri wrapper, kept only for icons), `index.html`,
+  `vite.config.ts`, `tsconfig.json`, `package.json`, `package-lock.json`,
+  `public/` and the web co-thinker doc are gone — CapsuleCraft has shipped
+  native-only installers since v1.12.1, and the web tree had been dead
+  weight ever since. CI now runs the native egui test job only;
+  `release.yml` resolves the version from `native/Cargo.toml` and takes
+  icons from `native/assets/`; READMEs and CONTRIBUTING describe the
+  native-only build.
+
 ## [2.8.0] — 2026-11-07 — Clickable plans, a calendar you can use
 
 ### Fixed

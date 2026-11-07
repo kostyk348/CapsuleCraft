@@ -22,7 +22,7 @@ pub use todo::draw_todo_block;
 
 use egui::{
     pos2, vec2, Align, Align2, Area, CursorIcon, FontFamily, FontId, Frame, Label, Layout, Margin,
-    Order, Rect, RichText, Sense, TextEdit, Ui,
+    Order, Rect, RichText, Sense, Stroke, StrokeKind, TextEdit, Ui,
 };
 use serde_json::{json, Value};
 
@@ -37,6 +37,8 @@ use crate::{ghost, hud, menu_header, menu_row, menu_separator, popover_frame, GU
 pub enum BlockOp {
     Up,
     Down,
+    /// Copy of this block inserted right below (hover toolbar / grip menu).
+    Duplicate,
     /// Drag-and-drop reorder: the block at `from` moves to the gap `to`
     /// (0..=len) of the *current* list. No-op when it lands where it was.
     Reorder {
@@ -351,9 +353,76 @@ pub fn reorder_insert_index(from: usize, to: usize, len: usize) -> Option<usize>
 /// insertion line currently sits. Kept in egui temp memory because rows are
 /// rebuilt from fresh clones every frame.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-struct BlockDrag {
-    from: usize,
-    to: usize,
+pub(crate) struct BlockDrag {
+    pub(crate) from: usize,
+    pub(crate) to: usize,
+}
+
+fn drag_state_id() -> egui::Id {
+    egui::Id::new("capsule-block-drag")
+}
+
+fn hovered_block_id() -> egui::Id {
+    egui::Id::new("capsule-block-hovered")
+}
+
+/// Current drag state, if a grip drag is in flight this frame.
+pub(crate) fn block_drag_state(ui: &Ui) -> Option<BlockDrag> {
+    ui.data(|d| d.get_temp::<BlockDrag>(drag_state_id()))
+}
+
+pub(crate) fn set_block_drag_state(ui: &Ui, drag: BlockDrag) {
+    ui.data_mut(|d| d.insert_temp(drag_state_id(), drag));
+}
+
+/// While a drag is live and the pointer rises above the first rendered row
+/// (the title area), the target gap becomes 0 — the very top of the page.
+/// Without this the topmost gap is unreachable whenever block 0 is skipped
+/// by the duplicate-heading filter, and dragging up always dead-ends.
+pub(crate) fn nudge_drag_to_top(ui: &Ui, first_row_top: f32) {
+    if let Some(mut drag) = block_drag_state(ui) {
+        if let Some(y) = ui.input(|i| i.pointer.hover_pos().map(|p| p.y)) {
+            if y < first_row_top && drag.to != 0 {
+                drag.to = 0;
+                set_block_drag_state(ui, drag);
+            }
+        }
+    }
+}
+
+/// Alt+↑ / Alt+↓ moves the block the pointer last hovered — an independent
+/// path to reordering that works even when the grip is hidden by a popup or
+/// the pointer race eats a release. Notion-style: also fires while a text
+/// field keeps focus, because Alt+arrows never type anything.
+pub(crate) fn keyboard_move_request(ui: &Ui, block_count: usize) -> Option<(usize, bool)> {
+    if ui.input(|i| !i.modifiers.alt) {
+        return None;
+    }
+    let index = ui
+        .data(|d| d.get_temp::<usize>(hovered_block_id()))
+        .filter(|index| *index < block_count)?;
+    let up = ui.input(|i| i.key_pressed(egui::Key::ArrowUp));
+    let down = ui.input(|i| i.key_pressed(egui::Key::ArrowDown));
+    if up {
+        Some((index, true))
+    } else if down {
+        Some((index, false))
+    } else {
+        None
+    }
+}
+
+/// Remember which block the pointer last hovered so Alt+arrows know what to
+/// move. Skipped while a drag is live (the dragged row is hovered by
+/// definition and must not override the anchor).
+fn remember_hovered_block(ui: &Ui, index: usize, drag_live: bool) {
+    if !drag_live {
+        ui.data_mut(|d| d.insert_temp(hovered_block_id(), index));
+    }
+}
+
+pub(crate) fn set_last_hovered_block(ui: &Ui, index: usize) {
+    ui.data_mut(|d| d.insert_temp(hovered_block_id(), index));
 }
 
 pub fn add_block_menu(ui: &mut Ui, locale: Locale) -> Option<BlockKind> {
@@ -414,7 +483,13 @@ pub fn draw_block_row(
     // insertion gap is updated by whichever row the pointer is over.
     let drag_id = egui::Id::new("capsule-block-drag");
 
-    let handle_rect = Rect::from_min_size(pos2(row_top.x, row_top.y + 3.0), vec2(14.0, 18.0));
+    // The grip is a full-height strip of the gutter, not a 14×18 dot: a
+    // target you can find and grab without aiming. The icon stays at the
+    // top of the row, where the eye expects it.
+    let handle_rect = Rect::from_min_size(
+        pos2(row_top.x, row_rect.top()),
+        vec2(14.0, row_rect.height().max(20.0)),
+    );
     let handle = ui
         .interact(
             handle_rect,
@@ -435,6 +510,7 @@ pub fn draw_block_row(
         });
     }
     let mut drag: Option<BlockDrag> = ui.data(|d| d.get_temp::<BlockDrag>(drag_id));
+    remember_hovered_block(ui, index, drag.is_some());
     if let Some(d) = drag.as_mut() {
         let pointer_y = ui.input(|i| i.pointer.hover_pos().map(|p| p.y));
         if index != d.from && ui.rect_contains_pointer(row_rect) {
@@ -491,7 +567,7 @@ pub fn draw_block_row(
 
     icons::paint(
         ui.painter(),
-        Rect::from_center_size(handle_rect.center(), vec2(12.0, 12.0)),
+        Rect::from_center_size(pos2(row_top.x + 7.0, row_rect.top() + 12.0), vec2(12.0, 12.0)),
         Icon::Grip,
         if hovered || handle.hovered() {
             theme::muted()
@@ -500,11 +576,81 @@ pub fn draw_block_row(
         },
     );
 
+    // Hover toolbar at the row's top-right: move up, duplicate, move down —
+    // one visible click each, never buried in the grip menu. Notion-style
+    // overlay, drawn only when the pointer rests on the row.
+    if hovered && drag.is_none() {
+        let (btn, gap) = (22.0, 2.0);
+        let bar_w = btn * 3.0 + gap * 2.0;
+        let bar_rect = Rect::from_min_size(
+            pos2(row_rect.right() - bar_w - 4.0, row_rect.top()),
+            vec2(bar_w, btn),
+        );
+        ui.painter()
+            .rect_filled(bar_rect, 6.0, theme::chrome());
+        ui.painter().rect_stroke(
+            bar_rect,
+            6.0,
+            theme::hairline(),
+            egui::StrokeKind::Inside,
+        );
+        let slots: [(&str, Icon, bool, Key, BlockOp); 3] = [
+            (
+                "up",
+                Icon::ArrowUp,
+                index > 0,
+                Key::MoveUp,
+                BlockOp::Up,
+            ),
+            ("dup", Icon::Copy, true, Key::DuplicateBlock, BlockOp::Duplicate),
+            (
+                "down",
+                Icon::ArrowDown,
+                index + 1 < block_count,
+                Key::MoveDown,
+                BlockOp::Down,
+            ),
+        ];
+        for (n, (suffix, icon, enabled, key, op_kind)) in slots.iter().enumerate() {
+            let rect = Rect::from_min_size(
+                pos2(
+                    bar_rect.left() + n as f32 * (btn + gap) + 1.0,
+                    bar_rect.top() + 2.0,
+                ),
+                vec2(btn - 4.0, btn - 4.0),
+            );
+            let button = ui
+                .interact(
+                    rect,
+                    egui::Id::new(("block-bar", index, *suffix)),
+                    Sense::click(),
+                )
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .on_hover_text(t(locale, *key));
+            let color = if !*enabled {
+                theme::fade(theme::faint(), 0.7)
+            } else if button.hovered() {
+                theme::ink()
+            } else {
+                theme::muted()
+            };
+            icons::paint(
+                ui.painter(),
+                Rect::from_center_size(rect.center(), vec2(12.0, 12.0)),
+                *icon,
+                color,
+            );
+            if *enabled && button.clicked() {
+                op = Some(op_kind.clone());
+            }
+        }
+    }
+
     // Notion-style "+" in the gutter: appears on hover next to the grip and
     // inserts any block kind directly below this row.
     if hovered && drag.is_none() {
         let plus_rect =
-            Rect::from_min_size(pos2(row_top.x + 13.0, row_top.y + 3.0), vec2(13.0, 18.0));
+            Rect::from_min_size(pos2(row_top.x + 14.0, row_top.y + 3.0), vec2(12.0, 18.0));
         let plus = ui
             .interact(
                 plus_rect,
@@ -672,6 +818,19 @@ pub fn draw_block_row(
             ui.data_mut(|d| d.insert_temp(submenu_id, submenu_open));
             menu_separator(ui);
 
+            if menu_row(
+                ui,
+                Some(Icon::Copy),
+                t(locale, Key::DuplicateBlock),
+                None,
+                false,
+                true,
+                false,
+            )
+            .clicked()
+            {
+                op = Some(BlockOp::Duplicate);
+            }
             if menu_row(
                 ui,
                 Some(Icon::ArrowUp),
@@ -1465,5 +1624,185 @@ mod drag_reorder_tests {
             .map(|b| b["id"].as_str().unwrap_or("").to_string())
             .collect();
         assert_eq!(ids, vec!["b1", "b0", "b2"], "block order after the drag");
+    }
+
+    /// The hover toolbar's duplicate button copies the block right below it.
+    #[test]
+    fn toolbar_duplicate_emits_op() {
+        let ctx = egui::Context::default();
+        let blocks = Rc::new(RefCell::new(vec![
+            json!({"id":"b0","type":"text","data":{"text":"first"}}),
+            json!({"id":"b1","type":"text","data":{"text":"second"}}),
+        ]));
+        let op_slot: Rc<RefCell<Option<BlockOp>>> = Rc::new(RefCell::new(None));
+        let vertical_id: Rc<RefCell<Option<egui::Id>>> = Rc::new(RefCell::new(None));
+
+        let run = |events: Vec<egui::Event>| {
+            let blocks = blocks.clone();
+            let op_slot = op_slot.clone();
+            let vertical_id = vertical_id.clone();
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(800.0, 600.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            ctx.run_pass(raw, |ctx| {
+                egui::Area::new(egui::Id::new("dup-harness"))
+                    .fixed_pos(egui::Pos2::ZERO)
+                    .show(ctx, |ui| {
+                        ui.vertical(|ui| {
+                            *vertical_id.borrow_mut() = Some(ui.id());
+                            let count = blocks.borrow().len();
+                            for index in 0..count {
+                                let mut block = blocks.borrow_mut();
+                                let (_, op) = draw_block_row(
+                                    ui,
+                                    &mut block[index],
+                                    index,
+                                    count,
+                                    &mut [],
+                                    Locale::En,
+                                );
+                                if op.is_some() {
+                                    *op_slot.borrow_mut() = op;
+                                }
+                            }
+                        });
+                    });
+            })
+            .textures_delta
+            .clear();
+        };
+
+        // Warm-up: egui registers the Area's layer state one pass behind, so
+        // hover hit-testing only becomes reliable after a few idle passes.
+        run(vec![]);
+        run(vec![]);
+        run(vec![]);
+        // Hover the row so the toolbar renders, then harvest the button rect.
+        let vid = vertical_id.borrow().expect("harness drew rows");
+        let row0_center = ctx
+            .read_response(vid.with(("block-menu", 0usize)))
+            .map(|r| r.rect.center())
+            .unwrap_or_else(|| pos2(400.0, 40.0));
+        run(vec![egui::Event::PointerMoved(row0_center)]);
+        run(vec![egui::Event::PointerMoved(row0_center)]);
+        eprintln!(
+            "DEBUG grip after hover: {:?}",
+            ctx.read_response(vid.with(("block-menu", 0usize)))
+                .map(|r| (r.hovered(), r.rect))
+        );
+        let dup_rect = ctx
+            .read_response(egui::Id::new(("block-bar", 0usize, "dup")))
+            .expect("duplicate button response")
+            .rect;
+
+        run(vec![egui::Event::PointerMoved(dup_rect.center())]);
+        run(vec![egui::Event::PointerButton {
+            pos: dup_rect.center(),
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        }]);
+        run(vec![egui::Event::PointerButton {
+            pos: dup_rect.center(),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        }]);
+
+        assert!(
+            matches!(op_slot.borrow().as_ref(), Some(BlockOp::Duplicate)),
+            "expected Duplicate from the toolbar, got {:?}",
+            op_slot.borrow()
+        );
+    }
+
+    /// Alt+↑/↓ returns a move request for the block the pointer last
+    /// hovered — the keyboard path that never depends on the grip.
+    #[test]
+    fn keyboard_alt_arrows_move_last_hovered() {
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(400.0, 300.0),
+            )),
+            ..Default::default()
+        };
+        ctx.run_pass(raw, |ctx| {
+            egui::Area::new(egui::Id::new("kbd-harness")).show(ctx, |ui| {
+                remember_hovered_block(ui, 1, false);
+                assert_eq!(keyboard_move_request(ui, 3), None, "no key yet");
+            });
+        })
+        .textures_delta
+        .clear();
+        let alt = egui::Modifiers::ALT;
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(400.0, 300.0),
+            )),
+            events: vec![
+                egui::Event::ModifiersChanged(alt),
+                egui::Event::Key {
+                    key: egui::Key::ArrowDown,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: alt,
+                },
+            ],
+            ..Default::default()
+        };
+        ctx.run_pass(raw, |ctx| {
+            egui::Area::new(egui::Id::new("kbd-harness")).show(ctx, |ui| {
+                assert_eq!(
+                    keyboard_move_request(ui, 3),
+                    Some((1, false)),
+                    "Alt+Down moves hovered block 1"
+                );
+            });
+        })
+        .textures_delta
+        .clear();
+    }
+
+    /// A pointer lifted above the first rendered row while dragging snaps
+    /// the target gap to 0 — the top of the page.
+    #[test]
+    fn nudge_drag_to_top_sets_gap_zero() {
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(400.0, 300.0),
+            )),
+            events: vec![egui::Event::PointerMoved(pos2(200.0, 40.0))],
+            ..Default::default()
+        };
+        ctx.run_pass(raw, |ctx| {
+            egui::Area::new(egui::Id::new("nudge-harness")).show(ctx, |ui| {
+                set_block_drag_state(
+                    ui,
+                    BlockDrag {
+                        from: 1,
+                        to: 2,
+                    },
+                );
+                nudge_drag_to_top(ui, 100.0);
+                assert_eq!(
+                    block_drag_state(ui),
+                    Some(BlockDrag { from: 1, to: 0 }),
+                    "pointer above the first row must target gap 0"
+                );
+            });
+        })
+        .textures_delta
+        .clear();
     }
 }

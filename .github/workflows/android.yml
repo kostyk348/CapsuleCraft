@@ -1,0 +1,69 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "native/**"
+      - "android/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "native/**"
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+jobs:
+  apk:
+    name: Debug APK (arm64-v8a)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The runner image ships the Android SDK with accepted licenses; only
+      # the NDK is installed here (android-actions/setup-android proved
+      # flaky: its sdkmanager license pass dies mid-update).
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27c
+          add-to-path: true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # AGP 8.7.x needs Gradle >= 8.9; pin instead of trusting the runner.
+          gradle-version: "8.10.2"
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      # --lib: on Android the app is the cdylib (android_main), not the bin —
+      # the bin target has no main() under target_os = "android" (E0601).
+      - name: Build native lib (arm64-v8a)
+        working-directory: native
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: cargo ndk -t arm64-v8a -o ../android/app/src/main/jniLibs build --release --lib
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CapsuleCraft-debug-arm64
+          path: android/app/build/outputs/apk/debug/*.apk

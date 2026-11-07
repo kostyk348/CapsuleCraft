@@ -162,6 +162,29 @@ pub fn canvas_fit_view(elements: &[Value], canvas_size: Vec2) -> CanvasView {
     }
 }
 
+/// The viewport a reopened page starts from. The stored view wins, unless it
+/// is still the identity and the content sits entirely off the first screen —
+/// then a fit-to-content jump instead of an empty grid that reads as "the
+/// drawing is gone". Any deliberate pan or zoom makes the view non-identity
+/// and the jump never fires again.
+pub fn canvas_open_view(elements: &[Value], stored: CanvasView, canvas_size: Vec2) -> CanvasView {
+    if stored != CanvasView::identity() {
+        return stored;
+    }
+    let Some(bbox) = content_bbox(elements) else {
+        return stored;
+    };
+    let visible = Rect::from_min_max(
+        stored.screen_to_world(pos2(0.0, 0.0)),
+        stored.screen_to_world(pos2(canvas_size.x, canvas_size.y)),
+    );
+    if visible.intersects(bbox) {
+        stored
+    } else {
+        canvas_fit_view(elements, canvas_size)
+    }
+}
+
 /// Builds an element whose top-left sits at the world position `at`.
 pub fn canvas_element_at(kind: &str, at: Pos2, locale: Locale) -> Value {
     let (width, height, text) = match kind {
@@ -766,6 +789,51 @@ pub fn draw_canvas_block(
                         view_changed = true;
                     }
                 }
+
+                // Keyboard navigation under the same guard: +/− zoom about
+                // the center, Home or Ctrl+0 fits, arrows scroll. The keys
+                // act only while the pointer rests on the field, so a node
+                // editor keeps its typing untouched.
+                let center = canvas_rect.size() / 2.0;
+                let (zoom_in, zoom_out, fit, pan) = ui.input(|i| {
+                    (
+                        i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals),
+                        i.key_pressed(egui::Key::Minus),
+                        i.key_pressed(egui::Key::Home)
+                            || (i.modifiers.ctrl && i.key_pressed(egui::Key::Num0)),
+                        vec2(
+                            (i.key_pressed(egui::Key::ArrowRight) as i32
+                                - i.key_pressed(egui::Key::ArrowLeft) as i32) as f32,
+                            (i.key_pressed(egui::Key::ArrowDown) as i32
+                                - i.key_pressed(egui::Key::ArrowUp) as i32) as f32,
+                        ) * 60.0,
+                    )
+                });
+                if zoom_in {
+                    view.zoom_at(center.to_pos2(), 1.25);
+                    view_changed = true;
+                }
+                if zoom_out {
+                    view.zoom_at(center.to_pos2(), 1.0 / 1.25);
+                    view_changed = true;
+                }
+                if fit {
+                    view = canvas_fit_view(&elements, canvas_rect.size());
+                    view_changed = true;
+                }
+                if pan != Vec2::ZERO {
+                    view.pan_by_scroll(pan);
+                    view_changed = true;
+                }
+            }
+
+            // A reopened page shows its saved (or identity) viewport; when
+            // the content lives entirely off that first screen, jump to it
+            // once instead of staring at an empty grid.
+            let open_view = canvas_open_view(&elements, view, canvas_rect.size());
+            if open_view != view {
+                view = open_view;
+                view_changed = true;
             }
 
             // --- grid in world space, one legible ladder step per zoom ---
@@ -1347,7 +1415,7 @@ pub fn draw_canvas_block(
             // --- minimap: content box, viewport, click-to-navigate ---
             let node_count = elements.iter().filter(|e| is_node(e)).count();
             if let Some(bbox) = content_bbox(&elements) {
-                if node_count >= 2 {
+                if node_count >= 1 {
                     let mm_size = vec2(130.0, 90.0);
                     let mm_rect = Rect::from_min_size(
                         canvas_rect.right_bottom() - vec2(10.0, 10.0) - mm_size,
@@ -1366,6 +1434,10 @@ pub fn draw_canvas_block(
                             theme::hairline(),
                             egui::StrokeKind::Inside,
                         );
+                        // Content and the viewport rect may reach past the
+                        // frame while panned away; clipped so the map stays
+                        // a neat window, not a spill.
+                        let mm_painter = painter.with_clip_rect(mm_rect.expand(1.0));
                         for element in elements.iter().filter(|e| is_node(e)) {
                             let rect = element_rect(element);
                             let mm_node = Rect::from_min_max(to_mm(rect.min), to_mm(rect.max));
@@ -1374,14 +1446,17 @@ pub fn draw_canvas_block(
                             } else {
                                 theme::fade(theme::ink(), 0.45)
                             };
-                            painter.rect_filled(mm_node, 1.0, color);
+                            mm_painter.rect_filled(mm_node, 1.0, color);
                         }
                         let visible_world = Rect::from_min_max(
                             view.screen_to_world(pos2(0.0, 0.0)),
                             view.screen_to_world(pos2(canvas_rect.width(), canvas_rect.height())),
                         );
-                        painter.rect_stroke(
-                            Rect::from_min_max(to_mm(visible_world.min), to_mm(visible_world.max)),
+                        mm_painter.rect_stroke(
+                            Rect::from_min_max(
+                                to_mm(visible_world.min),
+                                to_mm(visible_world.max),
+                            ),
                             1.0,
                             Stroke::new(1.0, theme::accent()),
                             egui::StrokeKind::Inside,
@@ -1649,6 +1724,32 @@ mod tests {
         view.zoom_at(local, 1_000.0);
         assert_eq!(view.zoom, CANVAS_MAX_ZOOM);
         assert!((view.screen_to_world(local) - local).length() < 1e-4);
+    }
+
+    /// A reopened canvas with content off the first screen jumps to it once;
+    /// content on screen and a deliberately moved view stay untouched.
+    #[test]
+    fn open_view_jumps_to_offscreen_content_once() {
+        let far = vec![json!({
+            "id": "n1", "type": "sticky", "x": 5000.0, "y": 5000.0,
+            "width": 150.0, "height": 90.0, "label": "", "color": ""
+        })];
+        let opened = canvas_open_view(&far, CanvasView::identity(), vec2(800.0, 600.0));
+        assert!(opened != CanvasView::identity(), "must fit off-screen content");
+        assert_eq!(
+            canvas_open_view(&far, opened, vec2(800.0, 600.0)),
+            opened,
+            "a moved view is never re-fitted"
+        );
+        let near = vec![json!({
+            "id": "n2", "type": "sticky", "x": 100.0, "y": 100.0,
+            "width": 150.0, "height": 90.0, "label": "", "color": ""
+        })];
+        assert_eq!(
+            canvas_open_view(&near, CanvasView::identity(), vec2(800.0, 600.0)),
+            CanvasView::identity(),
+            "on-screen content keeps the identity view"
+        );
     }
 
     #[test]

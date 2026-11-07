@@ -245,7 +245,7 @@ fn custom_model_row(
                         pick = Some(response.rect);
                         response.clicked()
                     } {
-                        if let Some(dir) = rfd::FileDialog::new()
+                        if let Some(dir) = crate::util::dialog::FileDialog::new()
                             .set_title(t(locale, Key::CustomModelPick))
                             .pick_folder()
                         {

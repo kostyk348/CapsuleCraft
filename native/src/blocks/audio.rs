@@ -72,7 +72,7 @@ pub fn draw_audio_block(
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if text_button(ui, Some(Icon::Plus), t(locale, Key::AttachAudio), false).clicked()
                     {
-                        if let Some(path) = rfd::FileDialog::new()
+                        if let Some(path) = crate::util::dialog::FileDialog::new()
                             .set_title(t(locale, Key::AttachAudio))
                             .add_filter("audio", &["mp3", "wav", "ogg", "m4a", "flac", "webm"])
                             .pick_file()

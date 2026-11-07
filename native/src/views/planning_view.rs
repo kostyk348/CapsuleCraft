@@ -425,7 +425,7 @@ fn export_ics(vault: &Vault, locale: Locale) {
         return;
     }
     let name = planning::ics_file_name(&today_key());
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::util::dialog::FileDialog::new()
         .set_title(t(locale, Key::ExportIcs))
         .set_file_name(&name)
         .add_filter("iCalendar", &["ics"])

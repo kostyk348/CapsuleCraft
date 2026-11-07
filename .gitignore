@@ -1,22 +1,8 @@
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-dist-ssr/
-*.local
-
-# Tauri / Rust
-src-tauri/target/
-src-tauri/gen/schemas/
+# Rust / native shell
 native/target/
 
 # Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
 
 # Environment
 .env
@@ -33,9 +19,6 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Test / coverage
-coverage/
 
 # Native packaging artifacts (AppImage build products)
 native/packaging/AppDir/

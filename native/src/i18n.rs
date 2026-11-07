@@ -256,6 +256,15 @@ strings! {
     BlockAi => ("Контраргумент", "Counter-argument"),
     MoveUp => ("Выше", "Move up"),
     MoveDown => ("Ниже", "Move down"),
+    DuplicateBlock => ("Дублировать", "Duplicate"),
+    SyncFolderHint => (
+        "Синхронизировать с папкой (Dropbox, Nextcloud, Syncthing). Shift — выбрать папку.",
+        "Sync with a folder (Dropbox, Nextcloud, Syncthing). Shift — pick folder."
+    ),
+    SyncFolderPick => ("Папка синхронизации", "Sync folder"),
+    SyncDone => ("Синхронизировано", "Synced"),
+    SyncUpToDate => ("Уже синхронизировано", "Already in sync"),
+    SyncFailed => ("Ошибка синхронизации", "Sync failed"),
     DeleteBlock => ("Удалить блок", "Delete block"),
     HeadingLevel => ("Уровень", "Heading level"),
     TurnInto => ("Превратить в…", "Turn into…"),

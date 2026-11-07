@@ -570,6 +570,10 @@ pub fn draw_sidebar(
             if icon_button(ui, Icon::Folder, t(locale, Key::ChangeFolder), true, false).clicked() {
                 action.open_vault = true;
             }
+            if icon_button(ui, Icon::Reload, t(locale, Key::SyncFolderHint), true, false).clicked()
+            {
+                action.sync_folder = true;
+            }
         });
     });
 

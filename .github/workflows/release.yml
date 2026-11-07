@@ -37,7 +37,7 @@ jobs:
         id: vars
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="v$(node -p "require('./package.json').version")"
+            TAG="v$(awk -F'"' '/^version = /{print $2; exit}' native/Cargo.toml)"
           else
             TAG="${GITHUB_REF#refs/tags/}"
           fi
@@ -92,7 +92,7 @@ jobs:
           workspaces: native
 
       - name: Build native shell
-        run: cargo build --release --manifest-path native/Cargo.toml
+        run: cargo build --release --manifest-path native/Cargo.toml --bin capsuleos-native
 
       - name: Package Windows portable zip
         shell: pwsh
@@ -188,7 +188,7 @@ jobs:
             libwayland-client0
 
       - name: Build native shell
-        run: cargo build --release --manifest-path native/Cargo.toml
+        run: cargo build --release --manifest-path native/Cargo.toml --bin capsuleos-native
 
       - name: Assemble AppDir
         run: |
@@ -200,7 +200,7 @@ jobs:
                    "$APPDIR"/usr/share/applications \
                    "$APPDIR"/usr/share/icons/hicolor/256x256/apps
           install -m 0755 native/target/release/capsuleos-native "$APPDIR"/usr/bin/capsuleos-native
-          cp src-tauri/icons/128x128@2x.png \
+          cp native/assets/icon.png \
              "$APPDIR"/usr/share/icons/hicolor/256x256/apps/capsulecraft.png
           ln -s usr/bin/capsuleos-native "$APPDIR"/AppRun
           ln -s capsulecraft.png "$APPDIR"/.DirIcon
@@ -362,8 +362,8 @@ jobs:
       - name: Build native shell (arm64 + x64)
         run: |
           set -e
-          cargo build --release --manifest-path native/Cargo.toml
-          cargo build --release --manifest-path native/Cargo.toml --target x86_64-apple-darwin
+          cargo build --release --manifest-path native/Cargo.toml --bin capsuleos-native
+          cargo build --release --manifest-path native/Cargo.toml --target x86_64-apple-darwin --bin capsuleos-native
           lipo -create \
             native/target/release/capsuleos-native \
             native/target/x86_64-apple-darwin/release/capsuleos-native \
@@ -378,7 +378,7 @@ jobs:
           rm -rf "$APP"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           install -m 0755 capsuleos-native-universal "$APP/Contents/MacOS/capsuleos-native"
-          cp src-tauri/icons/icon.icns "$APP/Contents/Resources/capsulecraft.icns"
+          cp native/assets/icon.icns "$APP/Contents/Resources/capsulecraft.icns"
           printf '%s\n' \
             '<?xml version="1.0" encoding="UTF-8"?>' \
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \

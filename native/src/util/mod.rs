@@ -1,3 +1,5 @@
+pub mod dialog;
+
 use std::path::Path;
 
 use egui::{FontId, Ui};

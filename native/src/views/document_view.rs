@@ -348,6 +348,7 @@ pub fn draw_document(
                     } else {
                     let mut block_op: Option<(usize, BlockOp)> = None;
                     let block_count = capsule.blocks.len();
+                    let first_row_top = ui.cursor().top();
                     for index in 0..block_count {
                         let mut block = capsule.blocks[index].clone();
                         let kind = block_type(&block).to_string();
@@ -414,6 +415,21 @@ pub fn draw_document(
                             BlockOp::Down if index + 1 < capsule.blocks.len() => {
                                 capsule.blocks.swap(index, index + 1);
                                 action.changed = true;
+                            }
+                            BlockOp::Duplicate => {
+                                // A copy lands right below with a fresh id so
+                                // links, todos and code state stay independent.
+                                if let Some(block) = capsule.blocks.get(index) {
+                                    let mut copy = block.clone();
+                                    if let Some(obj) = copy.as_object_mut() {
+                                        obj.insert(
+                                            "id".to_string(),
+                                            json!(crate::mime::new_block_id("paragraph")),
+                                        );
+                                    }
+                                    capsule.blocks.insert(index + 1, copy);
+                                    action.changed = true;
+                                }
                             }
                             BlockOp::Reorder { from, to } => {
                                 if let Some(insert) =
@@ -537,6 +553,32 @@ pub fn draw_document(
                                 action.changed = true;
                             }
                             _ => {}
+                        }
+                    }
+
+                    // While a grip drag is live, a pointer lifted above the
+                    // first rendered row (over the title) means "drop at the
+                    // very top" — gap 0, unreachable by row hit-testing when
+                    // block 0 is skipped as a duplicate heading.
+                    crate::blocks::nudge_drag_to_top(ui, first_row_top);
+
+                    // Alt+↑ / Alt+↓ moves the block last hovered. Independent
+                    // of the grip, the popup and the pointer, so reordering
+                    // stays possible even when a drag release is eaten.
+                    if let Some((hovered_index, up)) =
+                        crate::blocks::keyboard_move_request(ui, block_count)
+                    {
+                        let target = if up {
+                            hovered_index.checked_sub(1)
+                        } else if hovered_index + 1 < block_count {
+                            Some(hovered_index + 1)
+                        } else {
+                            None
+                        };
+                        if let Some(target) = target {
+                            capsule.blocks.swap(hovered_index, target);
+                            crate::blocks::set_last_hovered_block(ui, target);
+                            action.changed = true;
                         }
                     }
 
@@ -1002,7 +1044,7 @@ pub fn attachments_editor(
         let _ = hud(ui, t(locale, Key::AttachmentsTitle), theme::faint());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if text_button(ui, Some(Icon::Plus), t(locale, Key::AddAttachment), false).clicked() {
-                if let Some(paths) = rfd::FileDialog::new()
+                if let Some(paths) = crate::util::dialog::FileDialog::new()
                     .set_title(t(locale, Key::AddAttachment))
                     .pick_files()
                 {
@@ -1348,7 +1390,7 @@ fn attachments_readonly(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> Vec<A
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if icon_button(ui, Icon::Download, t(locale, Key::SaveAs), true, false).clicked() {
                     if let Some(bytes) = attachment_bytes(attachment) {
-                        if let Some(path) = rfd::FileDialog::new()
+                        if let Some(path) = crate::util::dialog::FileDialog::new()
                             .set_title(t(locale, Key::SaveAs))
                             .set_file_name(&attachment.name)
                             .save_file()

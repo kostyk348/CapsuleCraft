@@ -43,6 +43,7 @@ mod project_verify;
 pub mod rich_text;
 mod search;
 mod snapshot;
+mod sync;
 mod sync_imap;
 mod theme;
 mod ui_state;
@@ -83,6 +84,7 @@ pub(crate) const GUTTER: f32 = 26.0;
 /// Set once the `--snapshot` capture has been written, so the app can close.
 static SNAPSHOT_WRITTEN: AtomicBool = AtomicBool::new(false);
 
+#[cfg(not(target_os = "android"))]
 fn main() -> eframe::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let launch = cli::parse(&args);
@@ -161,6 +163,38 @@ fn main() -> eframe::Result<()> {
         std::process::exit(1);
     }
     std::process::exit(0);
+}
+
+/// Android entry (scaffold, v2.9.0): the same `NativeApp` runs as a
+/// NativeActivity. The vault lives in the app's internal data dir and syncs
+/// outward through the folder-sync engine (see `sync.rs` and
+/// docs/android.md) — no storage-permission prompts in this first cut.
+#[cfg(target_os = "android")]
+#[no_mangle]
+fn android_main(app: android_activity::AndroidApp) {
+    if let Some(data) = app.internal_data_path() {
+        vault::set_android_data_dir(std::path::PathBuf::from(data));
+    }
+    android_logger::init_once(
+        android_logger::Config::default().with_max_level(log::LevelFilter::Info),
+    );
+    let launch = cli::parse(&[]);
+    let options = eframe::NativeOptions {
+        android_app: Some(app),
+        ..Default::default()
+    };
+    let result = eframe::run_native(
+        "CapsuleCraft",
+        options,
+        Box::new(move |cc| {
+            theme::load();
+            theme::apply(&cc.egui_ctx);
+            Ok(Box::new(NativeApp::new(launch)))
+        }),
+    );
+    if let Err(err) = result {
+        log::error!("CapsuleCraft error: {err}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1290,11 +1324,86 @@ impl NativeApp {
         self.refresh_links();
     }
 
+    /// Two-way merge between the vault and a folder another device mirrors
+    /// (Dropbox, Nextcloud, Syncthing, a USB drive). A remembered folder
+    /// syncs on a plain click; Shift (or the first run) opens the picker.
+    fn sync_folder_action(&mut self, force_pick: bool) {
+        let pick = self
+            .ui_state
+            .sync_dir
+            .as_deref()
+            .map(PathBuf::from)
+            .filter(|dir| dir.is_dir())
+            .is_none()
+            || force_pick;
+        let dir = if pick {
+            crate::util::dialog::FileDialog::new()
+                .set_title(t(self.locale, Key::SyncFolderPick))
+                .set_directory(&self.vault.dir)
+                .pick_folder()
+        } else {
+            self.ui_state
+                .sync_dir
+                .as_deref()
+                .map(PathBuf::from)
+                .filter(|dir| dir.is_dir())
+        };
+        let Some(dir) = dir else {
+            return;
+        };
+        if !self.save_selected() {
+            return;
+        }
+        match crate::sync::sync_now(&self.vault.dir, &dir) {
+            Ok((pushed, pulled)) => {
+                self.ui_state.sync_dir = Some(dir.to_string_lossy().to_string());
+                self.ui_state.save();
+                if pushed + pulled == 0 {
+                    self.toast(format!(
+                        "{} ({})",
+                        t(self.locale, Key::SyncUpToDate),
+                        dir.display()
+                    ));
+                } else {
+                    // Pulled pages are on disk now; bring the vault in and
+                    // keep the current selection by message id.
+                    let selected_id = self
+                        .selected
+                        .and_then(|index| self.vault.capsules.get(index))
+                        .map(|capsule| capsule.message_id.clone());
+                    self.vault.reload();
+                    self.selected = selected_id
+                        .and_then(|id| {
+                            self.vault
+                                .capsules
+                                .iter()
+                                .position(|capsule| capsule.message_id == id)
+                        })
+                        .or_else(|| self.vault.selected_root());
+                    self.dirty = false;
+                    self.last_write = Instant::now();
+                    self.refresh_links();
+                    self.toast(format!(
+                        "{}: +{} / −{} ({})",
+                        t(self.locale, Key::SyncDone),
+                        pushed,
+                        pulled,
+                        dir.display()
+                    ));
+                }
+            }
+            Err(err) => {
+                self.status = format!("{}: {err}", t(self.locale, Key::SyncFailed));
+                self.status_error = true;
+            }
+        }
+    }
+
     fn open_vault_dialog(&mut self) {
         if !self.save_selected() {
             return;
         }
-        if let Some(dir) = rfd::FileDialog::new()
+        if let Some(dir) = crate::util::dialog::FileDialog::new()
             .set_title("Choose a CapsuleCraft .eml vault folder")
             .set_directory(&self.vault.dir)
             .pick_folder()
@@ -1308,7 +1417,7 @@ impl NativeApp {
             return;
         }
         let default_dir = vault::get_active_vault_dir();
-        if let Some(folder) = rfd::FileDialog::new()
+        if let Some(folder) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::OpenProjectAsVault))
             .set_directory(&default_dir)
             .pick_folder()
@@ -1492,7 +1601,7 @@ impl NativeApp {
         };
         let stem = file_name.trim_end_matches(".eml").trim_end_matches(".EML");
         let default_name = format!("{stem}.eml.asc");
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::EncryptCapsuleCmd))
             .set_file_name(&default_name)
             .add_filter("PGP armored message", &["asc"])
@@ -1520,7 +1629,7 @@ impl NativeApp {
         if !self.save_selected() {
             return;
         }
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::DecryptEmlCmd))
             .add_filter("PGP armored message", &["asc"])
             .pick_file()
@@ -1581,7 +1690,7 @@ impl NativeApp {
         let Some(capsule) = self.vault.capsules.get(index) else {
             return;
         };
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::ExportEml))
             .set_file_name(&capsule.file_name)
             .add_filter("email", &["eml"])
@@ -1612,7 +1721,7 @@ impl NativeApp {
             .trim_end_matches(".eml")
             .trim_end_matches(".EML");
         let default_name = format!("{stem}.md");
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::ExportMarkdown))
             .set_file_name(&default_name)
             .add_filter("markdown", &["md"])
@@ -1633,7 +1742,7 @@ impl NativeApp {
         if !self.save_selected() {
             return;
         }
-        let Some(dir) = rfd::FileDialog::new()
+        let Some(dir) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::ExportVault))
             .set_directory(&self.vault.dir)
             .pick_folder()
@@ -1658,7 +1767,7 @@ impl NativeApp {
         if !self.save_selected() {
             return;
         }
-        let Some(paths) = rfd::FileDialog::new()
+        let Some(paths) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::ImportEml))
             .add_filter("email", &["eml"])
             .pick_files()
@@ -1672,7 +1781,7 @@ impl NativeApp {
         if !self.save_selected() {
             return;
         }
-        let Some(folder) = rfd::FileDialog::new()
+        let Some(folder) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::ImportObsidianTitle))
             .pick_folder()
         else {
@@ -1764,11 +1873,22 @@ impl NativeApp {
         // Straight rm is a one-way door: send the page file to the OS trash
         // first (recoverable), and only fall back to a hard delete when the
         // trash is unavailable (e.g. network mounts).
-        let trashed = match trash::delete(&path) {
-            Ok(()) => true,
-            Err(err) => {
-                eprintln!("trash::delete failed, falling back to rm: {err}");
+        let trashed = {
+            #[cfg(target_os = "android")]
+            {
+                // No trash service on Android yet — straight delete
+                // (recoverable deletion returns with the SAF work).
                 std::fs::remove_file(&path).is_ok()
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                match trash::delete(&path) {
+                    Ok(()) => true,
+                    Err(err) => {
+                        eprintln!("trash::delete failed, falling back to rm: {err}");
+                        std::fs::remove_file(&path).is_ok()
+                    }
+                }
             }
         };
         if !trashed {
@@ -1906,6 +2026,8 @@ pub(crate) struct ShellAction {
     pub(crate) open_project_dialog: bool,
     pub(crate) sync_project: bool,
     pub(crate) switch_vault: Option<PathBuf>,
+    /// Two-way folder sync was requested from the sidebar footer.
+    pub(crate) sync_folder: bool,
 }
 
 impl ShellAction {
@@ -1940,6 +2062,7 @@ impl ShellAction {
         self.open_project_dialog |= other.open_project_dialog;
         self.sync_project |= other.sync_project;
         self.switch_vault = other.switch_vault.or_else(|| self.switch_vault.take());
+        self.sync_folder |= other.sync_folder;
     }
 }
 
@@ -2341,6 +2464,10 @@ impl NativeApp {
         if editor.open_vault || shell.open_vault {
             self.open_vault_dialog();
         }
+        if shell.sync_folder {
+            let force_pick = ui.input(|i| i.modifiers.shift);
+            self.sync_folder_action(force_pick);
+        }
         if editor.new_subpage {
             let parent = self
                 .selected
@@ -2671,7 +2798,7 @@ impl NativeApp {
     /// Custom icon: pick a PNG, copy it next to `ui_state.json` (so the
     /// original can move or vanish), switch to the Custom style live.
     fn pick_custom_icon(&mut self, ctx: &egui::Context) {
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::util::dialog::FileDialog::new()
             .add_filter("PNG", &["png"])
             .set_title(t(self.locale, Key::CommandIconCustom))
             .pick_file()

@@ -25,6 +25,10 @@ pub struct UiState {
     /// Active brand icon style (mascot or minimal document).
     #[serde(default)]
     pub icon_style: BrandIconStyle,
+    /// Folder the vault syncs with across devices (Dropbox, Nextcloud,
+    /// Syncthing); plain sidebar click syncs, Shift re-picks.
+    #[serde(default)]
+    pub sync_dir: Option<String>,
     /// User-supplied model folders (outside the components catalog).
     #[serde(default)]
     pub custom_models: CustomModels,
@@ -95,6 +99,7 @@ impl Default for UiState {
             wide_canvas: false,
             icon_style: BrandIconStyle::default(),
             custom_models: CustomModels::default(),
+            sync_dir: None,
         }
     }
 }
@@ -204,6 +209,7 @@ mod tests {
                 tts: None,
                 ocr: None,
             },
+            sync_dir: Some("/sync/vault".to_string()),
         };
         let json = serde_json::to_string(&state).unwrap();
         let decoded: UiState = serde_json::from_str(&json).unwrap();

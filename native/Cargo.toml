@@ -1,10 +1,19 @@
 [package]
 name = "capsuleos-native"
-version = "2.8.0"
+version = "2.9.0"
 edition = "2021"
 description = "CapsuleCraft native egui prototype (same .eml vault, no webview)"
 license = "MIT"
 publish = false
+
+# Android (NativeActivity) loads the app as a shared library exporting
+# android_main — the same src/main.rs is therefore also a cdylib target.
+# Desktop builds/releases target the bin explicitly (--bin capsuleos-native);
+# CI's Android job builds --lib (cargo ndk) to get libcapsuleos_native.so.
+[lib]
+name = "capsuleos_native"
+path = "src/main.rs"
+crate-type = ["cdylib"]
 
 [[bin]]
 name = "capsuleos-native"
@@ -13,7 +22,6 @@ path = "src/main.rs"
 [dependencies]
 eframe = { version = "0.37.0", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "links", "system_fonts", "glow", "wayland", "x11"] }
 egui = "0.37.0"
-rfd = "0.17.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 base64 = "0.22"
@@ -28,8 +36,6 @@ boa_engine = "0.20"
 pgp = "0.15"
 rand = "0.8"
 ignore = "0.4"
-# Page files go to the OS trash instead of being deleted outright.
-trash = "5"
 
 # Downloadable integrations (v1.12.0): components catalog, viewers, local AI.
 # Every crate here is pure Rust except pdfium-render, which loads the pdfium
@@ -51,6 +57,36 @@ rand09 = { package = "rand", version = "0.9" }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
+
+# Native file dialogs exist on desktop targets only; on Android the
+# util::dialog shim answers None until the SAF picker lands.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rfd = "0.17.2"
+# Page files go to the OS trash instead of being deleted outright.
+# (No trash service on Android — the shim falls back to plain deletes.)
+trash = "5"
+
+# Android (scaffold, v2.9.0): the same egui app as a NativeActivity. The
+# desktop eframe features (x11/wayland/glow) are inert on this target; winit
+# drives the Android event loop through android-activity instead. CI builds
+# the APK — see .github/workflows/android.yml and docs/android.md.
+[target.'cfg(target_os = "android")'.dependencies]
+eframe = { version = "0.37.0", default-features = false, features = [
+    # accesskit on Android is wired only through game-activity (eframe
+    # compile_error otherwise) — game-activity is the modern backend anyway.
+    "accesskit",
+    "clipboard",
+    "default_fonts",
+    "links",
+    "android-game-activity",
+] }
+# Same major as winit's copy so the `AndroidApp` handle types unify.
+android-activity = "0.6"
+android_logger = "0.14"
+log = "0.4"
+# native-tls (imap/ureq) lands on openssl-sys; cross-compiling needs the
+# vendored build — the NDK has no system OpenSSL to link against.
+openssl = { version = "0.10", features = ["vendored"] }
 
 [profile.release]
 opt-level = 2
