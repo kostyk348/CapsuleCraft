@@ -11,7 +11,7 @@
   `vault::set_android_data_dir`, хранилище живёт в
   `<internal>/capsulecraft/vault`.
 - `native/Cargo.toml` — target-зависимости `aarch64`: eframe с фичей
-  `android-native-activity`, `android-activity 0.6` (та же мажорная версия,
+  `android-game-activity`, `android-activity 0.6` (та же мажорная версия,
   что у winit, чтобы тип `AndroidApp` совпал), `android_logger`.
 - `android/` — минимальный gradle-проект: `NativeActivity` с
   `android.app.lib_name = capsuleos_native`, `hasCode=false` — никакого

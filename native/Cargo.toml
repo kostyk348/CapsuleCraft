@@ -58,11 +58,13 @@ winres = "0.1"
 # the APK — see .github/workflows/android.yml and docs/android.md.
 [target.'cfg(target_os = "android")'.dependencies]
 eframe = { version = "0.37.0", default-features = false, features = [
+    # accesskit on Android is wired only through game-activity (eframe
+    # compile_error otherwise) — game-activity is the modern backend anyway.
     "accesskit",
     "clipboard",
     "default_fonts",
     "links",
-    "android-native-activity",
+    "android-game-activity",
 ] }
 # Same major as winit's copy so the `AndroidApp` handle types unify.
 android-activity = "0.6"
