@@ -49,7 +49,7 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> ViewAction {
         )
         .clicked()
         {
-            if let Some(path) = rfd::FileDialog::new()
+            if let Some(path) = crate::util::dialog::FileDialog::new()
                 .set_title(t(locale, Key::ExportEml))
                 .set_file_name(&capsule.file_name)
                 .add_filter("email", &["eml"])

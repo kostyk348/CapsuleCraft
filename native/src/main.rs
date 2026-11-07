@@ -1337,7 +1337,7 @@ impl NativeApp {
             .is_none()
             || force_pick;
         let dir = if pick {
-            rfd::FileDialog::new()
+            crate::util::dialog::FileDialog::new()
                 .set_title(t(self.locale, Key::SyncFolderPick))
                 .set_directory(&self.vault.dir)
                 .pick_folder()
@@ -1403,7 +1403,7 @@ impl NativeApp {
         if !self.save_selected() {
             return;
         }
-        if let Some(dir) = rfd::FileDialog::new()
+        if let Some(dir) = crate::util::dialog::FileDialog::new()
             .set_title("Choose a CapsuleCraft .eml vault folder")
             .set_directory(&self.vault.dir)
             .pick_folder()
@@ -1417,7 +1417,7 @@ impl NativeApp {
             return;
         }
         let default_dir = vault::get_active_vault_dir();
-        if let Some(folder) = rfd::FileDialog::new()
+        if let Some(folder) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::OpenProjectAsVault))
             .set_directory(&default_dir)
             .pick_folder()
@@ -1601,7 +1601,7 @@ impl NativeApp {
         };
         let stem = file_name.trim_end_matches(".eml").trim_end_matches(".EML");
         let default_name = format!("{stem}.eml.asc");
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::EncryptCapsuleCmd))
             .set_file_name(&default_name)
             .add_filter("PGP armored message", &["asc"])
@@ -1629,7 +1629,7 @@ impl NativeApp {
         if !self.save_selected() {
             return;
         }
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::DecryptEmlCmd))
             .add_filter("PGP armored message", &["asc"])
             .pick_file()
@@ -1690,7 +1690,7 @@ impl NativeApp {
         let Some(capsule) = self.vault.capsules.get(index) else {
             return;
         };
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::ExportEml))
             .set_file_name(&capsule.file_name)
             .add_filter("email", &["eml"])
@@ -1721,7 +1721,7 @@ impl NativeApp {
             .trim_end_matches(".eml")
             .trim_end_matches(".EML");
         let default_name = format!("{stem}.md");
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::ExportMarkdown))
             .set_file_name(&default_name)
             .add_filter("markdown", &["md"])
@@ -1742,7 +1742,7 @@ impl NativeApp {
         if !self.save_selected() {
             return;
         }
-        let Some(dir) = rfd::FileDialog::new()
+        let Some(dir) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::ExportVault))
             .set_directory(&self.vault.dir)
             .pick_folder()
@@ -1767,7 +1767,7 @@ impl NativeApp {
         if !self.save_selected() {
             return;
         }
-        let Some(paths) = rfd::FileDialog::new()
+        let Some(paths) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::ImportEml))
             .add_filter("email", &["eml"])
             .pick_files()
@@ -1781,7 +1781,7 @@ impl NativeApp {
         if !self.save_selected() {
             return;
         }
-        let Some(folder) = rfd::FileDialog::new()
+        let Some(folder) = crate::util::dialog::FileDialog::new()
             .set_title(t(self.locale, Key::ImportObsidianTitle))
             .pick_folder()
         else {
@@ -2787,7 +2787,7 @@ impl NativeApp {
     /// Custom icon: pick a PNG, copy it next to `ui_state.json` (so the
     /// original can move or vanish), switch to the Custom style live.
     fn pick_custom_icon(&mut self, ctx: &egui::Context) {
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::util::dialog::FileDialog::new()
             .add_filter("PNG", &["png"])
             .set_title(t(self.locale, Key::CommandIconCustom))
             .pick_file()

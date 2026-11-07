@@ -281,7 +281,7 @@ pub fn draw_image_block(
 
 /// File dialog → `(name, cid, mime, base64, size, width, height)`.
 pub(crate) fn pick_image(locale: Locale) -> Option<(String, String, String, String, usize, u32, u32)> {
-    let path = rfd::FileDialog::new()
+    let path = crate::util::dialog::FileDialog::new()
         .set_title(t(locale, Key::ImageChoose))
         .add_filter("images", &IMAGE_EXTENSIONS)
         .pick_file()?;

@@ -89,7 +89,7 @@ pub fn draw(ui: &mut Ui, capsule: &Capsule, state: &mut MailState, locale: Local
         )
         .clicked()
         {
-            if let Some(path) = rfd::FileDialog::new()
+            if let Some(path) = crate::util::dialog::FileDialog::new()
                 .set_title(t(locale, Key::ExportEml))
                 .set_file_name(&capsule.file_name)
                 .add_filter("email", &["eml"])
@@ -629,7 +629,7 @@ fn attachments(ui: &mut Ui, capsule: &Capsule, locale: Locale) {
                         if ghost(ui, Icon::Download, None, t(locale, Key::SaveAs), true, 22.0)
                             .clicked()
                         {
-                            if let Some(path) = rfd::FileDialog::new()
+                            if let Some(path) = crate::util::dialog::FileDialog::new()
                                 .set_title(t(locale, Key::SaveAs))
                                 .set_file_name(&attachment.name)
                                 .save_file()

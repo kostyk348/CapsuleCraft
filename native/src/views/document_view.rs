@@ -1044,7 +1044,7 @@ pub fn attachments_editor(
         let _ = hud(ui, t(locale, Key::AttachmentsTitle), theme::faint());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if text_button(ui, Some(Icon::Plus), t(locale, Key::AddAttachment), false).clicked() {
-                if let Some(paths) = rfd::FileDialog::new()
+                if let Some(paths) = crate::util::dialog::FileDialog::new()
                     .set_title(t(locale, Key::AddAttachment))
                     .pick_files()
                 {
@@ -1390,7 +1390,7 @@ fn attachments_readonly(ui: &mut Ui, capsule: &Capsule, locale: Locale) -> Vec<A
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if icon_button(ui, Icon::Download, t(locale, Key::SaveAs), true, false).clicked() {
                     if let Some(bytes) = attachment_bytes(attachment) {
-                        if let Some(path) = rfd::FileDialog::new()
+                        if let Some(path) = crate::util::dialog::FileDialog::new()
                             .set_title(t(locale, Key::SaveAs))
                             .set_file_name(&attachment.name)
                             .save_file()
