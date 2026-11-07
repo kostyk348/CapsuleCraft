@@ -1286,6 +1286,7 @@ fn build_root_capsule(
         plain_body: None,
         html_body: None,
         raw_eml: None,
+        page_canvas: None,
     }
 }
 
@@ -1373,6 +1374,7 @@ fn build_subsystem_capsule(
         plain_body: None,
         html_body: None,
         raw_eml: None,
+        page_canvas: None,
     }
 }
 
@@ -1424,6 +1426,7 @@ fn build_doc_capsule(
         plain_body: None,
         html_body: None,
         raw_eml: None,
+        page_canvas: None,
     }
 }
 
@@ -1490,6 +1493,7 @@ fn build_tasks_capsule(project_name: &str, parent_id: &str, todos: &[ExtractedTo
         plain_body: None,
         html_body: None,
         raw_eml: None,
+        page_canvas: None,
     }
 }
 
@@ -1640,6 +1644,7 @@ fn build_module_capsule(
         plain_body: None,
         html_body: None,
         raw_eml: None,
+        page_canvas: None,
     }
 }
 
