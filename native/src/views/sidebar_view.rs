@@ -8,7 +8,7 @@ use egui::{
 use crate::caps;
 use crate::folder_name;
 use crate::hud;
-use crate::i18n::{t, Key, Locale};
+use crate::i18n::{self, t, Key, Locale};
 use crate::icon_button;
 use crate::icons::{self, Icon};
 use crate::mime::Capsule;
@@ -198,7 +198,7 @@ pub fn draw_sidebar(
             render_vault_menu_contents(ui, vault, locale, &mut action);
         });
     header.add_space(10.0);
-    if search_box(&mut header, search).changed() {
+    if search_box(&mut header, search, locale).changed() {
         // The list is rebuilt from `search` below; no extra state is needed.
     }
     header.add_space(14.0);
@@ -369,7 +369,7 @@ pub fn draw_sidebar(
             let query = search.trim().to_lowercase();
             if query.is_empty() {
                 if tree.roots().is_empty() {
-                    empty_pages(ui, &mut action, vault.capsules.is_empty());
+                    empty_pages(ui, &mut action, vault.capsules.is_empty(), locale);
                 } else {
                     let mut drop_target = None;
                     if let Some(index) = draw_page_nodes(
@@ -527,7 +527,7 @@ pub fn draw_sidebar(
         format!(
             "{} .eml · {}",
             vault.capsules.len(),
-            t(locale, Key::PageCount)
+            i18n::page_range(locale, selected.map(|index| index + 1), vault.capsules.len())
         )
     } else {
         format!(
@@ -625,7 +625,7 @@ fn vault_card(ui: &mut Ui, vault: &Vault) -> Response {
         .on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-fn search_box(ui: &mut Ui, search: &mut String) -> Response {
+fn search_box(ui: &mut Ui, search: &mut String, locale: Locale) -> Response {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
     ui.painter().rect(
         rect,
@@ -653,10 +653,43 @@ fn search_box(ui: &mut Ui, search: &mut String) -> Response {
         TextEdit::singleline(search)
             .frame(Frame::NONE)
             .margin(Margin::same(0))
-            .hint_text("Search pages")
+            .hint_text(t(locale, Key::SearchPagesHint))
+            .id(egui::Id::new("sidebar_search"))
             .desired_width(f32::INFINITY)
             .align(egui::Align2::LEFT_CENTER),
     );
+    // One-click clear instead of backspacing through the whole query; Esc
+    // clears too while the field is focused.
+    if !search.is_empty() {
+        let clear_rect = Rect::from_center_size(
+            pos2(rect.right() - 14.0, rect.center().y),
+            vec2(18.0, 18.0),
+        );
+        let clear =
+            ui.interact(clear_rect, egui::Id::new("sidebar_search_clear"), Sense::click());
+        icons::paint(
+            ui.painter(),
+            clear_rect.shrink(5.0),
+            Icon::Close,
+            if clear.hovered() {
+                theme::ink()
+            } else {
+                theme::faint()
+            },
+        );
+        if clear.clicked() {
+            search.clear();
+        }
+        clear
+            .on_hover_text(t(locale, Key::ClearSearch))
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
+    }
+    if response.has_focus()
+        && !search.is_empty()
+        && ui.input(|i| i.key_pressed(egui::Key::Escape))
+    {
+        search.clear();
+    }
     if response.has_focus() {
         ui.painter().rect_stroke(
             rect,
@@ -668,19 +701,19 @@ fn search_box(ui: &mut Ui, search: &mut String) -> Response {
     response
 }
 
-fn empty_pages(ui: &mut Ui, action: &mut ShellAction, no_pages: bool) {
+fn empty_pages(ui: &mut Ui, action: &mut ShellAction, no_pages: bool, locale: Locale) {
     ui.add_space(18.0);
     ui.label(
         RichText::new(if no_pages {
-            "No pages yet."
+            t(locale, Key::PagesEmptyTitle)
         } else {
-            "No native pages in this vault."
+            t(locale, Key::PagesEmptyNative)
         })
         .size(12.0)
         .color(theme::muted()),
     );
     ui.add_space(8.0);
-    if primary_button(ui, "New page", 28.0).clicked() {
+    if primary_button(ui, t(locale, Key::NewPage), 28.0).clicked() {
         action.new_page = true;
     }
 }

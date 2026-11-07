@@ -858,8 +858,11 @@ fn task_row(
             .margin(Margin::same(0))
             .font(FontId::new(9.5, theme::mono()))
             .text_color(due_color)
-            .hint_text("YYYY-MM-DD"),
-    );
+            // A quiet em dash for «no date»; the full format lives in the
+            // hover tooltip — the 84 px cell clips «YYYY-MM-DD» to noise.
+            .hint_text("—"),
+    )
+    .on_hover_text(t(locale, Key::DueDateHint));
     if due_response.changed() {
         item.due = if due.trim().is_empty() {
             None

@@ -32,6 +32,14 @@ pub struct UiState {
     /// User-supplied model folders (outside the components catalog).
     #[serde(default)]
     pub custom_models: CustomModels,
+    /// Message-ID of the page open when the app last exited, so a restart
+    /// reopens the same page (falls back to the vault root when the page was
+    /// deleted or renamed on disk meanwhile).
+    #[serde(default)]
+    pub last_page_id: Option<String>,
+    /// Key of the view (`views::View::key`) that was active last time.
+    #[serde(default)]
+    pub last_view: Option<String>,
 }
 
 /// User-supplied model directories: "I already have this model on disk".
@@ -100,6 +108,8 @@ impl Default for UiState {
             icon_style: BrandIconStyle::default(),
             custom_models: CustomModels::default(),
             sync_dir: None,
+            last_page_id: None,
+            last_view: None,
         }
     }
 }
@@ -210,10 +220,21 @@ mod tests {
                 ocr: None,
             },
             sync_dir: Some("/sync/vault".to_string()),
+            last_page_id: Some("<pke@capsuleos.local>".to_string()),
+            last_view: Some("planning".to_string()),
         };
         let json = serde_json::to_string(&state).unwrap();
         let decoded: UiState = serde_json::from_str(&json).unwrap();
         assert_eq!(state, decoded);
+    }
+
+    #[test]
+    fn session_fields_default_when_absent() {
+        // Settings written before session restore have neither field.
+        let json = r#"{"zoom_factor":1.0,"sidebar_width":280.0,"sidebar_collapsed":false,"wide_canvas":false}"#;
+        let decoded: UiState = serde_json::from_str(json).unwrap();
+        assert_eq!(decoded.last_page_id, None);
+        assert_eq!(decoded.last_view, None);
     }
 
     #[test]
