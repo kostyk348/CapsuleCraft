@@ -68,6 +68,9 @@ eframe = { version = "0.37.0", default-features = false, features = [
 android-activity = "0.6"
 android_logger = "0.14"
 log = "0.4"
+# native-tls (imap/ureq) lands on openssl-sys; cross-compiling needs the
+# vendored build — the NDK has no system OpenSSL to link against.
+openssl = { version = "0.10", features = ["vendored"] }
 
 [profile.release]
 opt-level = 2
