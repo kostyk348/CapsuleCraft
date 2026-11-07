@@ -37,15 +37,15 @@ mod modals;
 mod pdf;
 mod planning;
 mod preview;
+mod project_parser;
+mod project_skill;
+mod project_verify;
 pub mod rich_text;
 mod search;
 mod snapshot;
 mod sync_imap;
 mod theme;
 mod ui_state;
-mod project_parser;
-mod project_skill;
-mod project_verify;
 mod util;
 mod vault;
 mod viewer;
@@ -135,7 +135,10 @@ fn main() -> eframe::Result<()> {
         .with_resizable(true)
         .with_title("CapsuleCraft");
     let initial_ui_state = UiState::load();
-    if let Some(icon) = brand::window_icon(initial_ui_state.icon_style) {
+    if let Some(icon) = brand::window_icon(
+        initial_ui_state.icon_style,
+        brand::custom_icon_path().as_deref(),
+    ) {
         viewport = viewport.with_icon(Arc::new(icon));
     }
     let options = eframe::NativeOptions {
@@ -523,10 +526,9 @@ impl NativeApp {
         if self.stt.is_running(cid) {
             return;
         }
-        let Some(model_dir) = ai::stt::best_model_dir(
-            &self.components,
-            self.ui_state.custom_models.stt.as_deref(),
-        ) else {
+        let Some(model_dir) =
+            ai::stt::best_model_dir(&self.components, self.ui_state.custom_models.stt.as_deref())
+        else {
             self.toast(t(self.locale, Key::NeedComponentsToast));
             self.show_integrations = true;
             return;
@@ -620,7 +622,8 @@ impl NativeApp {
                         components::ComponentId::TtsVoiceDmitri,
                     ]
                 };
-                let Some(voice) = candidates.into_iter().find(|id| self.components.ready(*id)) else {
+                let Some(voice) = candidates.into_iter().find(|id| self.components.ready(*id))
+                else {
                     self.toast(t(self.locale, Key::NeedComponentsToast));
                     self.show_integrations = true;
                     return;
@@ -1270,7 +1273,8 @@ impl NativeApp {
             let tree = vault::PageTree::build(&self.vault.capsules);
             for idx in 0..self.vault.capsules.len() {
                 if !tree.children_of(Some(idx)).is_empty() && !tree.roots().contains(&idx) {
-                    self.collapsed.insert(self.vault.capsules[idx].message_id.clone());
+                    self.collapsed
+                        .insert(self.vault.capsules[idx].message_id.clone());
                 }
             }
         }
@@ -1315,7 +1319,10 @@ impl NativeApp {
                     self.switch_to_vault(target);
                     self.toast(format!(
                         "Project {} synchronized: {} modules ({} updated, {} removed)",
-                        summary.project_name, summary.modules_count, summary.capsules_updated, summary.capsules_removed
+                        summary.project_name,
+                        summary.modules_count,
+                        summary.capsules_updated,
+                        summary.capsules_removed
                     ));
                 }
                 Err(err) => {
@@ -1337,7 +1344,10 @@ impl NativeApp {
                 self.switch_to_vault(target);
                 self.toast(format!(
                     "Project {} synchronized: {} modules ({} updated, {} removed)",
-                    summary.project_name, summary.modules_count, summary.capsules_updated, summary.capsules_removed
+                    summary.project_name,
+                    summary.modules_count,
+                    summary.capsules_updated,
+                    summary.capsules_removed
                 ));
             }
             Err(err) => {
@@ -1888,6 +1898,8 @@ pub(crate) struct ShellAction {
     pub(crate) delete_page: bool,
     pub(crate) reparent: Option<(usize, Option<String>)>,
     pub(crate) toggle_icon_style: bool,
+    pub(crate) set_icon_style: Option<brand::BrandIconStyle>,
+    pub(crate) pick_custom_icon: bool,
     pub(crate) toggle_sidebar: bool,
     pub(crate) toggle_zen: bool,
     pub(crate) ingest_project: bool,
@@ -1920,6 +1932,8 @@ impl ShellAction {
         self.delete_page |= other.delete_page;
         self.reparent = other.reparent.or_else(|| self.reparent.take());
         self.toggle_icon_style |= other.toggle_icon_style;
+        self.set_icon_style = other.set_icon_style.or(self.set_icon_style.take());
+        self.pick_custom_icon |= other.pick_custom_icon;
         self.toggle_sidebar |= other.toggle_sidebar;
         self.toggle_zen |= other.toggle_zen;
         self.ingest_project |= other.ingest_project;
@@ -2201,20 +2215,20 @@ impl NativeApp {
                                     self.ocr_highlight.as_ref().map(|(id, _)| id.as_str()),
                                 ));
 
-                            // Page-mode canvas: a clicked, already-selected
-                            // page node asks to open its page (title-based,
-                            // exactly like a [[wiki-link]]).
-                            if let Some(target) =
-                                ui.ctx()
-                                    .data_mut(|data| data.remove_temp::<String>(egui::Id::new("page-canvas-nav")))
-                            {
-                                if let Some(index) = links::resolve(&target, &self.vault.capsules)
-                                {
-                                    editor.select = Some(index);
-                                } else {
-                                    editor.create_page = Some(target);
+                                // Page-mode canvas: a clicked, already-selected
+                                // page node asks to open its page (title-based,
+                                // exactly like a [[wiki-link]]).
+                                if let Some(target) = ui.ctx().data_mut(|data| {
+                                    data.remove_temp::<String>(egui::Id::new("page-canvas-nav"))
+                                }) {
+                                    if let Some(index) =
+                                        links::resolve(&target, &self.vault.capsules)
+                                    {
+                                        editor.select = Some(index);
+                                    } else {
+                                        editor.create_page = Some(target);
+                                    }
                                 }
-                            }
                             }
                             _ => views::draw_empty_state(ui, &mut editor, self.locale),
                         },
@@ -2407,7 +2421,13 @@ impl NativeApp {
             self.toggle_sidebar();
         }
         if shell.toggle_icon_style {
-            self.toggle_icon_style();
+            self.toggle_icon_style(&ctx);
+        }
+        if let Some(style) = shell.set_icon_style {
+            self.set_icon_style(&ctx, style);
+        }
+        if shell.pick_custom_icon {
+            self.pick_custom_icon(&ctx);
         }
         if shell.toggle_zen {
             self.toggle_zen_mode();
@@ -2634,10 +2654,47 @@ impl NativeApp {
         self.ui_state.save();
     }
 
-    fn toggle_icon_style(&mut self) {
-        self.ui_state.toggle_icon_style();
+    fn toggle_icon_style(&mut self, ctx: &egui::Context) {
+        let style = self.ui_state.toggle_icon_style();
         self.ui_state.save();
+        self.apply_window_icon(ctx, style);
         self.toast(t(self.locale, Key::IconStyleToast));
+    }
+
+    fn set_icon_style(&mut self, ctx: &egui::Context, style: brand::BrandIconStyle) {
+        self.ui_state.icon_style = style;
+        self.ui_state.save();
+        self.apply_window_icon(ctx, style);
+        self.toast(t(self.locale, Key::IconStyleToast));
+    }
+
+    /// Custom icon: pick a PNG, copy it next to `ui_state.json` (so the
+    /// original can move or vanish), switch to the Custom style live.
+    fn pick_custom_icon(&mut self, ctx: &egui::Context) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("PNG", &["png"])
+            .set_title(t(self.locale, Key::CommandIconCustom))
+            .pick_file()
+        else {
+            return;
+        };
+        let Some(target) = brand::custom_icon_path() else {
+            return;
+        };
+        if std::fs::copy(&path, &target).is_err() {
+            self.toast(t(self.locale, Key::IconCustomFailed));
+            return;
+        }
+        self.set_icon_style(ctx, brand::BrandIconStyle::Custom);
+        self.toast(t(self.locale, Key::IconCustomToast));
+    }
+
+    /// Push the current style's bitmap to the OS: the taskbar icon switches
+    /// without a restart (the titlebar mark redraws from the same bytes).
+    fn apply_window_icon(&self, ctx: &egui::Context, style: brand::BrandIconStyle) {
+        if let Some(icon) = brand::window_icon(style, brand::custom_icon_path().as_deref()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Icon(Some(Arc::new(icon))));
+        }
     }
 
     fn zoom_in(&mut self, ctx: &egui::Context) {
@@ -2727,7 +2784,12 @@ impl NativeApp {
             PaletteCommand::ZoomOut => self.zoom_out(ctx),
             PaletteCommand::ResetZoom => self.reset_zoom(ctx),
             PaletteCommand::ToggleWideCanvas => self.toggle_wide_canvas(),
-            PaletteCommand::ToggleIconStyle => self.toggle_icon_style(),
+            PaletteCommand::IconNova => self.set_icon_style(ctx, brand::BrandIconStyle::Nova),
+            PaletteCommand::IconDocument => {
+                self.set_icon_style(ctx, brand::BrandIconStyle::Document)
+            }
+            PaletteCommand::IconCapsule => self.set_icon_style(ctx, brand::BrandIconStyle::Capsule),
+            PaletteCommand::IconCustom => self.pick_custom_icon(ctx),
             PaletteCommand::IndexProject => self.ingest_current_project(),
         }
     }
