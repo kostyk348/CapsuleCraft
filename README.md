@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="screenshots/capsulecraft-mascot.png" alt="CapsuleCraft — a little mascot holding an .eml capsule" width="180">
+<img src="screenshots/capsulecraft-nova.png" alt="CapsuleCraft — the Nova brand icon: a neon capsule with an envelope" width="180">
 
 # CapsuleCraft
 
@@ -11,7 +11,7 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 
 [![Release](https://img.shields.io/github/v/release/kostyk348/CapsuleCraft?sort=semver&color=0ea5e9&label=release)](https://github.com/kostyk348/CapsuleCraft/releases)
 [![CI](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml)
-[![native tests](https://img.shields.io/badge/native%20tests-233%20passing-22c55e)](native/)
+[![native tests](https://img.shields.io/badge/native%20tests-272%20passing-22c55e)](native/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![No DB](https://img.shields.io/badge/database-none-orange)](#why-eml)
 [![Offline](https://img.shields.io/badge/offline--first-success)](#strengths)
@@ -24,7 +24,7 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 
 ---
 
-![CapsuleCraft demo — page, planning, graph, threads and MIME views](screenshots/demo.gif)
+<p align="center"><img src="screenshots/demo.gif" alt="CapsuleCraft in motion — themes, onboarding, the canvas, picture nodes, freehand drawing, icon styles and the release train v2.2 → v2.7" width="720"></p>
 
 ## What is CapsuleCraft?
 
@@ -321,7 +321,7 @@ native/src/
 ```bash
 # native shell
 cd native
-cargo test          # 233 unit tests
+cargo test          # 272 unit tests
 
 # legacy web engine
 npm ci
@@ -337,7 +337,7 @@ npx vitest run      # 172 tests
 | **v2.4.1** | Canvas toolbar adds spawn at the visible center (were pinned near the world origin — off-screen after panning: «при добавлении через кнопку нестабильно показывает»), +16 px cascade for consecutive adds; tests 255 → 259 | 2026-11-07 |
 | **v2.4.0** | Page mode «Страница \| Канвас»: every page toggles between the block editor and a full-height canvas (v2.3 engine: pan/zoom, arrows, shapes, snap, minimap); diagrams persist as `page-canvas.json` inside the same `.eml`; page-link nodes open/create pages like `[[wiki-links]]`; IMAP sync off the UI thread, duplicate-proof downloads (content hashing + Message-Id names), working auto_sync; honest data dirs with `CAPSULECRAFT_DATA_DIR` / `CAPSULECRAFT_CONFIG_DIR` overrides | 2026-11-07 |
 | **v2.3.0** | The canvas engine: node boards with pan/zoom, snapping, minimap and undo; sticky notes, shapes, arrows and free text as first-class canvas elements; the planning Gantt and the board share one zooming field language | 2026-11-07 |
-| **v2.2.1** | Editor promises kept: «Вставить ниже ▸» expands the full block palette in the grip menu; Notion-style «+» appears in the gutter on hover and inserts below the hovered block; slash menu — typing «/» opens a live-filtered floating palette and converts the paragraph; drag-and-drop block reorder with an accent insertion line; version manifests re-synced after the 2.1.0 stragglers | 2026-11-06 |
+| **v2.2.1** | Editor promises kept: «Вставить ниже ▸» expands the full block palette in the grip menu; Notion-style «+» appears in the gutter on hover and inserts below the hovered block; slash menu — typing «/» opens a live-filtered floating palette and converts the paragraph; drag-and-drop block reorder with an accent insertion line (the op wiring landed for real in v2.7.0); version manifests re-synced after the 2.1.0 stragglers | 2026-11-06 |
 | **v2.2.0** | Obsidian-style theming: 8 complete theme presets, personal accent colour, 80–140 % interface scale, appearance picker in ⌘K; interactive bilingual onboarding tour (12 steps, try-it buttons, first-run auto-open); OCR diagnostics (model preflight + engine log tail in the error); refreshed real-app screenshots incl. a themes gallery | 2026-11-06 |
 | **v2.1.0** | PDF pages render again (one pdfium binding per process); image block inserts a picture below any block with width/caption and viewer; OCR fixed (no invalid `-a`, real model id from `/v1/models`, 15-minute cold start, PDF page → OCR); English TTS voice Amy + STT language follows the locale; custom model folders for STT/TTS/OCR | 2026-11-05 |
 | **v2.0.0** | Project Knowledge Engine: index any source tree into a `.capsule/` vault of `.eml` pages (incremental FNV-1a scan, signature/docstring parsing for 8 languages, tech-debt registry, zero-loss re-sync) + generated agent skills; folder folding in the sidebar | 2026-11-03 |
@@ -373,6 +373,13 @@ runs no timed side effects or I/O, and vault sync is still a manual folder copy.
 - ✅ macOS native builds in CI (arm64)
 - ✅ Full theming (8 presets, accent, font scale) + onboarding tour — done in v2.2.0
 - ⬜ Optional end-to-end-encrypted vault sync (tamper/censor-proof, still zero-cloud)
+
+## Community
+
+- 🐛 **Issues** — bugs and feature requests: [github.com/kostyk348/CapsuleCraft/issues](https://github.com/kostyk348/CapsuleCraft/issues)
+- 🚀 **Releases** — installers for Windows, macOS and Linux, with `SHA256SUMS.txt` for every build: [github.com/kostyk348/CapsuleCraft/releases](https://github.com/kostyk348/CapsuleCraft/releases)
+- 💬 **Discussions** — not enabled yet; open an issue and it will be routed.
+- ✉️ **Telegram / X** — no official channel yet; if you mirror the releases somewhere, open an issue and the link will land here.
 
 ## Contributing
 
