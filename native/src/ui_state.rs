@@ -107,7 +107,10 @@ impl UiState {
     pub fn load() -> Self {
         let path = Self::file_path();
         if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(state) = serde_json::from_str::<UiState>(&content) {
+            if let Ok(mut state) = serde_json::from_str::<UiState>(&content) {
+                if state.icon_style.is_legacy_mascot() {
+                    state.icon_style = BrandIconStyle::Nova;
+                }
                 return state;
             }
         }
@@ -152,7 +155,7 @@ impl UiState {
     }
 
     pub fn toggle_icon_style(&mut self) -> BrandIconStyle {
-        self.icon_style = self.icon_style.toggle();
+        self.icon_style = self.icon_style.cycle();
         self.icon_style
     }
 }
@@ -168,7 +171,7 @@ mod tests {
         assert_eq!(state.sidebar_width, 280.0);
         assert!(!state.sidebar_collapsed);
         assert!(!state.wide_canvas);
-        assert_eq!(state.icon_style, BrandIconStyle::Document);
+        assert_eq!(state.icon_style, BrandIconStyle::Nova);
     }
 
     #[test]
@@ -195,7 +198,7 @@ mod tests {
             sidebar_width: 320.0,
             sidebar_collapsed: true,
             wide_canvas: true,
-            icon_style: BrandIconStyle::Mascot,
+            icon_style: BrandIconStyle::Capsule,
             custom_models: CustomModels {
                 stt: Some("/models/whisper".to_string()),
                 tts: None,

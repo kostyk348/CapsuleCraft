@@ -61,7 +61,10 @@ pub enum Command {
     ZoomOut,
     ResetZoom,
     ToggleWideCanvas,
-    ToggleIconStyle,
+    IconNova,
+    IconDocument,
+    IconCapsule,
+    IconCustom,
     IndexProject,
 }
 
@@ -473,15 +476,54 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
             },
         ),
         (
-            Command::ToggleIconStyle,
+            Command::IconNova,
             PaletteCommand {
-                id: "toggle_icon_style",
-                title: t(locale, Key::CommandToggleIconStyle).into(),
-                hint: "Mascot / Document".into(),
+                id: "icon_nova",
+                title: t(locale, Key::CommandIconNova).into(),
+                hint: "Nova".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(&["icon", "brand", "nova"], &["иконка", "логотип", "нова"]),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::IconDocument,
+            PaletteCommand {
+                id: "icon_document",
+                title: t(locale, Key::CommandIconDocument).into(),
+                hint: "Document".into(),
                 group: t(locale, Key::PaletteActions).into(),
                 keywords: kw(
-                    &["icon", "brand", "mascot", "document"],
-                    &["логотип", "иконка", "маскот"],
+                    &["icon", "brand", "document"],
+                    &["иконка", "логотип", "документ"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::IconCapsule,
+            PaletteCommand {
+                id: "icon_capsule",
+                title: t(locale, Key::CommandIconCapsule).into(),
+                hint: "Capsule".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["icon", "brand", "capsule"],
+                    &["иконка", "логотип", "капсула"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::IconCustom,
+            PaletteCommand {
+                id: "icon_custom",
+                title: t(locale, Key::CommandIconCustom).into(),
+                hint: "PNG".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["icon", "custom", "pick", "png"],
+                    &["иконка", "своя", "выбрать"],
                 ),
                 shortcut: None,
             },

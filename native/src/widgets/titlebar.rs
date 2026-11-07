@@ -248,7 +248,11 @@ pub fn draw_titlebar(
         action.toggle_icon_style = true;
     }
     let mark_rect = Rect::from_center_size(mark.center(), vec2(20.0, 20.0));
-    if let Some(texture) = brand::texture(ui_left.ctx(), icon_style) {
+    if let Some(texture) = brand::texture(
+        ui_left.ctx(),
+        icon_style,
+        brand::custom_icon_path().as_deref(),
+    ) {
         ui_left.painter().image(
             texture.id(),
             mark_rect,
