@@ -3,6 +3,38 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.7.0] — 2026-11-07 — Four faces and a working drag
+
+### Added
+- **Icon sets** (`native/src/brand.rs`): four styles — **Nova** (new
+  neon-capsule artwork, the default), **Document** (classic), **Capsule**
+  (generated pill mark), **Custom** (any PNG via the file dialog, copied
+  next to `ui_state.json`, broken/missing falls back to Nova). Live
+  switching: the taskbar icon follows via `ViewportCommand::Icon` without
+  a restart. Entries: the titlebar mark cycles all four; the palette
+  gains four explicit commands. Legacy `mascot` configs deserialize
+  through a hidden alias and normalize to `nova` — no settings resets.
+
+### Fixed
+- **Block drag-to-reorder never fired** (announced in v2.2.1, dead since
+  birth): the stale-state cleanup ran before the landing check on the
+  release frame and wiped the drag state. Cleanup now runs after the
+  drag block; a regression test drives a real pointer drag through
+  egui's event pipeline and asserts the emitted `Reorder{0,2}` and the
+  resulting order (#55).
+
+### Docs
+- README: `screenshots/demo.gif` now actually exists — a 14-frame promo
+  reel of v2.2 -> v2.7 (it was referenced but never committed); Nova
+  hero image; native tests badge 233 -> 272; a Community section; the
+  v2.2.1 row admits the reorder op landed in v2.7.0 (#57).
+
+### Tests
+- Icon styles: decode sizes, RGBA bytes, custom fallback, custom from
+  disk, the four-style cycle, the mascot serde alias.
+- Drag reorder: the event-pipeline regression test.
+- Native suite: 268 -> **272** passed (0 failed, 2 ignored).
+
 ## [2.6.0] — 2026-11-07 — A pen for the board
 
 ### Added

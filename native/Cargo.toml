@@ -1,6 +1,6 @@
 [package]
 name = "capsuleos-native"
-version = "2.6.0"
+version = "2.7.0"
 edition = "2021"
 description = "CapsuleCraft native egui prototype (same .eml vault, no webview)"
 license = "MIT"
