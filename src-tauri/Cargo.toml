@@ -1,6 +1,6 @@
 [package]
 name = "capsuleos"
-version = "2.3.0"
+version = "2.4.0"
 description = "CapsuleCraft вЂ” Zero-DB Pure-MIME workspace (native desktop)"
 authors = ["CapsuleCraft Contributors"]
 license = "MIT"
