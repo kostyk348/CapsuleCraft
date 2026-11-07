@@ -42,9 +42,61 @@ pub fn hud(ui: &mut Ui, text: &str, color: Color32) -> Response {
         theme::HUD_SPACING,
         color,
     );
+    // HUD lines must never overflow their row: a raw model path or a long
+    // requirement list used to widen the whole card frame past the viewport,
+    // dragging the right-aligned buttons off the card's edge. Re-layout with
+    // an ellipsis when the line does not fit.
+    let max = ui.available_width();
+    let galley = if max.is_finite() && galley.size().x > max {
+        let clamped = clamp_to_width(ui, text, max);
+        caps(
+            ui,
+            &clamped,
+            theme::HUD_SIZE,
+            theme::mono_bold(),
+            theme::HUD_SPACING,
+            color,
+        )
+    } else {
+        galley
+    };
     let (rect, response) = ui.allocate_exact_size(galley.size(), Sense::hover());
     ui.painter().galley(rect.min, galley, color);
     response
+}
+
+/// The longest prefix of `text` (uppercased, HUD font) that fits `max` with a
+/// trailing ".." ellipsis; empty when nothing fits.
+fn clamp_to_width(ui: &Ui, text: &str, max: f32) -> String {
+    let width = |s: &str| -> f32 {
+        caps(
+            ui,
+            s,
+            theme::HUD_SIZE,
+            theme::mono_bold(),
+            theme::HUD_SPACING,
+            Color32::WHITE,
+        )
+        .size()
+        .x
+    };
+    let chars: Vec<char> = text.chars().collect();
+    let mut best = 0usize;
+    let mut lo = 1usize;
+    let mut hi = chars.len();
+    while lo <= hi {
+        let mid = (lo + hi) / 2;
+        let candidate: String = chars[..mid].iter().collect::<String>() + "..";
+        if width(&candidate) <= max {
+            best = mid;
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    let mut out: String = chars[..best].iter().collect();
+    out.push_str("..");
+    out
 }
 
 pub fn chevron(ui: &mut Ui, color: Color32) -> Response {
@@ -527,4 +579,55 @@ pub fn info_row(ui: &mut Ui, label: &str, value: &str, mono: bool) {
         RichText::new(value).size(11.5).color(theme::ink())
     };
     ui.add(Label::new(rich).wrap().selectable(true));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Draws one hud line into a column of the given width, headlessly.
+    fn hud_rect(width: f32, text: &str) -> Rect {
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(width, 200.0))),
+            ..Default::default()
+        };
+        let mut rect = Rect::NOTHING;
+        let sink = &mut rect;
+        let mut out = ctx.run_pass(raw, |ctx| {
+            egui::Area::new(egui::Id::new("hud-test"))
+                .fixed_pos(pos2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    let mut column = ui.new_child(
+                        UiBuilder::new()
+                            .max_rect(Rect::from_min_size(pos2(0.0, 0.0), vec2(width, 200.0))),
+                    );
+                    *sink = hud(&mut column, text, theme::ink()).rect;
+                });
+        });
+        // Headless: drop the texture updates instead of painting them.
+        out.textures_delta.clear();
+        rect
+    }
+
+    /// Regression: hud lines allocated their galley as-is, so a long model
+    /// path stretched its card past the viewport and dragged the right-side
+    /// buttons off the card ("кнопки едут"). The line now clamps to the row.
+    #[test]
+    fn hud_never_exceeds_the_available_width() {
+        let long_path = "/home/user/Загрузки/models/whisper/very/deep/nested/folder/quantized-tiny/с-кириллицей";
+        let rect = hud_rect(300.0, long_path);
+        assert!(
+            rect.width() <= 300.5,
+            "hud stretched to {} px in a 300 px column",
+            rect.width()
+        );
+        // Short text is passed through untouched.
+        let rect = hud_rect(300.0, "ok");
+        assert!(rect.width() < 50.0);
+        // The clamp yields an ellipsis, not a hard cut, for the overflow case.
+        let short = hud_rect(80.0, long_path);
+        assert!(short.width() <= 80.5);
+        assert!(short.width() > 1.0, "clamped hud must still show something");
+    }
 }

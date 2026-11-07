@@ -32,6 +32,12 @@ pub struct Launch {
     pub scroll: Option<f32>,
     /// Run as a Model Context Protocol (MCP) server over stdin/stdout.
     pub mcp: bool,
+    /// Open a modal on startup (`--modal integrations`) — screenshots of the
+    /// dialogs without any window-manager automation.
+    pub modal: Option<String>,
+    /// Window size override in logical points (`--window-size 980x640`),
+    /// snapshot-only: lets a capture target the app's minimum window.
+    pub window_size: Option<[f32; 2]>,
     /// Import an Obsidian vault into CapsuleCraft (.eml) and exit.
     pub import_obsidian: Option<PathBuf>,
     /// Ingest a software project codebase into .capsule and exit.
@@ -90,6 +96,10 @@ pub fn parse(args: &[String]) -> Launch {
             "--onboarding" => launch.onboarding = true,
             "--scroll" => launch.scroll = take_value(&mut index).and_then(|v| v.parse().ok()),
             "--mcp" => launch.mcp = true,
+            "--modal" => launch.modal = take_value(&mut index).map(|v| v.trim().to_lowercase()),
+            "--window-size" => {
+                launch.window_size = take_value(&mut index).and_then(|v| parse_window_size(&v))
+            }
             "import-obsidian" => {
                 if let Some(next) = args.get(index + 1) {
                     if next == "--from" {
@@ -151,6 +161,18 @@ fn parse_locale(value: &str) -> Option<Locale> {
         "en" => Some(Locale::En),
         _ => None,
     }
+}
+
+/// `980x640` (or `980X640`) → logical window size; nonsense yields `None` and
+/// the snapshot keeps its default.
+fn parse_window_size(value: &str) -> Option<[f32; 2]> {
+    let (w, h) = value.split_once(['x', 'X'])?;
+    let w = w.trim().parse::<f32>().ok()?;
+    let h = h.trim().parse::<f32>().ok()?;
+    if !w.is_finite() || !h.is_finite() || w < 200.0 || h < 200.0 || w > 8000.0 || h > 8000.0 {
+        return None;
+    }
+    Some([w, h])
 }
 
 #[cfg(test)]
@@ -255,5 +277,21 @@ mod tests {
     fn parses_verify_project_flags() {
         let cmd = parse(&args(&["--verify-project", "D:/project"]));
         assert_eq!(cmd.verify_project, Some(PathBuf::from("D:/project")));
+    }
+
+    #[test]
+    fn parses_modal_and_window_size_flags() {
+        let launch = parse(&args(&["--modal", "Integrations", "--window-size", "980x640"]));
+        assert_eq!(launch.modal.as_deref(), Some("integrations"));
+        assert_eq!(launch.window_size, Some([980.0, 640.0]));
+        // Inline spelling and the capital X both work.
+        let launch = parse(&args(&["--modal=integrations", "--window-size=1280X800"]));
+        assert_eq!(launch.modal.as_deref(), Some("integrations"));
+        assert_eq!(launch.window_size, Some([1280.0, 800.0]));
+        // Nonsense falls back to the defaults instead of crashing startup.
+        let launch = parse(&args(&["--window-size", "tiny"]));
+        assert_eq!(launch.window_size, None);
+        let launch = parse(&args(&["--window-size", "10x10"]));
+        assert_eq!(launch.window_size, None);
     }
 }
