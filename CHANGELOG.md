@@ -3,6 +3,26 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.4.1] — 2026-11-07 — The button's result is always on screen
+
+### Fixed
+- **Canvas toolbar adds spawn at the visible center** instead of a fixed
+  spot near the world origin (`native/src/blocks/canvas.rs`). The viewport
+  persists in `data.view`, so after panning — or on a board whose saved
+  view sat far from the origin — the new element was added off-screen:
+  «при добавлении через кнопку нестабильно показывает». Now it lands at
+  `view.screen_to_world(canvas_rect.center())` with a +16 px cascade for
+  consecutive adds; the draw pass publishes the canvas rect to egui
+  memory and the toolbar reads it back at click time.
+- Element factory is `canvas_element_at(kind, at, locale)`; the legacy
+  fixed-position wrapper is removed.
+
+### Tests
+- Regression: four views × twelve consecutive adds always intersect the
+  viewport's world rect; cascade never stacks and never drifts past a
+  node size; the rect hand-off is verified by a headless draw pass.
+- Native suite: 255 -> **259** passed (0 failed, 2 ignored).
+
 ## [2.4.0] — 2026-11-07 — The page becomes the canvas
 
 The promised page-mode switch lands: every page is now **«Страница |
