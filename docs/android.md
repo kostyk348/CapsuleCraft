@@ -6,12 +6,22 @@
 
 ## Что уже есть
 
+- `libc++_shared.so` пакуется в APK шагом «Bundle libc++_shared.so» в CI:
+  cpal под Android тянет oboe (C++), поэтому `libcapsuleos_native.so` несёт
+  `DT_NEEDED libc++_shared.so`, а cargo-ndk эту рантайм-библиотеку из NDK не
+  копирует. Пропажа = мгновенный вылет на запуске (так ломались все сборки до
+  v2.12.4). Гейт `scripts/check_apk_native_deps.py` прогоняется в CI по
+  готовому APK: каждая зависимость каждого `.so` должна быть системной либо
+  упакованной, выравнивание — 16 КБ, экспорт `ANativeActivity_onCreate` — на
+  месте.
+
 - `native/src/main.rs::android_main` — точка входа: логирование через
   `android_logger`, внутренняя папка данных приложения передаётся в
   `vault::set_android_data_dir`, хранилище живёт в
   `<internal>/capsulecraft/vault`.
 - `native/Cargo.toml` — target-зависимости `aarch64`: eframe с фичей
-  `android-game-activity`, `android-activity 0.6` (та же мажорная версия,
+  `android-native-activity` (бэкенд обязан совпадать с `NativeActivity` из
+  манифеста; с v2.12.0), `android-activity 0.6` (та же мажорная версия,
   что у winit, чтобы тип `AndroidApp` совпал), `android_logger`; тот же
   `src/main.rs` объявлен ещё и целью `[lib]` с `crate-type = ["cdylib"]` —
   NativeActivity грузит приложение как `libcapsuleos_native.so`, а не как

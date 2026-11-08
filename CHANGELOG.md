@@ -3,6 +3,24 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.12.4] — 2026-11-08 — Android actually launches
+
+### Fixed
+- **The Android app crashed instantly on launch — on every device.** The
+  packaged `libcapsuleos_native.so` carries a `DT_NEEDED` on
+  `libc++_shared.so` (cpal's oboe audio backend is C++), but cargo-ndk does
+  not copy that runtime out of the NDK and the APK shipped without it: the
+  loader failed before a single line of Rust ran. Both CI workflows now
+  bundle `libc++_shared.so` from the NDK sysroot into `jniLibs` and a new
+  gate (`scripts/check_apk_native_deps.py`, pure python, no SDK needed)
+  verifies the built APK: every `DT_NEEDED` of every packaged `.so` must be
+  a system library or be packaged too, PT_LOAD alignment must be 16384
+  (16 KB-page devices), and `ANativeActivity_onCreate` must be exported.
+  Diagnosed by auditing the released v2.12.3 APK's ELF tables; the gate
+  fails on that APK and passes on the fixed layout.
+- `versionCode` was pinned at 1 since the first APK, so new releases could
+  not install over old ones ("App not installed"). It is now bumped per
+  release (2 for this one).
 ## [2.12.3] — 2026-11-08 — Search that finishes the thought
 
 A small QoL wave on top of the interactive-graph merge (PR #69). Tests
