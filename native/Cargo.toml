@@ -1,6 +1,6 @@
 [package]
 name = "capsuleos-native"
-version = "2.11.0"
+version = "2.12.0"
 edition = "2021"
 description = "CapsuleCraft native egui prototype (same .eml vault, no webview)"
 license = "MIT"
@@ -20,7 +20,10 @@ name = "capsuleos-native"
 path = "src/main.rs"
 
 [dependencies]
-eframe = { version = "0.37.0", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "links", "system_fonts", "glow", "wayland", "x11"] }
+# eframe is declared per-target (see the two `cfg(...)` blocks below): its
+# features are additive, and eframe forbids accesskit together with
+# android-native-activity — so the desktop stack and the Android stack must
+# not share one declaration.
 egui = "0.37.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -58,30 +61,37 @@ rand09 = { package = "rand", version = "0.9" }
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 
+# Desktop shell: full feature set, accesskit included.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+eframe = { version = "0.37.0", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "links", "system_fonts", "glow", "wayland", "x11"] }
 # Native file dialogs exist on desktop targets only; on Android the
 # util::dialog shim answers None until the SAF picker lands.
-[target.'cfg(not(target_os = "android"))'.dependencies]
 rfd = "0.17.2"
 # Page files go to the OS trash instead of being deleted outright.
 # (No trash service on Android — the shim falls back to plain deletes.)
 trash = "5"
 
-# Android (scaffold, v2.9.0): the same egui app as a NativeActivity. The
-# desktop eframe features (x11/wayland/glow) are inert on this target; winit
-# drives the Android event loop through android-activity instead. CI builds
-# the APK — see .github/workflows/android.yml and docs/android.md.
+# Android (NativeActivity): the same egui app as a NativeActivity. The
+# desktop features (x11/wayland/glow) are inert here; winit drives the Android
+# event loop through android-activity's native-activity backend, which is what
+# the manifest's `android.app.NativeActivity` requires. eframe 0.37 forbids
+# accesskit together with that backend (compile_error in eframe), so the
+# desktop-only accesskit feature is not enabled on this target. Before
+# v2.12.0 this section wrongly asked for `android-game-activity` while the
+# manifest shipped NativeActivity — the .so exported no
+# `ANativeActivity_onCreate` and the app crashed instantly on launch.
+# CI builds the APK — see .github/workflows/android.yml and docs/android.md.
 [target.'cfg(target_os = "android")'.dependencies]
 eframe = { version = "0.37.0", default-features = false, features = [
-    # accesskit on Android is wired only through game-activity (eframe
-    # compile_error otherwise) — game-activity is the modern backend anyway.
-    "accesskit",
     "clipboard",
     "default_fonts",
     "links",
-    "android-game-activity",
+    "glow",
+    "android-native-activity",
 ] }
-# Same major as winit's copy so the `AndroidApp` handle types unify.
-android-activity = "0.6"
+# Same major as winit's copy so the `AndroidApp` handle types unify; the
+# backend feature must match the manifest (NativeActivity).
+android-activity = { version = "0.6", features = ["native-activity"] }
 android_logger = "0.14"
 log = "0.4"
 # native-tls (imap/ureq) lands on openssl-sys; cross-compiling needs the

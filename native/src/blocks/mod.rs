@@ -453,6 +453,7 @@ pub fn draw_block_row(
     block_count: usize,
     attachments: &mut [Attachment],
     locale: Locale,
+    wrap_body: bool,
 ) -> (bool, Option<BlockOp>) {
     let kind = block_type(block).to_string();
     let mut changed = false;
@@ -468,8 +469,15 @@ pub fn draw_block_row(
                     ui.add_space(GUTTER);
                     ui.vertical(|ui| {
                         ui.set_max_width(ui.available_width());
-                        changed =
-                            draw_block_content(ui, block, &kind, attachments, locale, &mut op);
+                        changed = draw_block_content(
+                            ui,
+                            block,
+                            &kind,
+                            attachments,
+                            locale,
+                            &mut op,
+                            wrap_body,
+                        );
                     });
                 });
             },
@@ -887,6 +895,7 @@ pub fn draw_block_content(
     attachments: &mut [Attachment],
     locale: Locale,
     op: &mut Option<BlockOp>,
+    wrap_body: bool,
 ) -> bool {
     match kind {
         "heading" => {
@@ -1118,7 +1127,10 @@ pub fn draw_block_content(
         "paragraph" => {
             let mut text = block_data_text(block);
             let rows = text.lines().count().max(1);
-            let mut layouter = |ui: &Ui, buffer: &dyn egui::TextBuffer, wrap: f32| {
+            let mut layouter = move |ui: &Ui, buffer: &dyn egui::TextBuffer, wrap: f32| {
+                // "Word wrap off": every paragraph becomes one long line with
+                // a horizontal strip inside its own editor (prose-code style).
+                let wrap = if wrap_body { wrap } else { f32::INFINITY };
                 links::layout(ui, buffer.as_str(), 15.5, wrap)
             };
             let output = TextEdit::multiline(&mut text)
@@ -1566,6 +1578,7 @@ mod drag_reorder_tests {
                                     count,
                                     &mut [],
                                     Locale::En,
+                                    true,
                                 );
                                 if op.is_some() {
                                     *op_slot.borrow_mut() = op;
@@ -1669,6 +1682,7 @@ mod drag_reorder_tests {
                                     count,
                                     &mut [],
                                     Locale::En,
+                                    true,
                                 );
                                 if op.is_some() {
                                     *op_slot.borrow_mut() = op;

@@ -70,6 +70,79 @@ pub enum Command {
     IconCapsule,
     IconCustom,
     IndexProject,
+    // ---- v2.12.0 QoL wave -------------------------------------------------
+    CopyPageMarkdown,
+    CopyPageBody,
+    ToggleWrapBody,
+    NewMeetingNote,
+    NewTodoList,
+    NewJournalPage,
+    CopyVaultPath,
+    RevealVaultFolder,
+    TogglePin,
+    ShowShortcuts,
+    SortPages(crate::ui_state::PageSort),
+}
+
+impl Command {
+    /// Stable identifier used for the palette-recents memory (persisted in
+    /// ui_state.json as plain strings).
+    pub fn key(&self) -> &'static str {
+        match self {
+            Command::NewPage => "new_page",
+            Command::SavePage => "save_page",
+            Command::Undo => "undo",
+            Command::Redo => "redo",
+            Command::ExportPage => "export_page",
+            Command::ExportMarkdown => "export_markdown",
+            Command::ExportVault => "export_vault",
+            Command::ImportEml => "import_eml",
+            Command::ImportObsidian => "import_obsidian",
+            Command::ToggleLocale => "locale",
+            Command::ToggleTheme => "theme",
+            Command::Appearance => "appearance",
+            Command::Onboarding => "onboarding",
+            Command::SetView(_) => "set_view",
+            Command::OpenPage(_) => "open_page",
+            Command::DeletePage => "delete_page",
+            Command::ConnectMcp => "connect_mcp",
+            Command::Integrations => "integrations",
+            Command::SpeakPage => "speak_page",
+            Command::CoThink => "cothink",
+            Command::CoThinkMode(_) => "cothink_mode",
+            Command::OpenImapSync => "open_imap_sync",
+            Command::SyncImapNow => "sync_imap_now",
+            Command::SyncFolderNow => "sync_folder_now",
+            Command::ReloadVault => "reload_vault",
+            Command::DuplicatePage => "duplicate_page",
+            Command::CopyPageLink => "copy_page_link",
+            Command::Faq => "faq",
+            Command::ExportEncrypted => "export_encrypted",
+            Command::ImportEncrypted => "import_encrypted",
+            Command::ToggleZenMode => "zen_mode",
+            Command::ToggleSidebar => "toggle_sidebar",
+            Command::ZoomIn => "zoom_in",
+            Command::ZoomOut => "zoom_out",
+            Command::ResetZoom => "reset_zoom",
+            Command::ToggleWideCanvas => "wide_canvas",
+            Command::IconNova => "icon_nova",
+            Command::IconDocument => "icon_document",
+            Command::IconCapsule => "icon_capsule",
+            Command::IconCustom => "icon_custom",
+            Command::IndexProject => "index_project",
+            Command::CopyPageMarkdown => "copy_markdown",
+            Command::CopyPageBody => "copy_body",
+            Command::ToggleWrapBody => "wrap_body",
+            Command::NewMeetingNote => "tpl_meeting",
+            Command::NewTodoList => "tpl_todo",
+            Command::NewJournalPage => "tpl_journal",
+            Command::CopyVaultPath => "copy_vault_path",
+            Command::RevealVaultFolder => "reveal_vault",
+            Command::TogglePin => "toggle_pin",
+            Command::ShowShortcuts => "shortcuts",
+            Command::SortPages(_) => "sort_pages",
+        }
+    }
 }
 
 pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
@@ -607,6 +680,230 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
             },
         ),
         (
+            Command::CopyPageMarkdown,
+            PaletteCommand {
+                id: "copy_markdown",
+                title: t(locale, Key::CommandCopyMarkdown).into(),
+                hint: "Markdown".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["markdown", "copy", "clipboard", "md"],
+                    &["маркдаун", "копировать", "буфер"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::CopyPageBody,
+            PaletteCommand {
+                id: "copy_body",
+                title: t(locale, Key::CommandCopyBody).into(),
+                hint: String::new(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["copy", "text", "body", "clipboard"],
+                    &["копировать", "текст", "буфер"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::ToggleWrapBody,
+            PaletteCommand {
+                id: "wrap_body",
+                title: t(locale, Key::CommandWrapBody).into(),
+                hint: String::new(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["wrap", "line", "width", "text"],
+                    &["перенос", "строки", "ширина"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::NewMeetingNote,
+            PaletteCommand {
+                id: "tpl_meeting",
+                title: t(locale, Key::TemplateMeeting).into(),
+                hint: t(locale, Key::CommandNewPageHint).into(),
+                group: t(locale, Key::PalettePages).into(),
+                keywords: kw(
+                    &["meeting", "template", "notes", "agenda"],
+                    &["встреча", "шаблон", "заметка", "повестка"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::NewTodoList,
+            PaletteCommand {
+                id: "tpl_todo",
+                title: t(locale, Key::TemplateTodo).into(),
+                hint: t(locale, Key::CommandNewPageHint).into(),
+                group: t(locale, Key::PalettePages).into(),
+                keywords: kw(
+                    &["todo", "template", "tasks", "checklist"],
+                    &["задачи", "шаблон", "чеклист", "список"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::NewJournalPage,
+            PaletteCommand {
+                id: "tpl_journal",
+                title: t(locale, Key::TemplateJournal).into(),
+                hint: t(locale, Key::CommandNewPageHint).into(),
+                group: t(locale, Key::PalettePages).into(),
+                keywords: kw(
+                    &["journal", "diary", "template", "daily"],
+                    &["дневник", "шаблон", "запись"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::CopyVaultPath,
+            PaletteCommand {
+                id: "copy_vault_path",
+                title: t(locale, Key::CommandCopyVaultPath).into(),
+                hint: String::new(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["path", "copy", "folder", "location"],
+                    &["путь", "копировать", "папка"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::RevealVaultFolder,
+            PaletteCommand {
+                id: "reveal_vault",
+                title: t(locale, Key::CommandRevealVault).into(),
+                hint: "Finder / Explorer / Files".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["reveal", "open", "folder", "explorer", "finder", "files"],
+                    &["открыть", "папка", "проводник", "файлы"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::TogglePin,
+            PaletteCommand {
+                id: "toggle_pin",
+                title: t(locale, Key::CommandTogglePin).into(),
+                hint: String::new(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["pin", "unpin", "top", "favorite"],
+                    &["закрепить", "открепить", "избранное"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::ShowShortcuts,
+            PaletteCommand {
+                id: "shortcuts",
+                title: t(locale, Key::CommandShowShortcuts).into(),
+                hint: "Shift + /".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["shortcuts", "keys", "hotkeys", "help", "cheatsheet"],
+                    &["клавиши", "шпаргалка", "горячие", "помощь"],
+                ),
+                shortcut: Some("Shift /".into()),
+            },
+        ),
+        (
+            Command::SortPages(crate::ui_state::PageSort::Manual),
+            PaletteCommand {
+                id: "sort_manual",
+                title: format!(
+                    "{}: {}",
+                    t(locale, Key::PageSort),
+                    t(locale, Key::PageSortManual)
+                ),
+                hint: String::new(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(&["sort", "order", "vault"], &["сортировка", "порядок"]),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::SortPages(crate::ui_state::PageSort::TitleAsc),
+            PaletteCommand {
+                id: "sort_title_asc",
+                title: format!(
+                    "{}: {}",
+                    t(locale, Key::PageSort),
+                    t(locale, Key::PageSortTitleAsc)
+                ),
+                hint: "A→Z".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["sort", "title", "alphabetical"],
+                    &["сортировка", "заголовок", "алфавит"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::SortPages(crate::ui_state::PageSort::TitleDesc),
+            PaletteCommand {
+                id: "sort_title_desc",
+                title: format!(
+                    "{}: {}",
+                    t(locale, Key::PageSort),
+                    t(locale, Key::PageSortTitleDesc)
+                ),
+                hint: "Z→A".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["sort", "title", "reverse"],
+                    &["сортировка", "заголовок", "обратная"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::SortPages(crate::ui_state::PageSort::Newest),
+            PaletteCommand {
+                id: "sort_newest",
+                title: format!(
+                    "{}: {}",
+                    t(locale, Key::PageSort),
+                    t(locale, Key::PageSortNewest)
+                ),
+                hint: String::new(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["sort", "new", "recent", "date"],
+                    &["сортировка", "новые", "дата"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::SortPages(crate::ui_state::PageSort::Oldest),
+            PaletteCommand {
+                id: "sort_oldest",
+                title: format!(
+                    "{}: {}",
+                    t(locale, Key::PageSort),
+                    t(locale, Key::PageSortOldest)
+                ),
+                hint: String::new(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(&["sort", "old", "date"], &["сортировка", "старые", "дата"]),
+                shortcut: None,
+            },
+        ),
+        (
             Command::OpenImapSync,
             PaletteCommand {
                 id: "open_imap_sync",
@@ -772,11 +1069,16 @@ enum Row {
 }
 
 /// Draw the overlay. Returns a command when the user confirms one.
+///
+/// `recent_keys` are the ids of recently executed commands (from
+/// `UiState::palette_recents`): matching commands get a ranking boost so the
+/// palette surfaces the user's usual actions without re-typing.
 pub fn draw(
     ctx: &egui::Context,
     capsules: &[Capsule],
     locale: Locale,
     state: &mut PaletteState,
+    recent_keys: &[String],
 ) -> Option<Command> {
     if !state.open {
         return None;
@@ -865,7 +1167,7 @@ pub fn draw(
                     let command_list: Vec<PaletteCommand> =
                         all_commands.iter().map(|(_, c)| c.clone()).collect();
                     let ranked = search::rank_commands(&state.query, &command_list);
-                    let command_rows: Vec<(i32, Command)> = ranked
+                    let mut command_rows: Vec<(i32, Command)> = ranked
                         .into_iter()
                         .map(|(cmd, score)| {
                             let command = all_commands
@@ -876,6 +1178,19 @@ pub fn draw(
                             (score, command)
                         })
                         .collect();
+                    // Recently executed commands float up (boost, then stable
+                    // re-sort: ties keep the declaration order).
+                    if command_rows
+                        .iter()
+                        .any(|(_, command)| recent_keys.iter().any(|key| key == command.key()))
+                    {
+                        for (score, command) in command_rows.iter_mut() {
+                            if recent_keys.iter().any(|key| key == command.key()) {
+                                *score += 50;
+                            }
+                        }
+                        command_rows.sort_by(|a, b| b.0.cmp(&a.0));
+                    }
 
                     let index = build_index(capsules);
                     let hits = index.rank(&state.query);

@@ -227,7 +227,6 @@ dependencies = [
  "ndk-context",
  "ndk-sys 0.6.0+11769913",
  "num_enum",
- "simd_cesu8",
  "thiserror 2.0.21",
 ]
 
@@ -995,7 +994,7 @@ dependencies = [
 
 [[package]]
 name = "capsuleos-native"
-version = "2.10.1"
+version = "2.12.0"
 dependencies = [
  "android-activity",
  "android_logger",

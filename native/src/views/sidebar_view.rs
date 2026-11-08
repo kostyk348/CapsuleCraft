@@ -17,6 +17,7 @@ use crate::search;
 use crate::text_button;
 use crate::theme;
 use crate::truncate_chars;
+use crate::ui_state::{PageSort, UiState};
 use crate::vault::{PageTree, Vault};
 use crate::{menu_header, menu_row, menu_separator, popover_frame, ShellAction};
 
@@ -177,6 +178,9 @@ pub fn draw_sidebar(
     index: &search::Bm25Index,
     page_texts: &[String],
     watching: bool,
+    ui_state: &UiState,
+    words: usize,
+    threads: usize,
     locale: Locale,
 ) -> ShellAction {
     let mut action = ShellAction::default();
@@ -185,7 +189,7 @@ pub fn draw_sidebar(
     ui.set_min_width(outer.width());
     let inner = outer.shrink2(vec2(14.0, 8.0));
     let header_h = 122.0;
-    let footer_h = 122.0;
+    let footer_h = 138.0;
 
     let header_rect = Rect::from_min_max(inner.min, pos2(inner.right(), inner.top() + header_h));
     let footer_rect = Rect::from_min_max(pos2(inner.left(), inner.bottom() - footer_h), inner.max);
@@ -410,6 +414,73 @@ pub fn draw_sidebar(
             ui.spacing_mut().item_spacing.y = 1.0;
             let query = search.trim().to_lowercase();
             if query.is_empty() {
+                // Pinned pages: first, in pin order, so one click reaches the
+                // pages the user actually lives in.
+                let pinned_positions: Vec<usize> = ui_state
+                    .pinned_ids
+                    .iter()
+                    .filter_map(|id| {
+                        vault
+                            .capsules
+                            .iter()
+                            .position(|capsule| &capsule.message_id == id)
+                    })
+                    .collect();
+                if !pinned_positions.is_empty() {
+                    menu_header(ui, t(locale, Key::Pinned));
+                    for position in pinned_positions.iter() {
+                        if draw_search_row(
+                            ui,
+                            &vault.capsules,
+                            tree,
+                            *position,
+                            selected,
+                            0.0,
+                            None,
+                            search,
+                            locale,
+                        ) {
+                            action.select = Some(*position);
+                        }
+                    }
+                    ui.add_space(8.0);
+                }
+
+                // Sort control: a label-shaped popup; the choice persists in
+                // ui_state.json, so the list stops reshuffling on its own.
+                let sort_button = text_button(
+                    ui,
+                    None,
+                    &format!(
+                        "{}: {}",
+                        t(locale, Key::PageSort),
+                        t(locale, ui_state.sort_mode.key())
+                    ),
+                    false,
+                );
+                egui::Popup::menu(&sort_button)
+                    .frame(popover_frame())
+                    .align(egui::RectAlign::BOTTOM_START)
+                    .show(|ui| {
+                        ui.set_min_width(190.0);
+                        for sort in PageSort::ALL {
+                            if menu_row(
+                                ui,
+                                None,
+                                t(locale, sort.key()),
+                                None,
+                                ui_state.sort_mode == sort,
+                                true,
+                                false,
+                            )
+                            .clicked()
+                            {
+                                action.set_sort = Some(sort);
+                            }
+                        }
+                    });
+                ui.add_space(8.0);
+
                 if tree.roots().is_empty() {
                     empty_pages(ui, &mut action, vault.capsules.is_empty(), locale);
                 } else {
@@ -483,6 +554,45 @@ pub fn draw_sidebar(
                             *dragged_page = None;
                         }
                     }
+
+                    // Recently visited pages (excluding the open one and the
+                    // pins already shown above).
+                    let recents: Vec<usize> = ui_state
+                        .recent_page_ids
+                        .iter()
+                        .filter_map(|id| {
+                            vault
+                                .capsules
+                                .iter()
+                                .position(|capsule| &capsule.message_id == id)
+                        })
+                        .filter(|position| {
+                            Some(*position) != selected
+                                && !ui_state
+                                    .pinned_ids
+                                    .contains(&vault.capsules[*position].message_id)
+                        })
+                        .take(5)
+                        .collect();
+                    if !recents.is_empty() {
+                        ui.add_space(10.0);
+                        menu_header(ui, t(locale, Key::RecentPages));
+                        for position in recents {
+                            if draw_search_row(
+                                ui,
+                                &vault.capsules,
+                                tree,
+                                position,
+                                selected,
+                                0.0,
+                                None,
+                                search,
+                                locale,
+                            ) {
+                                action.select = Some(position);
+                            }
+                        }
+                    }
                 }
             } else {
                 // BM25 over the whole page text, not a substring of the
@@ -527,6 +637,33 @@ pub fn draw_sidebar(
                         &format!("{} · {}", rows.len(), t(locale, Key::Results)),
                         theme::faint(),
                     );
+                    // While the search field owns the keyboard: Enter opens
+                    // the top result, ↑/↓ walk the results with the cursor.
+                    let search_focused =
+                        ui.memory(|m| m.focused()) == Some(egui::Id::new("sidebar_search"));
+                    if search_focused {
+                        let (enter, down, up) = ui.input(|i| {
+                            (
+                                i.key_pressed(egui::Key::Enter),
+                                i.key_pressed(egui::Key::ArrowDown),
+                                i.key_pressed(egui::Key::ArrowUp),
+                            )
+                        });
+                        if (enter || down || up) && !rows.is_empty() {
+                            let cursor_id = egui::Id::new("sidebar_search_cursor");
+                            let mut cursor =
+                                ui.data(|d| d.get_temp::<usize>(cursor_id)).unwrap_or(0);
+                            if down {
+                                cursor = (cursor + 1).min(rows.len() - 1);
+                            }
+                            if up {
+                                cursor = cursor.saturating_sub(1);
+                            }
+                            cursor = cursor.min(rows.len() - 1);
+                            ui.data_mut(|d| d.insert_temp(cursor_id, cursor));
+                            action.select = Some(rows[cursor].0);
+                        }
+                    }
                     for (index, score, snippet) in rows.iter().take(60) {
                         if draw_search_row(
                             ui,
@@ -596,6 +733,19 @@ pub fn draw_sidebar(
     if !vault.load_errors.is_empty() {
         counts_label.on_hover_text(vault.load_errors.join("\n"));
     }
+    footer.add_space(2.0);
+    footer.label(
+        RichText::new(format!(
+            "{} {} · {} {}",
+            words,
+            t(locale, Key::WordsShort),
+            threads,
+            t(locale, Key::FooterThreads)
+        ))
+        .family(theme::mono())
+        .size(9.5)
+        .color(theme::faint()),
+    );
     footer.add_space(8.0);
     footer.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;

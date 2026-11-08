@@ -3,6 +3,57 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.12.0] — 2026-11-08 — The Android launch fix, the app icon, and the second QoL wave
+
+### Fixed
+- **The Android build stopped crashing on launch.** The crate asked eframe for
+  the `android-game-activity` backend while the manifest shipped
+  `android.app.NativeActivity`: the built `.so` exported `GameActivity_onCreate`
+  but no `ANativeActivity_onCreate`, so NativeActivity failed to bind and the
+  app died instantly on open. eframe is declared per-target now — desktop keeps
+  accesskit, Android takes `android-native-activity` (eframe 0.37 forbids that
+  backend together with accesskit, so the screen-reader bridge stays
+  desktop-only; see docs/android.md). Feature resolution is verified by
+  `cargo tree` and the CI Android job.
+- **The APK finally wears the app icon**: a generated launcher set (five
+  densities, legacy + round + adaptive `anydpi-v26` with a foreground layer)
+  in the Graphite/2D81FF brand palette, wired into the manifest. Before this
+  release the launcher showed the stock Android robot.
+
+### Added — navigation and pages
+- Browser-style back/forward: `Alt+Right` walks the forward stack that
+  `Alt+Left` fills; a fresh navigation clears it.
+- `Ctrl+1…9` jumps to the Nth page of the sidebar order — pinned first, then
+  the active sort; with a search query, the results.
+- `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle the views next to the `Alt+1…6`.
+- `N` — quick capture: a fresh page with the cursor in the subject; `F2`
+  focuses the subject for a rename; `Delete` opens confirm-delete.
+- Scroll memory per page (session-wide, incl. back/forward) and
+  `Ctrl+Home` / `Ctrl+End` jump to the very top/bottom.
+
+### Added — sidebar
+- Pinned pages section with `Ctrl+P` to pin/unpin; Recently visited section.
+- Sort menu (vault order / title A-Z / Z-A / newest / oldest) persisted in
+  ui_state.json, plus palette commands.
+- Search results are keyboard-driven: `Enter` opens the top hit, arrows walk
+  them while the field is focused.
+- Vault stats in the footer: total words and reply-chain pages.
+
+### Added — document
+- "Edited 5m ago" in the meta line, from the .eml mtime — hand edits on disk
+  show up honestly.
+- Word wrap toggle (`Ctrl+Shift+L`, palette): paragraphs become one long
+  line with a horizontal strip.
+- Copy as Markdown / Copy page text palette commands.
+- Page templates: meeting note, todo list, journal page dated today.
+
+### Added — shell
+- Palette recents: recently executed commands float up in the ranking
+  (persisted).
+- Copy vault path / Reveal vault folder commands.
+- Keyboard-shortcuts cheat sheet (`Shift+/`); the FAQ shows the app version.
+- Desktop window size persistence.
+
 ## [2.11.0] — 2026-11-08 — The five bug fixes batch, plus the QoL wave
 
 User-reported defects fixed one by one, then a quality-of-life pass across
