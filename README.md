@@ -11,7 +11,7 @@ every note, task and dataset is a plain, RFC 5322 `.eml` file on your disk.**
 
 [![Release](https://img.shields.io/github/v/release/kostyk348/CapsuleCraft?sort=semver&color=0ea5e9&label=release)](https://github.com/kostyk348/CapsuleCraft/releases)
 [![CI](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/CapsuleCraft/actions/workflows/ci.yml)
-[![native tests](https://img.shields.io/badge/native%20tests-304%20passing-22c55e)](native/)
+[![native tests](https://img.shields.io/badge/native%20tests-310%20passing-22c55e)](native/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![No DB](https://img.shields.io/badge/database-none-orange)](#why-eml)
 [![Offline](https://img.shields.io/badge/offline--first-success)](#strengths)
@@ -331,13 +331,14 @@ native/src/
 ```bash
 # native shell
 cd native
-cargo test          # 304 unit tests
+cargo test          # 310 unit tests
 ```
 
 ## Releases
 
 | Version | What | When |
 |---|---|---|
+| **v2.10.1** | The graph stops overlapping: cluster bubbles are **packed** (radii scaled to an area budget, overlaps relaxed apart with an anchor pull to the real centroids, cached by input fingerprint), labels are **de-collided** in the pages view and the overview (greedy priority placement instead of drawing over each other), and the layout ends with a deterministic **separation pass** that pushes coincident nodes apart (golden-angle split when pushes would cancel). Tests 304 → 310 | 2026-11-08 |
 | **v2.10.0** | The graph survives vault scale: three LOD levels (cluster overview with fit-to-screen bubbles + weighted aggregate edges; screen-space **density bins** when thousands of nodes share the viewport; individual pages with capped labels near zoom), folder **clusters** + label-propagation communities, **background Barnes–Hut layout** above 384 nodes streaming snapshots with a progress chip, layout cached by Message-ID between launches; **every release now ships a signed Android APK** (arm64-v8a, repo-borne release keystore, enforced by the finalizer); `--stress-graph N` + `--zoom` harness. Tests 291 → 304 | 2026-11-07 |
 | **v2.9.1** | Nine QoL fixes from a critique pass: the sidebar footer literally rendered «стр. .eml» — now `стр. 3 из 6`; the search placeholder, empty-vault message and «New page» button are finally localized; no-date planning rows show «—» (format moved to a hover tooltip) instead of a clipped «YYYY-MM…»; graph labels carry 26 chars; **session restore** — the open page (by Message-ID) and view reopen on launch; word count in the page meta line («2 блока · 39 слов», RU plurals); **«/» focuses the sidebar search from anywhere** (un-collapses the sidebar if needed); ✕ button + Esc clear the search. Tests 286 → 291 | 2026-11-07 |
 | **v2.9.0** | Blocks move three ways (hover toolbar ↑/⧉/↓, a full-height gutter grab strip, Alt+↑/↓), the unreachable topmost drag gap fixed; the canvas opens on content, keyboard zoom `+`/`−`/`Home`/`Ctrl+0`, minimap from any content; **cross-device sync** — two-way vault ↔ folder merge (LWW by mtime, 5 tests), a «Sync» button in the sidebar; Android begins (NativeActivity scaffold, debug-APK in CI, five cross-build obstacles fixed); **the legacy web engine removed** — the repo is the native shell only, CI runs native tests only. Tests 277 → 286 | 2026-11-07 |

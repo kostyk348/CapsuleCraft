@@ -995,7 +995,7 @@ dependencies = [
 
 [[package]]
 name = "capsuleos-native"
-version = "2.10.0"
+version = "2.10.1"
 dependencies = [
  "android-activity",
  "android_logger",

@@ -59,6 +59,9 @@ pub struct GraphState {
     /// Message-ID → position, persisted next to `ui_state.json`.
     cache: Option<PositionCache>,
     cache_path: Option<std::path::PathBuf>,
+    /// Packed bubble layout for the cluster overview, keyed by an input
+    /// fingerprint — the packing relaxation must not run every frame.
+    pack_cache: Option<(u64, Vec<[f32; 2]>, Vec<f32>)>,
 }
 
 /// Cheap vault fingerprint: page count plus the shape of every page's links
@@ -97,6 +100,7 @@ impl GraphState {
             cached: None,
             cache: None,
             cache_path: None,
+            pack_cache: None,
         }
     }
 }
@@ -124,6 +128,94 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (u8, u8, u8) {
         _ => (v, p, q),
     };
     ((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
+}
+
+/// Bubble-chart packing for the cluster overview. Radii are scaled down so
+/// the total bubble area fits `fill` of the box, then overlapping bubbles
+/// are relaxed apart — anchored to their layout centroids with a gentle
+/// pull, so the geography of the map survives. Deterministic: fixed pair
+/// order, no randomness. Returns the packed centers and the final radii.
+fn pack_bubbles(
+    anchors: &[[f32; 2]],
+    radii: &[f32],
+    bounds: ([f32; 2], [f32; 2]),
+    fill: f32,
+    iterations: usize,
+) -> (Vec<[f32; 2]>, Vec<f32>) {
+    let n = anchors.len();
+    let mut centers = anchors.to_vec();
+    let mut radii = radii.to_vec();
+    if n == 0 {
+        return (centers, radii);
+    }
+    let span = [
+        (bounds.1[0] - bounds.0[0]).max(1.0),
+        (bounds.1[1] - bounds.0[1]).max(1.0),
+    ];
+    let area = span[0] * span[1];
+    let total: f32 = radii.iter().map(|r| r * r).sum::<f32>() * std::f32::consts::PI;
+    if total > area * fill {
+        // Over budget: shrink every bubble by the same factor (area ∝ r²,
+        // so the radius scale is the square root of the area scale), with a
+        // floor so tiny clusters stay clickable.
+        let scale = (area * fill / total).sqrt();
+        for r in &mut radii {
+            *r = (*r * scale).max(7.0);
+        }
+    }
+    for _ in 0..iterations {
+        let mut worst = 0.0f32;
+        for a in 0..n {
+            for b in (a + 1)..n {
+                let dx = centers[b][0] - centers[a][0];
+                let dy = centers[b][1] - centers[a][1];
+                let want = radii[a] + radii[b] + 2.0;
+                let d2 = dx * dx + dy * dy;
+                if d2 >= want * want {
+                    continue;
+                }
+                let d = d2.sqrt().max(1e-3);
+                let push = (want - d) * 0.9;
+                let (ux, uy) = (dx / d, dy / d);
+                // The smaller bubble gives way: displacement weights come
+                // from the other bubble's area.
+                let wa =
+                    radii[b] * radii[b] / (radii[a] * radii[a] + radii[b] * radii[b]).max(1e-6);
+                centers[a][0] -= ux * push * wa;
+                centers[a][1] -= uy * push * wa;
+                centers[b][0] += ux * push * (1.0 - wa);
+                centers[b][1] += uy * push * (1.0 - wa);
+                worst = worst.max(push);
+            }
+        }
+        for i in 0..n {
+            // Anchor pull keeps the layout's geography; the clamp keeps the
+            // bubble inside the canvas.
+            centers[i][0] += (anchors[i][0] - centers[i][0]) * 0.025;
+            centers[i][1] += (anchors[i][1] - centers[i][1]) * 0.025;
+            let pad = radii[i] * 0.5;
+            centers[i][0] = centers[i][0].clamp(bounds.0[0] + pad, bounds.1[0] - pad);
+            centers[i][1] = centers[i][1].clamp(bounds.0[1] + pad, bounds.1[1] - pad);
+        }
+        if worst < 0.4 {
+            break;
+        }
+    }
+    (centers, radii)
+}
+
+/// Greedy label de-collision: `rects` are candidates in priority order
+/// (most important first); returns the indices that fit without touching an
+/// already-kept label. Shared by the pages view and the cluster overview so
+/// both cap text the same way.
+fn keep_non_overlapping(rects: &[egui::Rect]) -> Vec<usize> {
+    let mut kept: Vec<usize> = Vec::new();
+    for (i, r) in rects.iter().enumerate() {
+        if kept.iter().all(|&k| !rects[k].intersects(*r)) {
+            kept.push(i);
+        }
+    }
+    kept
 }
 
 fn cluster_display_name<'a>(key: &'a str, locale: Locale) -> String {
@@ -446,16 +538,53 @@ pub fn draw(
         }
         let span_x = (cmax[0] - cmin[0]).max(1e-3);
         let span_y = (cmax[1] - cmin[1]).max(1e-3);
-        let fit = |p: [f32; 2]| -> egui::Pos2 {
+        let fit = |p: [f32; 2]| -> [f32; 2] {
             let fx = (p[0] - cmin[0]) / span_x;
             let fy = (p[1] - cmin[1]) / span_y;
-            pos2(
+            [
                 rect.left() + (0.08 + 0.84 * fx.clamp(0.0, 1.0)) * rect.width(),
                 rect.top() + (0.08 + 0.84 * fy.clamp(0.0, 1.0)) * rect.height(),
-            )
+            ]
         };
         let cluster_radius =
             |count: usize| -> f32 { (9.0 + (count as f32).sqrt() * 1.7).min(30.0) };
+        let count = graph.clusters.len();
+        let anchors: Vec<[f32; 2]> = (0..count).map(|i| fit(metrics.centroids[i])).collect();
+        let raw_radii: Vec<f32> = (0..count)
+            .map(|i| cluster_radius(graph.clusters[i].members.len()))
+            .collect();
+        // Packing is O(k²) per iteration: cache the result by an input
+        // fingerprint and only recompute when the centroids, sizes or the
+        // canvas actually change (layout snapshots stream in, so this does
+        // refresh as the layout converges).
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        use std::hash::{Hash, Hasher};
+        (rect.width() as u32).hash(&mut hasher);
+        (rect.height() as u32).hash(&mut hasher);
+        for (a, r) in anchors.iter().zip(&raw_radii) {
+            ((a[0] * 2.0) as i32).hash(&mut hasher);
+            ((a[1] * 2.0) as i32).hash(&mut hasher);
+            ((*r * 4.0) as i32).hash(&mut hasher);
+        }
+        let fingerprint = hasher.finish();
+        let (centers, radii) = match &state.pack_cache {
+            Some((key, centers, radii)) if *key == fingerprint => (centers.clone(), radii.clone()),
+            _ => {
+                let packed = pack_bubbles(
+                    &anchors,
+                    &raw_radii,
+                    (
+                        [rect.left() + 4.0, rect.top() + 4.0],
+                        [rect.right() - 4.0, rect.bottom() - 4.0],
+                    ),
+                    0.42,
+                    120,
+                );
+                state.pack_cache = Some((fingerprint, packed.0.clone(), packed.1.clone()));
+                packed
+            }
+        };
+        let center = |index: usize| -> egui::Pos2 { pos2(centers[index][0], centers[index][1]) };
         if state.edges {
             for &(a, b, weight) in &graph.cluster_edges {
                 if graph.clusters[a as usize].members.is_empty()
@@ -463,41 +592,38 @@ pub fn draw(
                 {
                     continue;
                 }
-                let pa = fit(metrics.centroids[a as usize]);
-                let pb = fit(metrics.centroids[b as usize]);
                 let dim = dim_cluster(a).min(dim_cluster(b));
                 let width = (0.8 + (weight as f32).ln().max(0.0)).clamp(0.8, 3.0);
                 painter.line_segment(
-                    [pa, pb],
+                    [center(a as usize), center(b as usize)],
                     Stroke::new(width, theme::fade(theme::accent(), 0.4 * dim)),
                 );
             }
         }
-        let mut order: Vec<u32> = (0..graph.clusters.len() as u32).collect();
+        let mut order: Vec<u32> = (0..count as u32).collect();
         order.sort_by_key(|&index| graph.clusters[index as usize].members.len());
         let mut hovered_cluster: Option<u32> = None;
         if let Some(pointer) = response.hover_pos() {
             let mut best_d2 = f32::INFINITY;
             for &index in &order {
-                let pos = fit(metrics.centroids[index as usize]);
-                let node_radius = cluster_radius(graph.clusters[index as usize].members.len());
-                let d2 = pointer.distance_sq(pos);
-                if d2 <= (node_radius + 6.0).powi(2) && d2 < best_d2 {
+                let i = index as usize;
+                let d2 = pointer.distance_sq(center(i));
+                if d2 <= (radii[i] + 6.0).powi(2) && d2 < best_d2 {
                     best_d2 = d2;
                     hovered_cluster = Some(index);
                 }
             }
         }
         for &index in &order {
-            let count = graph.clusters[index as usize].members.len();
-            let pos = fit(metrics.centroids[index as usize]);
-            let node_radius = cluster_radius(count);
+            let i = index as usize;
+            let pos = center(i);
+            let node_radius = radii[i];
             let color = cluster_color(index);
             let dim = dim_cluster(index);
             if hovered_cluster == Some(index) || focus == Some(index) {
                 painter.circle_filled(pos, node_radius + 5.0, theme::fade(color, 0.2 * dim));
             }
-            painter.circle_filled(pos, node_radius, theme::fade(color, dim));
+            painter.circle_filled(pos, node_radius, theme::fade(color, 0.82 * dim));
             painter.circle_stroke(
                 pos,
                 node_radius,
@@ -505,19 +631,31 @@ pub fn draw(
             );
         }
         // Labels: the largest clusters only, so the overview stays a map and
-        // not a wall of text.
+        // not a wall of text — and they may not sit on top of each other.
         let mut top: Vec<u32> = order.clone();
         top.sort_by_key(|&index| std::cmp::Reverse(graph.clusters[index as usize].members.len()));
+        let label_font = FontId::new(10.5, theme::medium());
+        let mut label_rects: Vec<egui::Rect> = Vec::new();
+        let mut label_texts: Vec<String> = Vec::new();
         for &index in top.iter().take(14) {
-            let count = graph.clusters[index as usize].members.len();
-            let pos = fit(metrics.centroids[index as usize]);
-            let node_radius = cluster_radius(count);
-            let name = cluster_display_name(&graph.clusters[index as usize].key, locale);
+            let i = index as usize;
+            let count = graph.clusters[i].members.len();
+            let name = cluster_display_name(&graph.clusters[i].key, locale);
+            let text = format!("{} · {}", truncate_chars(&name, 22), count);
+            let galley = painter.layout_no_wrap(text.clone(), label_font.clone(), theme::muted());
+            let size = galley.size();
+            let pos = center(i);
+            let min = pos2(pos.x - size.x / 2.0 - 2.0, pos.y + radii[i] + 3.0);
+            label_rects.push(Rect::from_min_size(min, size + vec2(4.0, 2.0)));
+            label_texts.push(text);
+        }
+        for i in keep_non_overlapping(&label_rects) {
+            let index = top[i];
             painter.text(
-                pos2(pos.x, pos.y + node_radius + 5.0),
-                egui::Align2::CENTER_TOP,
-                format!("{} · {}", truncate_chars(&name, 22), count),
-                FontId::new(10.5, theme::medium()),
+                label_rects[i].min + vec2(2.0, 0.0),
+                egui::Align2::LEFT_TOP,
+                &label_texts[i],
+                label_font.clone(),
                 theme::fade(theme::muted(), dim_cluster(index)),
             );
         }
@@ -662,21 +800,23 @@ pub fn draw(
                 Stroke::new(1.0, theme::fade(theme::bg(), 0.8)),
             );
         }
-        // Labels: the most connected visible pages, capped per frame; the
+        // Labels: the most connected visible pages, capped per frame, and
+        // de-collided — a label that would sit on an already-placed one is
+        // skipped, the cap alone left a wall of overlapping text. The
         // hovered page is named by its tooltip instead.
         if state.zoom >= 0.55 {
             let size = (10.5 * state.zoom.clamp(0.85, 1.1)).clamp(9.0, 12.0);
+            let font = FontId::new(size, egui::FontFamily::Proportional);
             let mut top: Vec<u32> = visible.clone();
             top.sort_by_key(|&slot| std::cmp::Reverse(graph.nodes[slot as usize].degree));
-            let mut labeled = 0usize;
+            let mut candidates: Vec<(u32, String, egui::Rect)> = Vec::new();
             for &slot in &top {
-                if labeled >= LABEL_MAX {
+                if candidates.len() >= LABEL_MAX {
                     break;
                 }
                 if hovered == Some(slot) {
                     continue; // the tooltip already names it
                 }
-                labeled += 1;
                 let node = &graph.nodes[slot as usize];
                 let pos = to_screen(positions[slot as usize]);
                 let node_radius = (4.5 + (node.degree as f32).sqrt() * 1.8).clamp(4.5, 12.0)
@@ -687,15 +827,29 @@ pub fn draw(
                 } else {
                     truncate_chars(&capsule.subject, 26)
                 };
-                painter.text(
-                    pos2(pos.x, pos.y + node_radius + 6.0),
-                    egui::Align2::CENTER_TOP,
+                let galley = painter.layout_no_wrap(label.clone(), font.clone(), theme::muted());
+                let text_size = galley.size();
+                let min = pos2(pos.x - text_size.x / 2.0 - 2.0, pos.y + node_radius + 5.0);
+                candidates.push((
+                    slot,
                     label,
-                    FontId::new(size, egui::FontFamily::Proportional),
+                    Rect::from_min_size(min, text_size + vec2(4.0, 2.0)),
+                ));
+            }
+            let keep: Vec<usize> =
+                keep_non_overlapping(&candidates.iter().map(|c| c.2).collect::<Vec<_>>());
+            for i in keep {
+                let (slot, label, rect) = &candidates[i];
+                let node = &graph.nodes[*slot as usize];
+                painter.text(
+                    rect.min + vec2(2.0, 0.0),
+                    egui::Align2::LEFT_TOP,
+                    label,
+                    font.clone(),
                     if selected == Some(node.capsule) {
                         theme::ink()
                     } else {
-                        theme::fade(theme::muted(), 0.9 * dim_node(slot))
+                        theme::fade(theme::muted(), 0.9 * dim_node(*slot))
                     },
                 );
             }
@@ -955,5 +1109,101 @@ mod tests {
             graph::pick_mode(1.0, graph::DENSITY_VISIBLE_MAX + 1),
             LodMode::Density
         );
+    }
+
+    #[test]
+    fn bubbles_pack_without_overlap() {
+        // 24 equal bubbles of r=40 anchored on a dense grid inside a
+        // 900×600 canvas: after packing no two bubbles overlap (2 px
+        // tolerance) and every bubble stays inside the canvas.
+        let mut anchors = Vec::new();
+        for i in 0..24 {
+            let col = i % 6;
+            let row = i / 6;
+            anchors.push([60.0 + col as f32 * 110.0, 60.0 + row as f32 * 130.0]);
+        }
+        let radii = vec![40.0f32; 24];
+        let bounds = ([0.0f32, 0.0], [900.0, 600.0]);
+        let (centers, radii) = pack_bubbles(&anchors, &radii, bounds, 0.42, 120);
+        for a in 0..centers.len() {
+            for b in (a + 1)..centers.len() {
+                let dx = centers[a][0] - centers[b][0];
+                let dy = centers[a][1] - centers[b][1];
+                let dist = (dx * dx + dy * dy).sqrt();
+                assert!(
+                    dist + 2.0 >= radii[a] + radii[b],
+                    "bubbles {a} and {b} overlap: {dist} < {} + {}",
+                    radii[a],
+                    radii[b]
+                );
+            }
+            let pad = radii[a] * 0.5;
+            assert!(centers[a][0] >= bounds.0[0] + pad - 0.01);
+            assert!(centers[a][0] <= bounds.1[0] - pad + 0.01);
+            assert!(centers[a][1] >= bounds.0[1] + pad - 0.01);
+            assert!(centers[a][1] <= bounds.1[1] - pad + 0.01);
+        }
+    }
+
+    #[test]
+    fn bubble_radii_shrink_to_area_budget() {
+        // 20 bubbles of r=50 cannot fit 0.42 of a 400×300 canvas: the
+        // packing must scale them down, but never below the click floor.
+        let anchors: Vec<[f32; 2]> = (0..20)
+            .map(|i| [30.0 + (i % 5) as f32 * 80.0, 30.0 + (i / 5) as f32 * 70.0])
+            .collect();
+        let radii = vec![50.0f32; 20];
+        let (centers, radii) =
+            pack_bubbles(&anchors, &radii, ([0.0, 0.0], [400.0, 300.0]), 0.42, 90);
+        let total: f32 = radii.iter().map(|r| r * r).sum::<f32>() * std::f32::consts::PI;
+        assert!(total <= 0.42 * 400.0 * 300.0 * 1.25, "area {total}");
+        assert!(radii.iter().all(|r| *r >= 7.0));
+        assert!(centers.iter().all(|c| c[0].is_finite() && c[1].is_finite()));
+    }
+
+    #[test]
+    fn packing_keeps_geography_and_is_deterministic() {
+        // Two anchor clouds far apart: packed bubbles must stay near their
+        // own cloud (geography survives), and the result is reproducible.
+        let mut anchors: Vec<[f32; 2]> = (0..8)
+            .map(|i| [40.0 + (i % 4) as f32 * 30.0, 40.0 + (i / 4) as f32 * 30.0])
+            .collect();
+        anchors
+            .extend((0..8).map(|i| [700.0 + (i % 4) as f32 * 30.0, 400.0 + (i / 4) as f32 * 30.0]));
+        let radii = vec![26.0f32; 16];
+        let bounds = ([0.0f32, 0.0], [900.0, 600.0]);
+        let (left, left_r) = pack_bubbles(&anchors, &radii, bounds, 0.42, 80);
+        let (right, right_r) = pack_bubbles(&anchors, &radii, bounds, 0.42, 80);
+        assert_eq!(left, right);
+        assert_eq!(left_r, right_r);
+        for i in 0..8 {
+            assert!(
+                left[i][0] < 450.0,
+                "left bubble drifted right: {}",
+                left[i][0]
+            );
+        }
+        for i in 8..16 {
+            assert!(
+                left[i][0] > 450.0,
+                "right bubble drifted left: {}",
+                left[i][0]
+            );
+        }
+    }
+
+    #[test]
+    fn label_filter_skips_overlaps() {
+        let r = |min: [f32; 2], max: [f32; 2]| {
+            Rect::from_min_max(pos2(min[0], min[1]), pos2(max[0], max[1]))
+        };
+        let rects = vec![
+            r([0.0, 0.0], [100.0, 20.0]),   // kept
+            r([50.0, 0.0], [150.0, 20.0]),  // overlaps the first — dropped
+            r([0.0, 30.0], [80.0, 50.0]),   // disjoint — kept
+            r([90.0, 25.0], [200.0, 45.0]), // disjoint — kept
+        ];
+        assert_eq!(keep_non_overlapping(&rects), vec![0, 2, 3]);
+        assert!(keep_non_overlapping(&[]).is_empty());
     }
 }
