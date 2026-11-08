@@ -2,7 +2,7 @@ name: Android
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
     paths:
       - "native/**"
       - "android/**"
