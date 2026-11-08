@@ -65,7 +65,7 @@ pub fn draw_titlebar(
     right_ui.spacing_mut().item_spacing.x = 2.0;
 
     if is_compact {
-        let more_btn = icon_button(right_ui, Icon::Tag, t(locale, Key::PaletteActions), true, false);
+        let more_btn = icon_button(right_ui, Icon::More, t(locale, Key::PaletteActions), true, false);
         egui::Popup::menu(&more_btn)
             .frame(popover_frame())
             .align(egui::RectAlign::BOTTOM_END)

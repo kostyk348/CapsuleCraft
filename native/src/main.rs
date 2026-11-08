@@ -570,6 +570,10 @@ impl NativeApp {
                 app.show_onboarding = !modals::onboarding::is_done(&dir);
             }
         }
+        #[cfg(target_os = "android")]
+        {
+            app.ui_state.sidebar_collapsed = true;
+        }
         app.watcher = watch::VaultWatch::start(&app.vault.dir);
         app
     }
@@ -2906,7 +2910,7 @@ impl NativeApp {
         let link_context = self.current_link_context();
 
         let top_inset = if cfg!(target_os = "android") { 28.0 } else { 0.0 };
-        let bottom_inset = if cfg!(target_os = "android") { 20.0 } else { 0.0 };
+        let bottom_inset = if cfg!(target_os = "android") { 36.0 } else { 0.0 };
 
         if top_inset > 0.0 {
             egui::Panel::top("safe_area_top")

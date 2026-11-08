@@ -155,7 +155,18 @@ pub fn draw_onboarding(
             ui.painter()
                 .rect_filled(rect, 0.0, Color32::from_black_alpha(150));
 
-            let panel = Rect::from_center_size(rect.center(), vec2(560.0, 380.0));
+            let is_compact = rect.width() < 600.0;
+            let panel_w = if is_compact {
+                (rect.width() - 24.0).clamp(280.0, 560.0)
+            } else {
+                560.0
+            };
+            let panel_h = if is_compact {
+                (rect.height() - 60.0).clamp(320.0, 460.0)
+            } else {
+                380.0
+            };
+            let panel = Rect::from_center_size(rect.center(), vec2(panel_w, panel_h));
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
@@ -170,9 +181,10 @@ pub fn draw_onboarding(
                 theme::accent_color(),
             );
 
+            let pad = if is_compact { 16.0 } else { 24.0 };
             let mut body = ui.new_child(
                 UiBuilder::new()
-                    .max_rect(panel.shrink(24.0))
+                    .max_rect(panel.shrink(pad))
                     .layout(Layout::top_down(Align::Min)),
             );
 
@@ -181,12 +193,13 @@ pub fn draw_onboarding(
                 ui.label(
                     RichText::new(format!("{} / {}", index + 1, STEP_COUNT))
                         .family(theme::mono())
-                        .size(theme::HUD_SIZE + 1.0)
+                        .size(if is_compact { theme::HUD_SIZE } else { theme::HUD_SIZE + 1.0 })
                         .color(theme::faint()),
                 );
-                ui.add_space(10.0);
+                ui.add_space(if is_compact { 6.0 } else { 10.0 });
                 for i in 0..STEP_COUNT {
-                    let (dot, _) = ui.allocate_exact_size(vec2(6.0, 6.0), Sense::hover());
+                    let dot_size = if is_compact { 5.0 } else { 6.0 };
+                    let (dot, _) = ui.allocate_exact_size(vec2(dot_size, dot_size), Sense::hover());
                     let colour = if i == index {
                         theme::accent_color()
                     } else if i < index {
@@ -194,27 +207,27 @@ pub fn draw_onboarding(
                     } else {
                         theme::line_strong()
                     };
-                    ui.painter().circle_filled(dot.center(), 2.5, colour);
+                    ui.painter().circle_filled(dot.center(), if is_compact { 2.0 } else { 2.5 }, colour);
                 }
             });
-            body.add_space(12.0);
+            body.add_space(if is_compact { 8.0 } else { 12.0 });
 
             body.label(
                 RichText::new(t(locale, def.title))
                     .family(theme::display())
-                    .size(21.0)
+                    .size(if is_compact { 18.0 } else { 21.0 })
                     .color(theme::ink_strong()),
             );
-            body.add_space(8.0);
+            body.add_space(if is_compact { 6.0 } else { 8.0 });
             body.add(
                 egui::Label::new(
                     RichText::new(t(locale, def.body))
-                        .size(14.0)
+                        .size(if is_compact { 12.5 } else { 14.0 })
                         .color(theme::ink()),
                 )
                 .wrap(),
             );
-            body.add_space(12.0);
+            body.add_space(if is_compact { 8.0 } else { 12.0 });
 
             // "Try it" jumps into the real feature.
             if let Some(try_action) = def.try_action {
@@ -222,7 +235,7 @@ pub fn draw_onboarding(
                     let button = egui::Button::new(
                         RichText::new(t(locale, def.try_label))
                             .family(theme::medium())
-                            .size(13.0)
+                            .size(if is_compact { 12.0 } else { 13.0 })
                             .color(theme::invert_fg()),
                     )
                     .fill(theme::accent_color())
@@ -236,13 +249,14 @@ pub fn draw_onboarding(
             body.with_layout(Layout::bottom_up(Align::Min), |ui| {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
+                    let btn_h = if is_compact { 32.0 } else { 28.0 };
                     ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                         let next_label = if last {
                             t(locale, Key::OnbDone)
                         } else {
                             t(locale, Key::OnbNext)
                         };
-                        if primary_button(ui, next_label, 28.0).clicked() {
+                        if primary_button(ui, next_label, btn_h).clicked() {
                             action = if last {
                                 OnboardingAction::Complete
                             } else {
@@ -250,7 +264,7 @@ pub fn draw_onboarding(
                             };
                         }
                         if !last
-                            && secondary_button(ui, None, t(locale, Key::OnbBack), 28.0).clicked()
+                            && secondary_button(ui, None, t(locale, Key::OnbBack), btn_h).clicked()
                         {
                             action = OnboardingAction::Prev;
                         }
@@ -260,7 +274,7 @@ pub fn draw_onboarding(
                                     egui::Button::new(
                                         RichText::new(t(locale, Key::OnbSkip))
                                             .family(theme::medium())
-                                            .size(12.5)
+                                            .size(if is_compact { 11.5 } else { 12.5 })
                                             .color(theme::muted()),
                                     )
                                     .fill(Color32::TRANSPARENT)
@@ -339,5 +353,20 @@ mod tests {
         assert!(last > 0);
         let advanced = last + 1;
         assert_eq!(advanced.min(STEP_COUNT - 1), last);
+    }
+
+    #[test]
+    fn onboarding_modal_renders_on_narrow_mobile_screen() {
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(360.0, 800.0))),
+            ..Default::default()
+        };
+        let mut action = OnboardingAction::None;
+        let mut out = ctx.run_ui(raw, |ui| {
+            action = draw_onboarding(true, 0, Locale::Ru, ui.ctx());
+        });
+        out.textures_delta.clear();
+        assert!(matches!(action, OnboardingAction::None));
     }
 }

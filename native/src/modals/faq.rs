@@ -27,7 +27,9 @@ pub fn draw_faq_modal(show: bool, locale: Locale, ctx: &egui::Context) -> bool {
             ui.painter()
                 .rect_filled(rect, 0.0, egui::Color32::from_black_alpha(150));
 
-            let panel = Rect::from_center_size(rect.center(), vec2(720.0, 620.0));
+            let panel_w = (rect.width() - 24.0).clamp(280.0, 720.0);
+            let panel_h = (rect.height() - 48.0).clamp(320.0, 620.0);
+            let panel = Rect::from_center_size(rect.center(), vec2(panel_w, panel_h));
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
