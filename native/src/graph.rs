@@ -643,7 +643,70 @@ fn relax(
     }
 
     normalise(&mut positions);
+    // De-clump: repulsion keeps nodes apart during relaxation, but parent
+    // chains still converge into piles where dots stack on one pixel. Push
+    // overlapping nodes apart so the pages view shows a scatter, not a ball.
+    // The target has to be feasible — n discs only spread so far in a unit
+    // box — so the ideal distance is capped by the packing budget.
+    let feasible = (0.78 / n as f32).sqrt();
+    separate(&mut positions, ideal.min(feasible) * 0.9, 16);
     positions
+}
+
+/// Push apart every pair of nodes closer than `min_dist`. Grid-accelerated
+/// (only near pairs are compared) and deterministic: fixed order, and
+/// coincident points split along the golden-angle direction of the slot.
+fn separate(positions: &mut [[f32; 2]], min_dist: f32, iterations: usize) {
+    let n = positions.len();
+    if n < 2 || min_dist <= 0.0 {
+        return;
+    }
+    let min2 = min_dist * min_dist;
+    for _ in 0..iterations {
+        let grid = NodeGrid::build(positions, min_dist);
+        let mut moved = 0.0f32;
+        for slot in 0..n {
+            let pos = positions[slot];
+            let near = grid.query(
+                [pos[0] - min_dist, pos[1] - min_dist],
+                [pos[0] + min_dist, pos[1] + min_dist],
+            );
+            for other in near {
+                let other = other as usize;
+                if other <= slot {
+                    continue;
+                }
+                let dx = positions[slot][0] - positions[other][0];
+                let dy = positions[slot][1] - positions[other][1];
+                let d2 = dx * dx + dy * dy;
+                if d2 >= min2 {
+                    continue;
+                }
+                if d2 > 1e-12 {
+                    let d = d2.sqrt();
+                    let push = (min_dist - d) * 0.55;
+                    let (ux, uy) = (dx / d, dy / d);
+                    positions[slot][0] += ux * push;
+                    positions[slot][1] += uy * push;
+                    positions[other][0] -= ux * push;
+                    positions[other][1] -= uy * push;
+                } else {
+                    // Coincident: opposite pushes cancel out, so each node
+                    // walks its own golden-angle direction — deterministic.
+                    let (sa, so) = (slot as f32 * 2.399_963_2, other as f32 * 2.399_963_2);
+                    let push = min_dist * 0.55;
+                    positions[slot][0] += sa.sin() * push;
+                    positions[slot][1] += sa.cos() * push;
+                    positions[other][0] += so.sin() * push;
+                    positions[other][1] += so.cos() * push;
+                }
+                moved += min_dist;
+            }
+        }
+        if moved < 1e-4 {
+            break;
+        }
+    }
 }
 
 impl Graph {
@@ -1133,8 +1196,44 @@ mod tests {
         let second = build(&capsules, None);
         for (a, b) in first.nodes.iter().zip(second.nodes.iter()) {
             assert_eq!(a.pos, b.pos);
-            assert!(a.pos[0].abs() <= 1.0001 && a.pos[1].abs() <= 1.0001);
+            // The de-clump pass may push a pile slightly past the old unit
+            // box; the view fits the content bounds, so a small overshoot
+            // is fine — it just must stay bounded.
+            assert!(a.pos[0].abs() <= 1.5 && a.pos[1].abs() <= 1.5);
         }
+    }
+
+    #[test]
+    fn coincident_nodes_get_separated() {
+        // 60 nodes piled on one point: after the pass every pair sits at
+        // (almost) the requested distance and the pile has spread out.
+        let mut positions = vec![[0.5f32, 0.5]; 60];
+        let min_dist = (0.78f32 / 60.0).sqrt() * 0.9;
+        separate(&mut positions, min_dist, 40);
+        let mut worst = f32::INFINITY;
+        for a in 0..positions.len() {
+            for b in (a + 1)..positions.len() {
+                let dx = positions[a][0] - positions[b][0];
+                let dy = positions[a][1] - positions[b][1];
+                worst = worst.min((dx * dx + dy * dy).sqrt());
+            }
+        }
+        assert!(worst > min_dist * 0.6, "worst pair {worst} vs {min_dist}");
+        let span = positions
+            .iter()
+            .fold(0.0f32, |m, p| m.max(p[0].abs().max(p[1].abs())));
+        assert!(span > 0.25, "pile did not spread, span {span}");
+    }
+
+    #[test]
+    fn separate_is_deterministic() {
+        let mut a: Vec<[f32; 2]> = (0..120)
+            .map(|i| [(i % 10) as f32 * 0.01, (i / 10) as f32 * 0.01])
+            .collect();
+        let mut b = a.clone();
+        separate(&mut a, 0.05, 12);
+        separate(&mut b, 0.05, 12);
+        assert_eq!(a, b);
     }
 
     #[test]

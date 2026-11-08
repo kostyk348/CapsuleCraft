@@ -3,6 +3,34 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.10.1] — 2026-11-08 — The graph stops overlapping
+
+A critique pass over the v2.10.0 screenshots: circles piled up, labels sat
+on top of each other, nodes stacked on the same pixel. Tests 304 → 310.
+
+### Added
+- **Bubble packing for the cluster overview**: bubble radii are scaled to an
+  area budget (42 % of the canvas, floor 7 px so tiny clusters stay
+  clickable) and overlapping bubbles are relaxed apart with an anchor pull
+  towards their real centroids, so the folder map stays a map instead of a
+  solid blob. The packing is O(k²) per iteration and cached by an input
+  fingerprint — it recomputes only when centroids, sizes or the canvas
+  change, not per frame.
+- **Label de-collision** shared by the pages view and the cluster overview:
+  candidates are measured, then kept greedily in priority order (most
+  connected first) — a label that would touch an already-placed one is
+  skipped instead of drawn over it.
+- **Node separation pass** at the end of the layout: every pair of nodes
+  closer than a feasible minimum (ideal distance capped by the packing
+  budget for n discs in a unit box) is pushed apart, grid-accelerated and
+  deterministic; coincident points split along per-node golden-angle
+  directions so opposite pushes cannot cancel out. The pages view shows a
+  scatter, not a pile.
+
+### Fixed
+- Cluster bubbles no longer merge into one blob at any zoom in the overview
+  band (60 folders × 500 pages verified under Xvfb).
+
 ## [2.10.0] — 2026-11-07 — A graph that survives 200k pages, and Android in the release
 
 The graph view was rebuilt for vault scale: it stays responsive and readable
