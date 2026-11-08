@@ -1413,7 +1413,16 @@ impl NativeApp {
 
     /// Humanized "edited 5m ago" stamp for the page meta line, from the
     /// .eml file's mtime (hand edits on disk show up honestly).
-    fn page_edited_hint(&self, index: usize) -> Option<String> {
+    /// Absolute local stamp for a modification time — the hover text on
+    /// the humanized "edited Nm ago" label (test: edited_stamp_format).
+    pub(crate) fn edited_absolute_stamp(modified: std::time::SystemTime) -> String {
+        chrono::DateTime::<chrono::Local>::from(modified)
+            .format("%d.%m.%Y %H:%M")
+            .to_string()
+    }
+
+    /// (humanized, absolute) pair for the document meta line.
+    fn page_edited_hint(&self, index: usize) -> Option<(String, String)> {
         let capsule = self.vault.capsules.get(index)?;
         let modified = std::fs::metadata(self.vault.dir.join(&capsule.file_name))
             .ok()?
@@ -1422,7 +1431,15 @@ impl NativeApp {
         let elapsed = modified.elapsed().ok()?;
         let seconds = elapsed.as_secs();
         let (key, count) = if seconds < 60 {
-            return Some(t(self.locale, Key::EditedNow).to_string());
+            return Some((
+                t(self.locale, Key::EditedNow).to_string(),
+                Self::edited_absolute_stamp(
+                    std::fs::metadata(self.vault.dir.join(&capsule.file_name))
+                        .ok()?
+                        .modified()
+                        .ok()?,
+                ),
+            ));
         } else if seconds < 3600 {
             (Key::EditedMinutes, seconds / 60)
         } else if seconds < 86400 {
@@ -1430,7 +1447,15 @@ impl NativeApp {
         } else {
             (Key::EditedDays, seconds / 86400)
         };
-        Some(t(self.locale, key).replace("{n}", &count.to_string()))
+        Some((
+            t(self.locale, key).replace("{n}", &count.to_string()),
+            Self::edited_absolute_stamp(
+                std::fs::metadata(self.vault.dir.join(&capsule.file_name))
+                    .ok()?
+                    .modified()
+                    .ok()?,
+            ),
+        ))
     }
 
     /// Create a page pre-filled with one of the stock templates.
@@ -2416,6 +2441,9 @@ pub(crate) struct ShellAction {
     pub(crate) select: Option<usize>,
     pub(crate) open_vault: bool,
     pub(crate) new_page: bool,
+    /// Create a page with this subject (sidebar no-results search:
+    /// type a title, press Enter or click the create row).
+    pub(crate) create_page_named: Option<String>,
     pub(crate) reload: bool,
     pub(crate) save: bool,
     pub(crate) view: Option<View>,
@@ -2451,6 +2479,7 @@ impl ShellAction {
         self.select = other.select.or(self.select);
         self.open_vault |= other.open_vault;
         self.new_page |= other.new_page;
+        self.create_page_named = other.create_page_named.or(self.create_page_named.take());
         self.reload |= other.reload;
         self.save |= other.save;
         self.view = other.view.or(self.view);
@@ -3011,7 +3040,9 @@ impl NativeApp {
                                         .as_deref(),
                                     self.ocr_highlight.as_ref().map(|(id, _)| id.as_str()),
                                     self.ui_state.wrap_body,
-                                    edited_hint.as_deref(),
+                                    edited_hint
+                                        .as_ref()
+                                        .map(|(hint, stamp)| (hint.as_str(), stamp.as_str())),
                                 ));
 
                                 // Page-mode canvas: a clicked, already-selected
@@ -3126,6 +3157,14 @@ impl NativeApp {
             self.create_page_titled(&title);
         } else if let Some(index) = view_action.select.or(editor.select).or(shell.select) {
             self.select_page(index);
+        }
+        if let Some(title) = shell.create_page_named.take() {
+            self.create_page_titled(&title);
+            // Put the caret straight into the title: the page came from a
+            // typed query, so renaming is the next thing the user does.
+            ctx.data_mut(|data| {
+                data.insert_temp(egui::Id::new("focus-page-subject"), true);
+            });
         }
         if let Some((dragged_idx, new_parent_id)) = shell.reparent {
             if let Err(err) = self.vault.reparent_page(dragged_idx, new_parent_id) {
@@ -4082,5 +4121,22 @@ mod app_tests {
             "no click in the title bar opened the Integrations modal"
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod qol_tests {
+    /// The hover stamp on "edited Nm ago" must read as a fixed-width local
+    /// datetime (dd.mm.yyyy hh:mm) whatever the timezone offset is.
+    #[test]
+    fn edited_stamp_format() {
+        let stamp = crate::NativeApp::edited_absolute_stamp(std::time::SystemTime::UNIX_EPOCH);
+        let digits: String = stamp.chars().filter(|c| c.is_ascii_digit()).collect();
+        assert_eq!(stamp.len(), 16, "dd.mm.yyyy hh:mm is 16 chars: {stamp}");
+        assert_eq!(digits.len(), 12, "12 digits: {stamp}");
+        assert_eq!(stamp.as_bytes()[2], b'.');
+        assert_eq!(stamp.as_bytes()[5], b'.');
+        assert_eq!(stamp.as_bytes()[10], b' ');
+        assert_eq!(stamp.as_bytes()[13], b':');
     }
 }

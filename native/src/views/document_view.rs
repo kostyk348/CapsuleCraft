@@ -117,7 +117,8 @@ pub fn draw_document(
     wrap_body: bool,
     // Humanized "edited 5m ago" stamp computed from the file mtime (None for
     // pages whose file could not be stat'ed).
-    edited_hint: Option<&str>,
+    // ("edited 5m ago", absolute local stamp for the hover tooltip).
+    edited_hint: Option<(&str, &str)>,
 ) -> EditorAction {
     let mut action = EditorAction::default();
     let mut area = ScrollArea::vertical().id_salt("document");
@@ -187,6 +188,17 @@ pub fn draw_document(
                     // in the vault mid-word would be destructive.
                     let title_id =
                         egui::Id::new(("subject-before-edit", capsule.message_id.clone()));
+
+                    // A page created from the sidebar search query opens
+                    // with the caret in the title: renaming is the next
+                    // thing the user does.
+                    if ui
+                        .ctx()
+                        .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("focus-page-subject")))
+                        == Some(true)
+                    {
+                        response.request_focus();
+                    }
                     if response.gained_focus() {
                         ui.ctx()
                             .data_mut(|data| data.insert_temp(title_id, capsule.subject.clone()));
@@ -839,7 +851,7 @@ pub fn document_meta(
     ui: &mut Ui,
     capsule: &mut Capsule,
     locale: Locale,
-    edited_hint: Option<&str>,
+    edited_hint: Option<(&str, &str)>,
 ) -> bool {
     let mut changed = false;
     ui.horizontal_wrapped(|ui| {
@@ -1021,7 +1033,7 @@ pub fn document_meta(
 
         // "Изменено 5 мин назад" — файл .eml правится и снаружи, поэтому
         // штамп берётся из mtime, а не из внутреннего поля страницы.
-        if let Some(hint) = edited_hint {
+        if let Some((hint, stamp)) = edited_hint {
             if !hint.trim().is_empty() {
                 dot_sep(ui);
                 ui.label(
@@ -1029,7 +1041,8 @@ pub fn document_meta(
                         .family(theme::mono())
                         .size(9.5)
                         .color(theme::faint()),
-                );
+                )
+                .on_hover_text(stamp);
             }
         }
     });

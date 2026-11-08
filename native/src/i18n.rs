@@ -140,6 +140,7 @@ strings! {
     NoMatches => ("Ничего не найдено", "No pages match"),
     Results => ("найдено", "found"),
     ClearSearch => ("Сбросить поиск", "Clear search"),
+    CreatePageNamed => ("Создать страницу", "Create page"),
     ChangeFolder => ("Сменить папку…", "Change folder…"),
     ZeroDb => ("Zero-DB хранилище", "Zero-DB vault"),
     Watching => ("папка под наблюдением", "folder watched"),

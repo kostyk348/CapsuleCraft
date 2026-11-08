@@ -3,6 +3,35 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.12.3] — 2026-11-08 — Search that finishes the thought
+
+A small QoL wave on top of the interactive-graph merge (PR #69). Tests
+336 → 336 after the merge base moved to 333; three new headless tests.
+
+### Added
+- **Create a page straight from the search field.** When the sidebar search
+  finds nothing, the empty state now offers "Создать страницу “<запрос>”"
+  (a click, or just Enter — the field already owns the keyboard). The page
+  is created with the typed title, the search clears, and the caret lands
+  in the new page's subject: typing a name is one gesture away from having
+  the page. The shell reuses the same `create_page_titled` path wiki-links
+  use, so toasts, saving and link refresh all behave identically.
+- **Esc empties the sidebar search.** With the field focused, the first
+  Escape clears the query; the next one (field now unfocused) reaches the
+  global handlers unchanged. Getting the semantics right required two egui
+  lessons, both written down in comments: a singleline TextEdit surrenders
+  focus while still processing the Escape, so `memory.focused()` is already
+  empty by the time widgets draw (the field's focus is remembered from the
+  previous frame instead), and the probe reads its flags before taking the
+  context write lock, because Response methods share that RwLock.
+
+### Changed
+- The "изменено N мин назад" stamp in the page meta line shows the absolute
+  local timestamp (`dd.mm.yyyy hh:mm`) on hover.
+- Enter over a non-empty result list opens the top result via the same
+  frame-start focus probe as the create flow — the old mid-frame probe
+  could observe the field as already blurred on the Enter frame and drop
+  the keystroke.
 ## [2.12.2] — 2026-11-08 — Drag and drop actually drops
 
 The user was right: page drag-and-drop in the sidebar never delivered. Two
