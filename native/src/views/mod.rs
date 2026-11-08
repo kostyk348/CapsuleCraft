@@ -109,6 +109,11 @@ pub struct ViewAction {
     /// Page to select by Message-ID; the shell resolves it to an index.
     pub select_id: Option<String>,
     pub changed: bool,
+    /// Capsules the view mutated, by index. The shell must persist these
+    /// pages themselves: the planning board writes into the inbox page while
+    /// a different (or no) page is selected, and saving only the open page
+    /// used to drop those edits on the next reload.
+    pub touched: Vec<usize>,
     pub view: Option<View>,
     pub toast: Option<String>,
     pub request_palette: bool,
@@ -120,6 +125,7 @@ impl ViewAction {
         self.select = other.select.or(self.select);
         self.select_id = other.select_id.or_else(|| self.select_id.take());
         self.changed |= other.changed;
+        self.touched.extend(other.touched);
         self.view = other.view.or(self.view);
         self.toast = other.toast.or_else(|| self.toast.take());
         self.request_palette |= other.request_palette;

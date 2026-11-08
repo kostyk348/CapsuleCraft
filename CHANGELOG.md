@@ -3,6 +3,34 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.12.1] — 2026-11-08 — The planning board keeps its promises
+
+User-reported defect batch against the v2.12.0 planning board.
+
+### Fixed
+- **Tasks survive a reload.** Planning edits (add, tick, reschedule) landed
+  on the inbox page while the shell only ever saved the open page, so every
+  restart — or any watcher-triggered reload — threw the edits away. Views now
+  report the capsules they touched (`ViewAction::touched`) and the shell
+  persists exactly those pages, with undo snapshots and a «Saved» status.
+- **Tasks land on a savable page.** Quick add used to drop tasks onto the
+  first page even when it was an imported read-only .eml: the write failed
+  and the task existed only in memory. The board now prefers a native inbox
+  page, then any native page, and creates a fresh page when the vault has
+  none — task creation always works.
+- **The due-date field no longer fights the keyboard.** The row rebuilds its
+  item every frame, so every keystroke that was not yet a complete date was
+  discarded and the field snapped back mid-typing. Partial input now lives in
+  a per-task draft buffer and commits as soon as the date is complete (or on
+  blur); a red tint marks invalid text while typing.
+- **Overdue is honest.** With dates typeable again, a task kept whatever
+  stale date it had; the calendar day panel now says explicitly when the
+  focused day is in the past (a new task lands in Overdue at once), and the
+  red overdue tint follows the date being typed, not just the stored one.
+
+Tests 318 → 323 (touched reporting, native-target choice, page creation
+fallback, disk round-trip, due-draft typing).
+
 ## [2.12.0] — 2026-11-08 — The Android launch fix, the app icon, and the second QoL wave
 
 ### Fixed

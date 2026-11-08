@@ -432,6 +432,7 @@ strings! {
     TaskAdded => ("Задача добавлена", "Task added"),
     TasksOn => ("Задачи на", "Tasks on"),
     Rescheduled => ("Срок перенесён:", "Rescheduled to"),
+    PastDayHint => ("День уже в прошлом — новая задача сразу попадёт в «просрочено».", "This day is in the past — the task lands in Overdue right away."),
     CalendarHint => ("Клик по дню показывает его задачи справа; перетащите задачу на другой день, чтобы перенести срок.", "Click a day to show its tasks on the right; drag a task onto another day to reschedule it."),
     ShowAllDay => ("Показать все задачи этого дня", "Show all of this day's tasks"),
     InboxSubject => ("Входящие задачи", "Inbox tasks"),
