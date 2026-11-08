@@ -48,6 +48,8 @@ pub enum AttachmentAction {
 #[derive(Default)]
 pub struct EditorAction {
     pub changed: bool,
+    /// One-off notification the shell shows as a toast.
+    pub toast: Option<String>,
     /// Block index the user asked to delete — the shell confirms first.
     pub delete_block: Option<usize>,
     pub select: Option<usize>,
@@ -212,6 +214,45 @@ pub fn draw_document(
                         action.view = Some(View::Mail);
                     }
                     ui.add_space(18.0);
+                    // The letter's text itself. The Page tab used to show only
+                    // the banner and push the content to the Email tab, which
+                    // read like a broken page; render the body here, read-only.
+                    let body = capsule.plain_body.clone().or_else(|| {
+                        capsule
+                            .html_body
+                            .as_deref()
+                            .map(crate::mime::html_to_plain_text)
+                    });
+                    if let Some(text) = body.filter(|text| !text.trim().is_empty()) {
+                        super::section(ui, t(locale, Key::BodyText));
+                        Frame::new()
+                            .fill(theme::wash())
+                            .corner_radius(theme::RADIUS)
+                            .inner_margin(Margin::same(14))
+                            .show(ui, |ui| {
+                                ui.set_max_width(ui.available_width());
+                                ui.add(
+                                    Label::new(
+                                        RichText::new(text.trim_end())
+                                            .size(13.0)
+                                            .color(theme::ink()),
+                                    )
+                                    .wrap(),
+                                );
+                            });
+                        ui.add_space(10.0);
+                        if secondary_button(ui, Some(Icon::Copy), t(locale, Key::CopyBody), 26.0)
+                            .clicked()
+                        {
+                            ui.output_mut(|out| {
+                                out.commands.push(egui::OutputCommand::CopyText(
+                                    text.trim_end().to_string(),
+                                ));
+                            });
+                            action.toast = Some(t(locale, Key::CopiedToClipboard).to_string());
+                        }
+                        ui.add_space(18.0);
+                    }
                     if !capsule.attachments.is_empty() {
                         super::section(ui, t(locale, Key::AttachmentsTitle));
                         // Imported emails show their documents too: images and
@@ -804,6 +845,19 @@ pub fn document_meta(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool
                 .size(9.5)
                 .color(theme::faint()),
             );
+            // Reading-time estimate at ~200 words per minute, hidden for
+            // near-empty pages so the meta line stays clean.
+            let words = links::word_count(capsule);
+            if words >= 60 {
+                dot_sep(ui);
+                let minutes = (words / 200).max(1);
+                ui.label(
+                    RichText::new(format!("~{} {}", minutes, t(locale, Key::ReadTime)))
+                        .family(theme::mono())
+                        .size(9.5)
+                        .color(theme::faint()),
+                );
+            }
         } else {
             ui.label(
                 RichText::new(t(locale, Key::ImportedEmail))

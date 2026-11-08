@@ -245,6 +245,10 @@ struct NativeApp {
     threads: ThreadsState,
     palette: PaletteState,
     history: history::HistoryStore,
+    /// Recently focused pages (message ids), newest last — Alt+Left walks it.
+    nav_stack: Vec<String>,
+    nav_last: Option<String>,
+    window_title: String,
     /// Snapshot of the page as it was before the latest edit.
     snapshot: Option<(String, PageSnapshot)>,
     toast: Option<(String, Instant)>,
@@ -472,6 +476,9 @@ impl NativeApp {
             threads: ThreadsState::default(),
             palette: PaletteState::default(),
             history: history::HistoryStore::default(),
+            nav_stack: Vec::new(),
+            nav_last: None,
+            window_title: String::new(),
             snapshot: None,
             toast: None,
             confirm_delete: false,
@@ -1181,6 +1188,60 @@ impl NativeApp {
                     .find(|(subject, _, _)| subject == &wanted)
             })
             .map(|(_, _, index)| *index)
+    }
+
+    /// Clone the current page into a new one: same blocks, tags and body,
+    /// fresh identity and file.
+    fn duplicate_selected(&mut self) {
+        if !self.save_selected() {
+            return;
+        }
+        let Some(index) = self.selected else {
+            return;
+        };
+        let source = match self.vault.capsules.get(index) {
+            Some(capsule) => capsule.clone(),
+            None => return,
+        };
+        match self.vault.create_page(None) {
+            Ok(new_index) => {
+                if let Some(capsule) = self.vault.capsules.get_mut(new_index) {
+                    capsule.subject = format!("{} (copy)", source.subject);
+                    capsule.blocks = source.blocks.clone();
+                    capsule.tags = source.tags.clone();
+                    capsule.plain_body = source.plain_body.clone();
+                    capsule.html_body = source.html_body.clone();
+                    capsule.in_reply_to = None;
+                    capsule.parent_id = None;
+                }
+                if self.vault.save(new_index).is_ok() {
+                    self.selected = Some(new_index);
+                    self.dirty = false;
+                    self.refresh_links();
+                    self.toast(t(self.locale, Key::Duplicated));
+                }
+            }
+            Err(err) => {
+                self.status = err;
+                self.status_error = true;
+            }
+        }
+    }
+
+    /// Put a capsule:// link to the current page on the clipboard.
+    fn copy_page_link(&mut self, ctx: &egui::Context) {
+        let Some(index) = self.selected else {
+            return;
+        };
+        let Some(capsule) = self.vault.capsules.get(index) else {
+            return;
+        };
+        let link = format!("capsule://{}", capsule.message_id);
+        ctx.output_mut(|out| {
+            out.commands
+                .push(egui::OutputCommand::CopyText(link.clone()))
+        });
+        self.toast(t(self.locale, Key::CopiedToClipboard));
     }
 
     fn toast(&mut self, text: impl Into<String>) {
@@ -2229,6 +2290,56 @@ impl NativeApp {
         if cmd && ctx.input(|i| i.key_pressed(egui::Key::N)) {
             self.new_page(None);
         }
+        if cmd && ctx.input(|i| i.key_pressed(egui::Key::D)) && !self.palette.open {
+            self.duplicate_selected();
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::F5)) {
+            self.save_selected();
+            let count = self.vault.capsules.len();
+            self.vault.reload();
+            self.refresh_links();
+            self.toast(format!(
+                "{}: {}",
+                t(self.locale, Key::Reloaded),
+                self.vault.capsules.len().max(count)
+            ));
+        }
+        if cmd && ctx.input(|i| i.key_pressed(egui::Key::F)) && !self.palette.open {
+            // Focus the sidebar search on the next frame; the sidebar picks
+            // the flag up from egui temp storage.
+            ctx.data_mut(|data| data.insert_temp(egui::Id::new("focus-sidebar-search"), true));
+        }
+        // J/K walk the page list without touching the mouse — only when no
+        // text field is eating the keyboard.
+        if !self.palette.open
+            && !ctx.egui_wants_keyboard_input()
+            && !ctx.input(|i| i.modifiers.any())
+        {
+            let step = ctx.input(|i| {
+                (i.key_pressed(egui::Key::J) as i32) - (i.key_pressed(egui::Key::K) as i32)
+            });
+            if step != 0 && !self.vault.capsules.is_empty() {
+                let count = self.vault.capsules.len();
+                let current = self.selected.unwrap_or(0);
+                self.selected = Some((current as i32 + step).rem_euclid(count as i32) as usize);
+            }
+        }
+        // Alt+Left returns to the previously focused page.
+        if !self.palette.open
+            && ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::ArrowLeft))
+        {
+            if let Some(previous) = self.nav_stack.pop() {
+                if let Some(index) = self
+                    .vault
+                    .capsules
+                    .iter()
+                    .position(|capsule| capsule.message_id == previous)
+                {
+                    self.selected = Some(index);
+                    self.nav_last = Some(previous);
+                }
+            }
+        }
         if cmd && ctx.input(|i| i.key_pressed(egui::Key::K)) {
             self.palette.open = !self.palette.open;
             self.palette.just_opened = self.palette.open;
@@ -2274,6 +2385,37 @@ impl NativeApp {
             } else {
                 std::process::exit(0);
             }
+        }
+
+        // Track page navigation for Alt+Left and keep the OS window title in
+        // sync with what the user is looking at.
+        let current_id = self
+            .selected
+            .and_then(|index| self.vault.capsules.get(index))
+            .map(|capsule| capsule.message_id.clone());
+        if current_id != self.nav_last {
+            if let Some(previous) = self.nav_last.take() {
+                if self.nav_stack.last() != Some(&previous) {
+                    self.nav_stack.push(previous);
+                    if self.nav_stack.len() > 64 {
+                        self.nav_stack.remove(0);
+                    }
+                }
+            }
+            self.nav_last = current_id.clone();
+        }
+        let wanted_title = match current_id.as_deref().and_then(|id| {
+            self.vault
+                .capsules
+                .iter()
+                .find(|capsule| capsule.message_id == id)
+        }) {
+            Some(capsule) => format!("{} — CapsuleCraft", capsule.subject),
+            None => "CapsuleCraft".to_string(),
+        };
+        if self.window_title != wanted_title {
+            self.window_title = wanted_title.clone();
+            ctx.send_viewport_cmd(egui::ViewportCommand::Title(wanted_title));
         }
 
         let tree = PageTree::build(&self.vault.capsules);
@@ -2496,6 +2638,9 @@ impl NativeApp {
                     });
             });
 
+        if let Some(message) = editor.toast.take() {
+            self.toast(message);
+        }
         if editor.changed {
             self.record_change();
         }
@@ -2951,6 +3096,20 @@ impl NativeApp {
             PaletteCommand::ExportVault => self.export_vault(),
             PaletteCommand::ImportEml => self.import_eml(),
             PaletteCommand::ImportObsidian => self.import_obsidian_dialog(),
+            PaletteCommand::SyncFolderNow => self.sync_folder_action(false),
+            PaletteCommand::ReloadVault => {
+                self.save_selected();
+                let count = self.vault.capsules.len();
+                self.vault.reload();
+                self.refresh_links();
+                self.toast(format!(
+                    "{}: {}",
+                    t(self.locale, Key::Reloaded),
+                    self.vault.capsules.len().max(count)
+                ));
+            }
+            PaletteCommand::DuplicatePage => self.duplicate_selected(),
+            PaletteCommand::CopyPageLink => self.copy_page_link(ctx),
             PaletteCommand::ToggleLocale => {
                 let locale = self.locale.other();
                 self.set_locale(locale);

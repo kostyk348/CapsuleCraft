@@ -233,8 +233,16 @@ pub fn draw(
                         );
 
                         if !collapsed {
-                            for (depth, index) in &chain.replies {
-                                reply_row(ui, capsules, *index, *depth, locale, &mut action);
+                            for (position, (depth, index)) in chain.replies.iter().enumerate() {
+                                reply_row(
+                                    ui,
+                                    capsules,
+                                    *index,
+                                    *depth,
+                                    position,
+                                    locale,
+                                    &mut action,
+                                );
                             }
                         }
                     }
@@ -251,6 +259,7 @@ fn reply_row(
     capsules: &[Capsule],
     index: usize,
     depth: usize,
+    position: usize,
     locale: Locale,
     action: &mut ViewAction,
 ) {
@@ -267,6 +276,14 @@ fn reply_row(
     );
     let ui = &mut row;
     ui.spacing_mut().item_spacing.x = 7.0;
+    // Chain position numbering: where a reply sits inside the thread. Only
+    // the multithread view numbers pages; the sidebar keeps plain titles.
+    ui.label(
+        RichText::new(format!("{}.", position + 1))
+            .family(theme::mono())
+            .size(10.0)
+            .color(theme::fade(theme::faint(), 0.9)),
+    );
     ui.label(
         RichText::new("↳")
             .size(11.0)

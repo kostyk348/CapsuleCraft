@@ -1834,6 +1834,134 @@ mod tests {
         );
     }
 
+    /// Minimal egui-semantics check: hover-rect + full-row click overlay,
+    /// then a checkbox registered later in a child UI — who gets the click?
+    #[test]
+    fn minimal_overlay_vs_checkbox_semantics() {
+        let ctx = egui::Context::default();
+        let done = Rc::new(RefCell::new(false));
+        let row_clicked = Rc::new(RefCell::new(false));
+        let rect_cell: Rc<RefCell<Option<egui::Rect>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let done = done.clone();
+            let row_clicked = row_clicked.clone();
+            let rect_cell = rect_cell.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut out = ctx.run_pass(raw, |ctx| {
+                    ctx.root_ui(|ui| {
+                        let mut body = ui.new_child(
+                            egui::UiBuilder::new()
+                                .max_rect(egui::Rect::from_min_size(
+                                    egui::Pos2::ZERO,
+                                    egui::vec2(1400.0, 900.0),
+                                ))
+                                .layout(egui::Layout::top_down(egui::Align::Min)),
+                        );
+                        egui::ScrollArea::vertical()
+                            .auto_shrink([false, false])
+                            .show(&mut body, |ui| {
+                                let (rect, _) =
+                                    ui.allocate_exact_size(vec2(400.0, 34.0), egui::Sense::hover());
+                                *rect_cell.borrow_mut() = Some(rect);
+                                let row_hit = ui.interact(
+                                    rect,
+                                    egui::Id::unique(("scratch-row")),
+                                    egui::Sense::click(),
+                                );
+                                if row_hit.clicked() {
+                                    *row_clicked.borrow_mut() = true;
+                                }
+                                let mut child = ui.new_child(
+                                    egui::UiBuilder::new()
+                                        .max_rect(rect.shrink2(vec2(8.0, 4.0)))
+                                        .layout(egui::Layout::left_to_right(egui::Align::Center)),
+                                );
+                                let mut value = done.borrow_mut();
+                                crate::widgets::controls::checkbox(&mut child, &mut value);
+                            });
+                    });
+                });
+                out.textures_delta.clear();
+            }
+        };
+
+        run(vec![]);
+        let rect = rect_cell.borrow().expect("row rect");
+        let p = pos2(rect.left() + 16.0, rect.center().y);
+        run(vec![egui::Event::PointerMoved(p)]);
+        run(vec![press(p)]);
+        run(vec![release(p)]);
+        run(vec![]);
+        assert!(
+            *done.borrow(),
+            "checkbox must win the click over the later-registered row overlay"
+        );
+        assert!(!*row_clicked.borrow(), "row must not steal the click");
+    }
+
+    /// Clicking the checkbox toggles the task even though the full-row
+    /// click overlay covers the line (egui must give the click to the
+    /// later, smaller widget under the pointer).
+    #[test]
+    fn checkbox_click_toggles_the_task() {
+        let ctx = egui::Context::default();
+        let vault = Rc::new(RefCell::new(capsule_with_task(&today_key())));
+        let state = Rc::new(RefCell::new(PlanningState::default()));
+        let action: Rc<RefCell<Option<ViewAction>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let vault = vault.clone();
+            let state = state.clone();
+            let action = action.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut out = ctx.run_pass(raw, |ctx| {
+                    ctx.root_ui(|ui| {
+                        let mut vault = vault.borrow_mut();
+                        let mut state = state.borrow_mut();
+                        let act = draw(ui, &mut vault, &mut state, Locale::En, None);
+                        *action.borrow_mut() = Some(act);
+                    });
+                });
+                out.textures_delta.clear();
+            }
+        };
+
+        run(vec![]);
+        let row = ctx
+            .read_response(egui::Id::unique(("plan-row", KEY)))
+            .expect("plan row response");
+        // The 16×16 checkbox is the first widget of the row child: its
+        // center sits 16 px from the row's left edge, vertically centered.
+        let p = pos2(row.rect.left() + 16.0, row.rect.center().y);
+        run(vec![egui::Event::PointerMoved(p)]);
+        run(vec![press(p)]);
+        run(vec![release(p)]);
+        run(vec![]);
+        let done = vault.borrow().capsules[0].blocks[0]["data"]["items"][0]["done"]
+            .as_bool()
+            .unwrap();
+        assert!(done, "checkbox click must toggle the task");
+    }
+
     /// Dropping a chip on another day cell reschedules the plan.
     #[test]
     fn calendar_drag_chip_reschedules() {

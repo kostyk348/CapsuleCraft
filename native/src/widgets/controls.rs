@@ -351,7 +351,7 @@ pub fn secondary_button(ui: &mut Ui, icon: Option<Icon>, label: &str, height: f3
 }
 
 pub fn checkbox(ui: &mut Ui, done: &mut bool) -> Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::click());
+    let (rect, mut response) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::click());
     let hovered = response.hovered();
     let fill = if *done {
         theme::accent()
@@ -384,6 +384,10 @@ pub fn checkbox(ui: &mut Ui, done: &mut bool) -> Response {
     }
     if response.clicked() {
         *done = !*done;
+        // egui does not set CHANGED for plain allocate_exact_size widgets;
+        // without this every `checkbox(..).changed()` caller silently
+        // dropped the toggle.
+        response.mark_changed();
     }
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }

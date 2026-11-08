@@ -910,6 +910,91 @@ fn needs_base64(content: &str) -> bool {
             .any(|line| line.starts_with("--") && line.len() > 2)
 }
 
+/// Quick HTML → plain text for read-only rendering on the Page tab: drops
+/// `style`/`script` blocks and tags, unescapes the common entities and
+/// collapses blank runs. Not a parser — imported letters are never rewritten.
+pub fn html_to_plain_text(html: &str) -> String {
+    let lower = html.to_lowercase();
+    let mut out = String::with_capacity(html.len());
+    let mut i = 0;
+    let mut skip_until: Option<String> = None;
+    while i < lower.len() {
+        if let Some(open_tag) = &skip_until {
+            let close_tag = open_tag.replace('<', "</");
+            match lower[i..].find(&close_tag) {
+                Some(off) => match lower[i + off..].find('>') {
+                    Some(end) => i += off + end + 1,
+                    None => break,
+                },
+                None => break,
+            }
+            skip_until = None;
+            continue;
+        }
+        match lower[i..].find('<') {
+            Some(tag_start) => {
+                // Copy the plain text run between tags verbatim (UTF-8 safe).
+                out.push_str(&html[i..i + tag_start]);
+                let after = &lower[i + tag_start..];
+                let tag_end = match after.find('>') {
+                    Some(end) => i + tag_start + end,
+                    None => break,
+                };
+                let tag = &lower[i + tag_start..=tag_end];
+                for opener in ["<style", "<script"] {
+                    if tag.starts_with(opener) {
+                        skip_until = Some(opener.to_string());
+                        break;
+                    }
+                }
+                if skip_until.is_none() {
+                    // Block-level tags turn into line breaks.
+                    let block = [
+                        "p",
+                        "div",
+                        "tr",
+                        "li",
+                        "h1",
+                        "h2",
+                        "h3",
+                        "h4",
+                        "table",
+                        "blockquote",
+                    ];
+                    let bare = tag.trim_end_matches('>');
+                    if bare.starts_with("<br")
+                        || block.iter().any(|name| {
+                            bare.starts_with(&format!("<{name}"))
+                                && bare[name.len() + 1..]
+                                    .chars()
+                                    .next()
+                                    .map(|c| c.is_whitespace() || c == '>')
+                                    .unwrap_or(true)
+                        })
+                    {
+                        out.push('\n');
+                    }
+                }
+                i = tag_end + 1;
+            }
+            None => {
+                out.push_str(&html[i..]);
+                break;
+            }
+        }
+    }
+    let mut text = out
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"");
+    while text.contains("\n\n\n") {
+        text = text.replace("\n\n\n", "\n\n");
+    }
+    text.trim().to_string()
+}
+
 fn escape_html(value: &str) -> String {
     value
         .replace('&', "&amp;")
@@ -953,6 +1038,13 @@ fn base36(mut value: u32) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn html_to_plain_keeps_cyrillic_and_drops_style() {
+        let text =
+            crate::mime::html_to_plain_text("<div>Привет <b>мир</b></div><style>p{}</style>");
+        assert_eq!(text, "Привет мир");
+    }
+
     /// Maintainer tool: writes a populated demo vault for screenshots.
     /// Run: cargo test generate_demo_vault -- --ignored --nocapture
     #[test]

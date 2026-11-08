@@ -52,6 +52,10 @@ pub enum Command {
     CoThinkMode(crate::cothinker::CoThinkMode),
     OpenImapSync,
     SyncImapNow,
+    SyncFolderNow,
+    ReloadVault,
+    DuplicatePage,
+    CopyPageLink,
     Faq,
     ExportEncrypted,
     ImportEncrypted,
@@ -368,6 +372,62 @@ pub fn commands(locale: Locale) -> Vec<(Command, PaletteCommand)> {
                     &["почта", "синхронизация"],
                 ),
                 shortcut: Some("Ctrl Shift S".into()),
+            },
+        ),
+        (
+            Command::SyncFolderNow,
+            PaletteCommand {
+                id: "sync_folder_now",
+                title: t(locale, Key::SyncFolderMenu).into(),
+                hint: "Folder".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["sync", "folder", "mirror", "backup"],
+                    &["синхронизация", "папка", "зеркало", "резерв"],
+                ),
+                shortcut: None,
+            },
+        ),
+        (
+            Command::ReloadVault,
+            PaletteCommand {
+                id: "reload_vault",
+                title: t(locale, Key::ReloadVault).into(),
+                hint: "F5".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["reload", "refresh", "rescan", "disk"],
+                    &["перечитать", "обновить", "пересканировать"],
+                ),
+                shortcut: Some("F5".into()),
+            },
+        ),
+        (
+            Command::DuplicatePage,
+            PaletteCommand {
+                id: "duplicate_page",
+                title: t(locale, Key::DuplicatePage).into(),
+                hint: "Ctrl D".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["duplicate", "copy", "clone"],
+                    &["дублировать", "копия", "клон"],
+                ),
+                shortcut: Some("Ctrl D".into()),
+            },
+        ),
+        (
+            Command::CopyPageLink,
+            PaletteCommand {
+                id: "copy_page_link",
+                title: t(locale, Key::CopyPageLink).into(),
+                hint: "Link".into(),
+                group: t(locale, Key::PaletteActions).into(),
+                keywords: kw(
+                    &["copy", "link", "url", "share"],
+                    &["копировать", "ссылка", "поделиться"],
+                ),
+                shortcut: None,
             },
         ),
         (

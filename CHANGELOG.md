@@ -3,6 +3,54 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.11.0] — 2026-11-08 — The five bug fixes batch, plus the QoL wave
+
+User-reported defects fixed one by one, then a quality-of-life pass across
+the shell. Tests 310 → 313.
+
+### Fixed
+- **Checkboxes are clickable again.** The custom `checkbox()` widget was
+  built on `allocate_exact_size(Sense::click())`, and egui does not set the
+  `CHANGED` flag on such widgets by itself — every `checkbox(..).changed()`
+  handler (planning tasks, todo blocks) silently dropped the toggle, so
+  ticks flashed and reverted. The widget now calls `mark_changed()`; a
+  headless egui click test drives the planning list and asserts the task
+  persists.
+- **The insert-below menu survives the pointer moving into it.** The "+"
+  popup was rendered inside the row's hover gate: egui popups die when
+  `show()` stops being called, so dragging down into the menu killed it
+  instantly. The interact and popup are registered every frame now; only
+  the icon painting stays hover-gated.
+- **IMAP sync updates existing letters.** Same Message-ID used to mean
+  "skip forever"; now a newer server copy with a different body digest
+  overwrites the stale local file and the report says `N updated`.
+- **Imported email pages render their text.** The Page tab showed only the
+  read-only banner and pushed the content to the Email tab; the body
+  (plain part, or HTML stripped to text) renders on the page now, with a
+  copy button.
+
+### Added
+- **Thread numbering in Threads only**: reply rows show their chain
+  position (`1.`, `2.`, …); the sidebar keeps plain titles.
+- **Folder sync is discoverable**: a labeled «Sync folder» row in the vault
+  menu and a `Sync folder now` palette command, next to the footer icon
+  that was the only entry before.
+- **Keyboard**: `J`/`K` walk the page list, `Alt+Left` walks the visited
+  pages back-stack, `F5` reloads the vault from disk (with a toast),
+  `Ctrl+F` focuses the sidebar search, `Ctrl+D` duplicates the page.
+- **Duplicate page** (`Ctrl+D` / palette): same blocks, tags and body,
+  fresh identity; lands with a toast.
+- **Copy page link** (`capsule://id`) via the palette.
+- **Reload vault from disk** palette command (F5 twin).
+- **Reading-time estimate** (~200 words/min) in the page meta line for
+  pages with real prose.
+- **Window title follows the page** — the OS title bar shows the open
+  subject instead of a bare app name.
+
+### QoL details
+- Duplicates and copies raise toasts; the editor can raise them too
+  (`EditorAction::toast`).
+
 ## [2.10.1] — 2026-11-08 — The graph stops overlapping
 
 A critique pass over the v2.10.0 screenshots: circles piled up, labels sat
