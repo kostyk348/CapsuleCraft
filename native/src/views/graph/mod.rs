@@ -601,57 +601,60 @@ pub fn draw(
         painter.galley(box_rect.min + vec2(8.0, 5.0), galley, theme::faint());
     }
 
-    if let Some(index) = selected {
+    let effective_selected = if state.selection_cleared {
+        None
+    } else {
+        selected
+    };
+
+    if let Some(index) = effective_selected {
         if let Some(capsule) = capsules.get(index) {
             if graph.nodes.iter().any(|node| node.capsule == index) {
-                let summary_rect = Rect::from_min_size(
-                    pos2(rect.right() - 262.0, rect.top() + 14.0),
-                    vec2(248.0, 118.0),
-                );
-                painter.rect(
-                    summary_rect,
-                    theme::RADIUS,
-                    theme::panel(),
-                    theme::hairline(),
-                    egui::StrokeKind::Inside,
-                );
-                let mut card = ui.new_child(
-                    egui::UiBuilder::new()
-                        .max_rect(summary_rect.shrink(10.0))
-                        .layout(Layout::top_down(Align::Min)),
-                );
-                let _ = hud(
-                    &mut card,
-                    if capsule.native { "PAGE" } else { "IMPORTED" },
-                    theme::faint(),
-                );
-                card.add_space(5.0);
-                card.add(
-                    egui::Label::new(
-                        RichText::new(truncate_chars(&capsule.subject, 34))
-                            .family(theme::medium())
-                            .size(12.5)
-                            .color(theme::ink()),
-                    )
-                    .wrap(),
-                );
-                card.add_space(4.0);
-                card.add(
-                    egui::Label::new(
-                        RichText::new(truncate_chars(&capsule.from, 32))
-                            .size(10.5)
-                            .color(theme::muted()),
-                    )
-                    .truncate(),
-                );
-                if !capsule.tags.is_empty() {
-                    card.add_space(5.0);
-                    card.horizontal_wrapped(|ui| {
-                        for tag in capsule.tags.iter().take(3) {
-                            let _ = tag_chip(ui, tag, theme::muted());
+                let card_anchor = pos2(rect.right() - 262.0, rect.top() + 14.0);
+                let max_rect =
+                    Rect::from_min_size(card_anchor, vec2(248.0, rect.height() - 28.0));
+                let mut card_ui = ui.new_child(egui::UiBuilder::new().max_rect(max_rect));
+
+                egui::Frame::new()
+                    .fill(theme::fade(theme::panel(), 0.94))
+                    .corner_radius(theme::RADIUS)
+                    .stroke(theme::hairline())
+                    .inner_margin(egui::Margin::same(10))
+                    .show(&mut card_ui, |ui| {
+                        ui.set_width(228.0);
+                        let _ = hud(
+                            ui,
+                            if capsule.native { "PAGE" } else { "IMPORTED" },
+                            theme::faint(),
+                        );
+                        ui.add_space(5.0);
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(truncate_chars(&capsule.subject, 34))
+                                    .family(theme::medium())
+                                    .size(12.5)
+                                    .color(theme::ink()),
+                            )
+                            .wrap(),
+                        );
+                        ui.add_space(4.0);
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(truncate_chars(&capsule.from, 32))
+                                    .size(10.5)
+                                    .color(theme::muted()),
+                            )
+                            .truncate(),
+                        );
+                        if !capsule.tags.is_empty() {
+                            ui.add_space(6.0);
+                            ui.horizontal_wrapped(|ui| {
+                                for tag in capsule.tags.iter().take(3) {
+                                    let _ = tag_chip(ui, tag, theme::muted());
+                                }
+                            });
                         }
                     });
-                }
             }
         }
     }
