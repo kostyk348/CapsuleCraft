@@ -101,7 +101,9 @@ pub fn render_pages(
 
     let is_hovering = hovered.is_some();
     let has_selection = selected_slot.is_some();
-    let active_slot = hovered.or(selected_slot).filter(|&slot| is_node_allowed(slot));
+    let active_slot = hovered
+        .or(selected_slot)
+        .filter(|&slot| is_node_allowed(slot));
 
     // Search query matching
     let search_clean = state.search_query.trim().to_lowercase();
@@ -111,9 +113,9 @@ pub fn render_pages(
             return false;
         }
         let capsule_idx = graph.nodes[slot as usize].capsule;
-        capsules.get(capsule_idx).map_or(false, |c| {
-            c.subject.to_lowercase().contains(&search_clean)
-        })
+        capsules
+            .get(capsule_idx)
+            .map_or(false, |c| c.subject.to_lowercase().contains(&search_clean))
     };
 
     // Connected neighborhood query O(k)
@@ -257,7 +259,9 @@ pub fn render_pages(
             let ma = is_search_match(a);
             let mb = is_search_match(b);
             mb.cmp(&ma).then_with(|| {
-                graph.nodes[b as usize].degree.cmp(&graph.nodes[a as usize].degree)
+                graph.nodes[b as usize]
+                    .degree
+                    .cmp(&graph.nodes[a as usize].degree)
             })
         });
         let mut candidates: Vec<(u32, String, egui::Rect)> = Vec::new();
@@ -400,12 +404,20 @@ mod tests {
         assert!(!state.selection_cleared);
 
         let selected = Some(42usize);
-        let effective = if state.selection_cleared { None } else { selected };
+        let effective = if state.selection_cleared {
+            None
+        } else {
+            selected
+        };
         assert_eq!(effective, Some(42));
 
         // When user clicked empty canvas
         state.selection_cleared = true;
-        let effective = if state.selection_cleared { None } else { selected };
+        let effective = if state.selection_cleared {
+            None
+        } else {
+            selected
+        };
         assert_eq!(effective, None, "clicking empty canvas deselects graph");
 
         // When user selects a different note externally
@@ -414,7 +426,15 @@ mod tests {
             state.last_external_selected = new_selected;
             state.selection_cleared = false;
         }
-        let effective = if state.selection_cleared { None } else { new_selected };
-        assert_eq!(effective, Some(99), "external selection change restores focus");
+        let effective = if state.selection_cleared {
+            None
+        } else {
+            new_selected
+        };
+        assert_eq!(
+            effective,
+            Some(99),
+            "external selection change restores focus"
+        );
     }
 }

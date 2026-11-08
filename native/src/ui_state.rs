@@ -10,7 +10,41 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::brand::BrandIconStyle;
+use crate::mime::Capsule;
 use crate::vault;
+
+/// Sidebar page ordering. `Manual` keeps the vault's own order (the default,
+/// so the tree view behaves exactly like it always did); the rest are flat
+/// sorts over all pages.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PageSort {
+    #[default]
+    Manual,
+    TitleAsc,
+    TitleDesc,
+    Newest,
+    Oldest,
+}
+
+impl PageSort {
+    pub const ALL: [PageSort; 5] = [
+        PageSort::Manual,
+        PageSort::TitleAsc,
+        PageSort::TitleDesc,
+        PageSort::Newest,
+        PageSort::Oldest,
+    ];
+
+    pub fn key(self) -> crate::i18n::Key {
+        match self {
+            PageSort::Manual => crate::i18n::Key::PageSortManual,
+            PageSort::TitleAsc => crate::i18n::Key::PageSortTitleAsc,
+            PageSort::TitleDesc => crate::i18n::Key::PageSortTitleDesc,
+            PageSort::Newest => crate::i18n::Key::PageSortNewest,
+            PageSort::Oldest => crate::i18n::Key::PageSortOldest,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UiState {
@@ -40,6 +74,30 @@ pub struct UiState {
     /// Key of the view (`views::View::key`) that was active last time.
     #[serde(default)]
     pub last_view: Option<String>,
+    /// Sidebar ordering, persisted so the list stops reshuffling itself.
+    #[serde(default)]
+    pub sort_mode: PageSort,
+    /// Pages pinned to the top of the sidebar (Message-IDs, display order).
+    #[serde(default)]
+    pub pinned_ids: Vec<String>,
+    /// Message-IDs of recently visited pages, newest first (session aid).
+    #[serde(default)]
+    pub recent_page_ids: Vec<String>,
+    /// Keys of recently executed palette commands (`Command::key`), newest
+    /// first: the palette boosts them instead of making the user re-type.
+    #[serde(default)]
+    pub palette_recents: Vec<String>,
+    /// Paragraph text wraps inside the document view. Turning it off gives
+    /// every paragraph a horizontal scroll strip (prose-code style).
+    #[serde(default = "default_true")]
+    pub wrap_body: bool,
+    /// Desktop window size from the previous run, applied on startup.
+    #[serde(default)]
+    pub window_size: Option<[f32; 2]>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// User-supplied model directories: "I already have this model on disk".
@@ -110,6 +168,12 @@ impl Default for UiState {
             sync_dir: None,
             last_page_id: None,
             last_view: None,
+            sort_mode: PageSort::Manual,
+            pinned_ids: Vec::new(),
+            recent_page_ids: Vec::new(),
+            palette_recents: Vec::new(),
+            wrap_body: true,
+            window_size: None,
         }
     }
 }
@@ -173,6 +237,78 @@ impl UiState {
         self.icon_style = self.icon_style.cycle();
         self.icon_style
     }
+
+    /// Record a page visit in the recents ring (dedup, newest first, cap 8).
+    pub fn note_page_visit(&mut self, id: &str) {
+        if id.trim().is_empty() {
+            return;
+        }
+        self.recent_page_ids.retain(|existing| existing != id);
+        self.recent_page_ids.insert(0, id.to_string());
+        self.recent_page_ids.truncate(8);
+    }
+
+    /// Pin/unpin a page by Message-ID; returns the new pinned state. Pinned
+    /// pages keep first-pinned-first display order.
+    pub fn toggle_pin(&mut self, id: &str) -> bool {
+        if let Some(position) = self.pinned_ids.iter().position(|existing| existing == id) {
+            self.pinned_ids.remove(position);
+            return false;
+        }
+        self.pinned_ids.push(id.to_string());
+        true
+    }
+
+    /// Record an executed palette command key (dedup, newest first, cap 8).
+    pub fn note_palette_command(&mut self, key: &str) {
+        if key.trim().is_empty() {
+            return;
+        }
+        self.palette_recents.retain(|existing| existing != key);
+        self.palette_recents.insert(0, key.to_string());
+        self.palette_recents.truncate(8);
+    }
+
+    /// Sidebar display order: pinned pages first (in pin order), then the
+    /// rest under the chosen sort. Returns indices into `capsules`.
+    pub fn order_pages(&self, capsules: &[Capsule]) -> Vec<usize> {
+        let mut pinned = Vec::new();
+        let mut rest: Vec<usize> = Vec::new();
+        for (index, capsule) in capsules.iter().enumerate() {
+            if self.pinned_ids.contains(&capsule.message_id) {
+                pinned.push(index);
+            } else {
+                rest.push(index);
+            }
+        }
+        pinned.sort_by_key(|index| {
+            self.pinned_ids
+                .iter()
+                .position(|id| capsules[*index].message_id == *id)
+                .unwrap_or(usize::MAX)
+        });
+        match self.sort_mode {
+            PageSort::Manual => {}
+            PageSort::TitleAsc => rest.sort_by(|a, b| {
+                capsules[*a]
+                    .subject
+                    .to_lowercase()
+                    .cmp(&capsules[*b].subject.to_lowercase())
+            }),
+            PageSort::TitleDesc => rest.sort_by(|a, b| {
+                capsules[*b]
+                    .subject
+                    .to_lowercase()
+                    .cmp(&capsules[*a].subject.to_lowercase())
+            }),
+            PageSort::Newest => {
+                rest.sort_by_key(|index| std::cmp::Reverse(capsules[*index].timestamp))
+            }
+            PageSort::Oldest => rest.sort_by_key(|index| capsules[*index].timestamp),
+        }
+        pinned.extend(rest);
+        pinned
+    }
 }
 
 #[cfg(test)]
@@ -222,6 +358,12 @@ mod tests {
             sync_dir: Some("/sync/vault".to_string()),
             last_page_id: Some("<pke@capsuleos.local>".to_string()),
             last_view: Some("planning".to_string()),
+            sort_mode: PageSort::TitleAsc,
+            pinned_ids: vec!["<pin@capsuleos.local>".to_string()],
+            recent_page_ids: Vec::new(),
+            palette_recents: Vec::new(),
+            wrap_body: true,
+            window_size: None,
         };
         let json = serde_json::to_string(&state).unwrap();
         let decoded: UiState = serde_json::from_str(&json).unwrap();
@@ -253,5 +395,113 @@ mod tests {
         assert_eq!(models.slot(CustomModelKind::Ocr), Some("/m/ocr"));
         models.set(CustomModelKind::Ocr, None);
         assert_eq!(models.slot(CustomModelKind::Ocr), None);
+    }
+
+    fn capsule(id: &str, subject: &str, timestamp: i64) -> Capsule {
+        let mut capsule = Capsule::blank(id.to_string(), format!("{id}.eml"), subject.to_string());
+        capsule.timestamp = timestamp;
+        capsule
+    }
+
+    #[test]
+    fn page_visit_ring_dedups_and_caps() {
+        let mut state = UiState::default();
+        for i in 0..12 {
+            state.note_page_visit(&format!("<p{i}@x>"));
+        }
+        assert_eq!(state.recent_page_ids.len(), 8);
+        assert_eq!(state.recent_page_ids[0], "<p11@x>");
+        state.note_page_visit("<p5@x>");
+        assert_eq!(state.recent_page_ids[0], "<p5@x>");
+        assert_eq!(state.recent_page_ids.len(), 8);
+        assert_eq!(
+            state
+                .recent_page_ids
+                .iter()
+                .filter(|id| *id == "<p5@x>")
+                .count(),
+            1
+        );
+        state.note_page_visit("   ");
+        assert_eq!(state.recent_page_ids.len(), 8);
+    }
+
+    #[test]
+    fn toggle_pin_round_trips() {
+        let mut state = UiState::default();
+        assert!(state.toggle_pin("<a@x>"));
+        assert!(state.toggle_pin("<b@x>"));
+        assert!(!state.toggle_pin("<a@x>"));
+        assert_eq!(state.pinned_ids, vec!["<b@x>".to_string()]);
+    }
+
+    #[test]
+    fn palette_recents_dedup_and_cap() {
+        let mut state = UiState::default();
+        for i in 0..10 {
+            state.note_palette_command(&format!("cmd{i}"));
+        }
+        assert_eq!(state.palette_recents.len(), 8);
+        state.note_palette_command("cmd3");
+        assert_eq!(state.palette_recents[0], "cmd3");
+        assert_eq!(
+            state
+                .palette_recents
+                .iter()
+                .filter(|k| *k == "cmd3")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn order_pages_pinned_first_then_sort() {
+        let capsules = vec![
+            capsule("<a@x>", "Beta", 100),
+            capsule("<b@x>", "alpha", 300),
+            capsule("<c@x>", "Gamma", 200),
+            capsule("<d@x>", "delta", 400),
+        ];
+        // Manual keeps vault order, minus pinned reshuffling.
+        let mut state = UiState::default();
+        state.toggle_pin("<c@x>");
+        assert_eq!(state.order_pages(&capsules), vec![2, 0, 1, 3]);
+
+        state.sort_mode = PageSort::TitleAsc;
+        let order = state.order_pages(&capsules);
+        let subjects: Vec<&str> = order
+            .iter()
+            .map(|i| capsules[*i].subject.as_str())
+            .collect();
+        assert_eq!(subjects, vec!["Gamma", "alpha", "Beta", "delta"]);
+
+        state.sort_mode = PageSort::Newest;
+        let order = state.order_pages(&capsules);
+        assert_eq!(order[0], 2, "pinned page stays first");
+        assert_eq!(order[1], 3, "newest unpinned next");
+
+        state.sort_mode = PageSort::Oldest;
+        let order = state.order_pages(&capsules);
+        assert_eq!(order[0], 2);
+        assert_eq!(order[1], 0);
+    }
+
+    #[test]
+    fn new_fields_default_and_round_trip() {
+        let json = r#"{"zoom_factor":1.0,"sidebar_width":280.0,"sidebar_collapsed":false,"wide_canvas":false}"#;
+        let decoded: UiState = serde_json::from_str(json).unwrap();
+        assert_eq!(decoded.sort_mode, PageSort::Manual);
+        assert!(decoded.pinned_ids.is_empty());
+        assert!(decoded.palette_recents.is_empty());
+        assert!(decoded.wrap_body, "wrap defaults to on for older settings");
+        assert_eq!(decoded.window_size, None);
+
+        let mut state = UiState::default();
+        state.wrap_body = false;
+        state.window_size = Some([1280.0, 800.0]);
+        state.sort_mode = PageSort::Newest;
+        let json = serde_json::to_string(&state).unwrap();
+        let decoded: UiState = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, state);
     }
 }

@@ -6,6 +6,8 @@
          outward through the folder-sync engine — no permissions yet. -->
     <application
         android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:hasCode="false"
         android:allowBackup="true">
 

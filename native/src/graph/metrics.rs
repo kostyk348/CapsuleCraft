@@ -285,18 +285,43 @@ mod tests {
     fn adjacency_map_matches_edges() {
         use super::super::{EdgeKind, Graph, GraphCluster, GraphEdge, GraphNode};
         let nodes = vec![
-            GraphNode { capsule: 10, degree: 1, pos: [0.0, 0.0] },
-            GraphNode { capsule: 20, degree: 2, pos: [0.5, 0.5] },
-            GraphNode { capsule: 30, degree: 1, pos: [1.0, 1.0] },
+            GraphNode {
+                capsule: 10,
+                degree: 1,
+                pos: [0.0, 0.0],
+            },
+            GraphNode {
+                capsule: 20,
+                degree: 2,
+                pos: [0.5, 0.5],
+            },
+            GraphNode {
+                capsule: 30,
+                degree: 1,
+                pos: [1.0, 1.0],
+            },
         ];
         let edges = vec![
-            GraphEdge { source: 10, target: 20, kind: EdgeKind::PageParent, label: None },
-            GraphEdge { source: 20, target: 30, kind: EdgeKind::Reply, label: None },
+            GraphEdge {
+                source: 10,
+                target: 20,
+                kind: EdgeKind::PageParent,
+                label: None,
+            },
+            GraphEdge {
+                source: 20,
+                target: 30,
+                kind: EdgeKind::Reply,
+                label: None,
+            },
         ];
         let graph = Graph {
             nodes,
             edges,
-            clusters: vec![GraphCluster { key: "".into(), members: vec![0, 1, 2] }],
+            clusters: vec![GraphCluster {
+                key: "".into(),
+                members: vec![0, 1, 2],
+            }],
             cluster_of: vec![0, 0, 0],
             ..Graph::default()
         };
@@ -326,8 +351,14 @@ mod tests {
         // Depth 1: node 0 and its neighbor 1
         assert_eq!(metrics.neighborhood_bfs(0, 1), [0, 1].into_iter().collect());
         // Depth 2: nodes 0, 1, 2
-        assert_eq!(metrics.neighborhood_bfs(0, 2), [0, 1, 2].into_iter().collect());
+        assert_eq!(
+            metrics.neighborhood_bfs(0, 2),
+            [0, 1, 2].into_iter().collect()
+        );
         // Depth 3: nodes 0, 1, 2, 3
-        assert_eq!(metrics.neighborhood_bfs(0, 3), [0, 1, 2, 3].into_iter().collect());
+        assert_eq!(
+            metrics.neighborhood_bfs(0, 3),
+            [0, 1, 2, 3].into_iter().collect()
+        );
     }
 }

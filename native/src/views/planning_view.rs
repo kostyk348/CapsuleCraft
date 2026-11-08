@@ -54,6 +54,11 @@ pub struct PlanningState {
     pub day_text: String,
     /// Key of the task currently dragged between calendar day cells.
     pub drag_key: Option<String>,
+    /// In-progress due-date typing, keyed by task key. The row rebuilds its
+    /// item from the vault every frame; without this buffer any input that is
+    /// not yet a valid date (every keystroke before the last) would be thrown
+    /// away and the field would fight the keyboard.
+    pub due_drafts: std::collections::HashMap<String, String>,
 }
 
 impl Default for PlanningState {
@@ -77,6 +82,7 @@ impl Default for PlanningState {
             linking: None,
             day_text: String::new(),
             drag_key: None,
+            due_drafts: std::collections::HashMap::new(),
         }
     }
 }
@@ -208,13 +214,9 @@ pub fn draw(
         filter_bar(ui, state, &all_tasks, locale);
     }
 
-    quick_add(
-        ui,
-        state,
-        locale,
-        &mut edits,
-        !all_tasks.is_empty() || !vault.capsules.is_empty(),
-    );
+    // Always available: when the vault has no savable page yet, adding the
+    // first task creates one instead of silently doing nothing.
+    quick_add(ui, state, locale, &mut edits, true);
 
     let body = Rect::from_min_max(
         pos2(ui.max_rect().left(), ui.cursor().top()),
@@ -254,6 +256,7 @@ pub fn draw(
                     &all_tasks,
                     &today,
                     locale,
+                    state,
                     &mut edits,
                     &mut action,
                 ),
@@ -310,8 +313,9 @@ fn apply(vault: &mut Vault, edits: &[Edit], locale: Locale, action: &mut ViewAct
                 priority,
             } => add_task(vault, text, due.clone(), priority),
         };
-        if changed {
+        if let Some(index) = changed {
             action.changed = true;
+            action.touched.push(index);
             if matches!(edit, Edit::Add { .. }) {
                 action.toast = Some(t(locale, Key::TaskAdded).to_string());
             }
@@ -319,55 +323,64 @@ fn apply(vault: &mut Vault, edits: &[Edit], locale: Locale, action: &mut ViewAct
     }
 }
 
-fn patch_item(vault: &mut Vault, capsule_id: &str, block_id: &str, item: &TodoItem) -> bool {
-    let Some(capsule) = vault
+/// Applies the item patch and returns the touched capsule's index.
+fn patch_item(
+    vault: &mut Vault,
+    capsule_id: &str,
+    block_id: &str,
+    item: &TodoItem,
+) -> Option<usize> {
+    let index = vault
         .capsules
-        .iter_mut()
-        .find(|capsule| capsule.message_id == capsule_id)
-    else {
-        return false;
-    };
-    let Some(block) = capsule
+        .iter()
+        .position(|capsule| capsule.message_id == capsule_id)?;
+    let block = vault
+        .capsules
+        .get_mut(index)?
         .blocks
         .iter_mut()
-        .find(|block| block.get("id").and_then(|id| id.as_str()) == Some(block_id))
-    else {
-        return false;
-    };
-    planning::patch_item(block, &item.id, item)
+        .find(|block| block.get("id").and_then(|id| id.as_str()) == Some(block_id))?;
+    planning::patch_item(block, &item.id, item).then_some(index)
 }
 
-fn delete_item(vault: &mut Vault, capsule_id: &str, block_id: &str, item_id: &str) -> bool {
-    let Some(capsule) = vault
+/// Removes the item and returns the touched capsule's index.
+fn delete_item(
+    vault: &mut Vault,
+    capsule_id: &str,
+    block_id: &str,
+    item_id: &str,
+) -> Option<usize> {
+    let index = vault
         .capsules
-        .iter_mut()
-        .find(|capsule| capsule.message_id == capsule_id)
-    else {
-        return false;
-    };
-    let Some(block) = capsule
+        .iter()
+        .position(|capsule| capsule.message_id == capsule_id)?;
+    let block = vault
+        .capsules
+        .get_mut(index)?
         .blocks
         .iter_mut()
-        .find(|block| block.get("id").and_then(|id| id.as_str()) == Some(block_id))
-    else {
-        return false;
-    };
+        .find(|block| block.get("id").and_then(|id| id.as_str()) == Some(block_id))?;
     let Some(items) = block
         .get_mut("data")
         .and_then(|data| data.get_mut("items"))
         .and_then(|items| items.as_array_mut())
     else {
-        return false;
+        return None;
     };
     let before = items.len();
     items.retain(|item| item.get("id").and_then(|id| id.as_str()) != Some(item_id));
-    items.len() != before
+    (items.len() != before).then_some(index)
 }
 
-fn add_task(vault: &mut Vault, text: &str, due: Option<String>, priority: &str) -> bool {
+/// Appends the task to a page that can actually be saved and returns its
+/// index: a native inbox page first, then any native page. Tasks dropped
+/// onto an imported read-only .eml used to sit in memory only and vanish on
+/// the next reload; when the vault has no native page at all, a fresh one is
+/// created so the task always has a home.
+fn add_task(vault: &mut Vault, text: &str, due: Option<String>, priority: &str) -> Option<usize> {
     let text = text.trim();
     if text.is_empty() {
-        return false;
+        return None;
     }
     let item = serde_json::json!({
         "id": format!("item_{}", crate::now_nanos()),
@@ -377,19 +390,30 @@ fn add_task(vault: &mut Vault, text: &str, due: Option<String>, priority: &str) 
         "due": due,
         "priority": priority,
     });
-    let inbox = vault
+    let target = vault
         .capsules
         .iter()
-        .position(|capsule| capsule.tags.iter().any(|tag| tag == "#inbox"))
-        .or(if vault.capsules.is_empty() {
-            None
-        } else {
-            Some(0)
-        });
-    let Some(index) = inbox else {
-        return false;
-    };
+        .position(|capsule| capsule.native && capsule.tags.iter().any(|tag| tag == "#inbox"))
+        .or_else(|| vault.capsules.iter().position(|capsule| capsule.native));
+    if let Some(index) = target {
+        push_task_item(&mut vault.capsules[index], item);
+        return Some(index);
+    }
+    let index = vault.create_page(None).ok()?;
     let capsule = &mut vault.capsules[index];
+    capsule.subject = "Tasks".to_string();
+    capsule.tags.push("#inbox".to_string());
+    capsule.blocks.push(serde_json::json!({
+        "id": crate::mime::new_block_id("todo_list"),
+        "type": "todo_list",
+        "data": { "items": [item] }
+    }));
+    Some(index)
+}
+
+/// Puts the item into the page's first todo block, creating the block when
+/// the page does not have one yet.
+fn push_task_item(capsule: &mut crate::mime::Capsule, item: serde_json::Value) {
     let block = capsule
         .blocks
         .iter_mut()
@@ -416,7 +440,6 @@ fn add_task(vault: &mut Vault, text: &str, due: Option<String>, priority: &str) 
             "data": { "items": [item] }
         })),
     }
-    true
 }
 
 fn export_ics(vault: &Vault, locale: Locale) {
@@ -761,13 +784,14 @@ fn agenda(
     all: &[PlannedTask],
     today: &str,
     locale: Locale,
+    state: &mut PlanningState,
     edits: &mut Vec<Edit>,
     action: &mut ViewAction,
 ) {
     for (bucket, tasks) in planning::group_tasks(visible, today) {
         section(ui, bucket.title(locale));
         for task in &tasks {
-            task_row(ui, task, all, today, locale, edits, action);
+            task_row(ui, task, all, today, locale, state, edits, action);
         }
     }
 }
@@ -779,13 +803,13 @@ fn task_row(
     all: &[PlannedTask],
     today: &str,
     locale: Locale,
+    state: &mut PlanningState,
     edits: &mut Vec<Edit>,
     action: &mut ViewAction,
 ) {
     let mut item = task.item.clone();
     let mut touched = false;
     let blocked = is_blocked(task, all);
-    let overdue = bucket_of(task, today) == Bucket::Overdue;
 
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::hover());
     // The row itself is clickable and opens the plan's source page; widgets
@@ -838,12 +862,20 @@ fn task_row(
         let _ = tag_chip(ui, t(locale, Key::BlockedShort), theme::badge_beta());
     }
 
-    // Due date edit.
-    let mut due = item.due.clone().unwrap_or_default();
+    // Due date edit. While the text is not a complete date yet it lives in
+    // the draft buffer, so the field keeps what the user typed between
+    // frames instead of snapping back to the stored value.
+    let task_key = task.key();
+    let mut due = state
+        .due_drafts
+        .get(&task_key)
+        .cloned()
+        .unwrap_or_else(|| item.due.clone().unwrap_or_default());
+    let shown_overdue = is_date_key(&due) && planning::days_between(today, &due) < 0;
     let due_color = if due.is_empty() {
         theme::faint()
     } else if is_date_key(&due) {
-        if overdue {
+        if shown_overdue {
             theme::bad()
         } else {
             theme::muted()
@@ -859,21 +891,33 @@ fn task_row(
                 .margin(Margin::same(0))
                 .font(FontId::new(9.5, theme::mono()))
                 .text_color(due_color)
+                .id(egui::Id::unique(("due-edit", &task_key)))
                 // A quiet em dash for «no date»; the full format lives in the
                 // hover tooltip — the 84 px cell clips «YYYY-MM-DD» to noise.
                 .hint_text("—"),
         )
         .on_hover_text(t(locale, Key::DueDateHint));
     if due_response.changed() {
-        item.due = if due.trim().is_empty() {
-            None
-        } else if is_date_key(due.trim()) {
-            Some(due.trim().to_string())
-        } else {
-            item.due.clone()
-        };
-        if due.trim().is_empty() || is_date_key(due.trim()) {
+        let trimmed = due.trim().to_string();
+        if trimmed.is_empty() {
+            item.due = None;
             touched = true;
+            state.due_drafts.remove(&task_key);
+        } else if is_date_key(&trimmed) {
+            item.due = Some(trimmed);
+            touched = true;
+            state.due_drafts.remove(&task_key);
+        } else {
+            state.due_drafts.insert(task_key.clone(), due.clone());
+        }
+    }
+    if due_response.lost_focus() {
+        if let Some(raw) = state.due_drafts.remove(&task_key) {
+            let trimmed = raw.trim().to_string();
+            if is_date_key(&trimmed) && item.due.as_deref() != Some(trimmed.as_str()) {
+                item.due = Some(trimmed);
+                touched = true;
+            }
         }
     }
 
@@ -1592,13 +1636,23 @@ fn calendar(
                     ui,
                     &format!("{} {}", t(locale, Key::TasksOn), human_date(&focus, locale)),
                 );
+                if planning::days_between(&today, &focus) < 0 {
+                    // A task due in the past is overdue by definition; saying
+                    // so stops the «why is my new task overdue» surprise.
+                    ui.label(
+                        RichText::new(t(locale, Key::PastDayHint))
+                            .size(10.0)
+                            .color(theme::bad()),
+                    );
+                    ui.add_space(2.0);
+                }
                 let day_tasks = tasks_on_day(visible, &focus, true);
                 if day_tasks.is_empty() {
                     ui.label(RichText::new("—").size(12.0).color(theme::faint()));
                 }
                 let all = visible.to_vec();
                 for task in &day_tasks {
-                    task_row(ui, task, &all, today, locale, edits, action);
+                    task_row(ui, task, &all, today, locale, state, edits, action);
                 }
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
@@ -2080,6 +2134,248 @@ mod tests {
             "cell click must focus the day"
         );
         assert_eq!(action.borrow().as_ref().expect("action").select_id, None);
+    }
+
+    /// A planning edit must report the capsule it changed so the shell saves
+    /// that page — not whichever page happens to be open. Saving only the
+    /// selected page used to drop planning edits on the next reload, which
+    /// showed up as tasks losing their tick or vanishing entirely.
+    #[test]
+    fn toggle_reports_the_touched_capsule() {
+        let ctx = egui::Context::default();
+        let vault = Rc::new(RefCell::new(capsule_with_task(&today_key())));
+        let state = Rc::new(RefCell::new(PlanningState::default()));
+        let action: Rc<RefCell<Option<ViewAction>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let vault = vault.clone();
+            let state = state.clone();
+            let action = action.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut out = ctx.run_pass(raw, |ctx| {
+                    ctx.root_ui(|ui| {
+                        let mut vault = vault.borrow_mut();
+                        let mut state = state.borrow_mut();
+                        let act = draw(ui, &mut vault, &mut state, Locale::En, None);
+                        // Absorb instead of overwrite: settle frames after
+                        // the click must not erase the click's action.
+                        let mut acc = action.borrow_mut();
+                        match acc.as_mut() {
+                            Some(existing) => existing.absorb(act),
+                            None => *acc = Some(act),
+                        }
+                    });
+                });
+                out.textures_delta.clear();
+            }
+        };
+
+        run(vec![]);
+        let row = ctx
+            .read_response(egui::Id::unique(("plan-row", KEY)))
+            .expect("plan row response");
+        let p = pos2(row.rect.left() + 16.0, row.rect.center().y);
+        run(vec![egui::Event::PointerMoved(p)]);
+        run(vec![press(p)]);
+        run(vec![release(p)]);
+        run(vec![]);
+        let action = action.borrow_mut().take().expect("action");
+        assert!(action.changed, "the toggle must mark the vault changed");
+        assert_eq!(
+            action.touched,
+            vec![0usize],
+            "the toggled capsule must be reported for persistence"
+        );
+        assert!(
+            vault.borrow().capsules[0].blocks[0]["data"]["items"][0]["done"]
+                .as_bool()
+                .unwrap()
+        );
+    }
+
+    /// Tasks go to a page that can be saved: a native inbox page first, then
+    /// any native page — never onto an imported read-only .eml, where the
+    /// task would sit in memory only and vanish on the next reload.
+    #[test]
+    fn add_task_prefers_a_native_inbox_page() {
+        let mut vault = capsule_with_task(&today_key());
+        let mut imported = vault.capsules[0].clone();
+        imported.message_id = "msg-imported".into();
+        imported.file_name = "imported.eml".into();
+        imported.native = false;
+        imported.tags = vec!["#inbox".into()];
+        imported.blocks = vec![serde_json::json!({
+            "id": "blk-p",
+            "type": "paragraph",
+            "data": {"text": "imported letter"}
+        })];
+        vault.capsules.insert(0, imported);
+        let target = add_task(&mut vault, "Write the tests", None, "normal");
+        assert_eq!(
+            target,
+            Some(1),
+            "the task must skip the read-only import and land on the native page"
+        );
+        let added = vault.capsules[1]
+            .blocks
+            .iter()
+            .find(|block| crate::mime::block_type(block) == "todo_list")
+            .and_then(|block| block["data"]["items"].as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .any(|item| item["text"].as_str() == Some("Write the tests"))
+            })
+            .expect("todo block");
+        assert!(added, "the new task must be in the native page's list");
+    }
+
+    /// When the vault has no savable page at all, the first task creates one
+    /// instead of silently doing nothing.
+    #[test]
+    fn add_task_creates_a_page_when_none_is_native() {
+        let dir = std::env::temp_dir().join(format!("capsule_planning_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp vault dir");
+        let mut vault = capsule_with_task(&today_key());
+        vault.dir = dir.clone();
+        vault.capsules[0].native = false;
+        let target = add_task(&mut vault, "First task", None, "normal");
+        let index = target.expect("a page must be created");
+        let page = &vault.capsules[index];
+        assert!(page.native, "the created page must be savable");
+        assert!(page.tags.iter().any(|tag| tag == "#inbox"));
+        let text = page
+            .blocks
+            .iter()
+            .find(|block| crate::mime::block_type(block) == "todo_list")
+            .and_then(|block| block["data"]["items"][0]["text"].as_str())
+            .expect("todo item");
+        assert_eq!(text, "First task");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The added task survives a full disk round-trip: save the touched page,
+    /// re-parse the .eml, find the task again. This is the reload half of the
+    /// «tasks disappear» report.
+    #[test]
+    fn added_task_survives_save_and_reload() {
+        let dir = std::env::temp_dir().join(format!("capsule_roundtrip_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp vault dir");
+        let mut vault = capsule_with_task(&today_key());
+        vault.dir = dir.clone();
+        let index = add_task(
+            &mut vault,
+            "Позвонить домой",
+            Some(add_days(&today_key(), 1)),
+            "high",
+        )
+        .expect("task lands on the native page");
+        assert_eq!(index, 0);
+        vault.save(index).expect("save the touched page");
+        let raw = std::fs::read_to_string(dir.join("plan.eml")).expect("saved .eml");
+        let capsule = crate::mime::parse_eml(&raw, "plan.eml", 0);
+        let tasks = planning::tasks_in_capsule(
+            &capsule.message_id,
+            &capsule.subject,
+            &capsule.tags,
+            &capsule.blocks,
+        );
+        assert!(
+            tasks.iter().any(|task| task.item.text == "Позвонить домой"),
+            "the task must be readable back from the saved page"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Typing a due date must not fight the keyboard: while the text is not
+    /// yet a valid date it stays in the draft buffer, and the full date
+    /// commits. Before the buffer, every keystroke that was not a complete
+    /// date was thrown away and the field snapped back to the stored value.
+    #[test]
+    fn due_draft_keeps_typing_and_commits_the_date() {
+        let ctx = egui::Context::default();
+        // An empty due keeps the field blank, so the test does not depend on
+        // headless key-repeat delivery for clearing the prefilled date.
+        let vault = Rc::new(RefCell::new(capsule_with_task("")));
+        let state = Rc::new(RefCell::new(PlanningState::default()));
+        let action: Rc<RefCell<Option<ViewAction>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let vault = vault.clone();
+            let state = state.clone();
+            let action = action.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1400.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut out = ctx.run_pass(raw, |ctx| {
+                    ctx.root_ui(|ui| {
+                        let mut vault = vault.borrow_mut();
+                        let mut state = state.borrow_mut();
+                        let act = draw(ui, &mut vault, &mut state, Locale::En, None);
+                        let mut acc = action.borrow_mut();
+                        match acc.as_mut() {
+                            Some(existing) => existing.absorb(act),
+                            None => *acc = Some(act),
+                        }
+                    });
+                });
+                out.textures_delta.clear();
+            }
+        };
+
+        run(vec![]);
+        let due = ctx
+            .read_response(egui::Id::unique(("due-edit", KEY)))
+            .expect("due field response")
+            .rect;
+        let p = due.center();
+        run(vec![egui::Event::PointerMoved(p)]);
+        run(vec![press(p)]);
+        run(vec![release(p)]);
+        run(vec![egui::Event::Text("2026-".into())]);
+        run(vec![]);
+        assert!(
+            state.borrow().due_drafts.contains_key(KEY),
+            "the partial date must survive in the draft buffer"
+        );
+        {
+            let vault = vault.borrow();
+            let stored = vault.capsules[0].blocks[0]["data"]["items"][0]["due"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
+            assert!(
+                !planning::is_date_key(&stored),
+                "a partial date must not overwrite the stored due date (got {stored})"
+            );
+        }
+        run(vec![egui::Event::Text("12-01".into())]);
+        run(vec![]);
+        assert_eq!(
+            item_due(&vault.borrow()),
+            "2026-12-01",
+            "the completed date must commit"
+        );
+        assert!(
+            !state.borrow().due_drafts.contains_key(KEY),
+            "the draft must be dropped once the date commits"
+        );
     }
 
     /// Kanban and Gantt still draw headless with the new interactions.

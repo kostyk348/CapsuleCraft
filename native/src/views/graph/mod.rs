@@ -310,7 +310,16 @@ pub fn draw(
         .desired_width(110.0);
     bar.add(search_edit);
     if !state.search_query.is_empty() {
-        if ghost(&mut bar, Icon::Close, None, t(locale, Key::ClearSearch), true, 26.0).clicked() {
+        if ghost(
+            &mut bar,
+            Icon::Close,
+            None,
+            t(locale, Key::ClearSearch),
+            true,
+            26.0,
+        )
+        .clicked()
+        {
             state.search_query.clear();
         }
     }
@@ -334,7 +343,12 @@ pub fn draw(
 
     let local_depth = state.local_depth.clamp(1, 3);
     let mode_label = if state.local_mode {
-        format!("{}: {} {}", t(locale, Key::GraphLocalMode), t(locale, Key::GraphDepth), local_depth)
+        format!(
+            "{}: {} {}",
+            t(locale, Key::GraphLocalMode),
+            t(locale, Key::GraphDepth),
+            local_depth
+        )
     } else {
         t(locale, Key::GraphGlobalMode).to_string()
     };
@@ -430,15 +444,7 @@ pub fn draw(
     let mode = graph::pick_mode(state.zoom, visible.len());
 
     handle_interaction(
-        ui,
-        &response,
-        &transform,
-        mode,
-        &positions,
-        &graph,
-        capsules,
-        &metrics,
-        state,
+        ui, &response, &transform, mode, &positions, &graph, capsules, &metrics, state,
     );
 
     let context_hovered = response.hover_pos().and_then(|p| {
@@ -494,7 +500,8 @@ pub fn draw(
                     )
                     .clicked()
                     {
-                        ui.ctx().copy_text(format!("capsule://{}", capsule.message_id));
+                        ui.ctx()
+                            .copy_text(format!("capsule://{}", capsule.message_id));
                         action.toast = Some(t(locale, Key::CopiedToClipboard).to_string());
                         ui.close();
                     }
@@ -542,6 +549,11 @@ pub fn draw(
         render_clusters(&painter, rect, &response, &graph, &metrics, state, locale);
     } else if mode == LodMode::Density {
         render_density(
+            &painter, rect, &response, &transform, &graph, &metrics, state, &visible, &positions,
+            locale,
+        );
+    } else if mode == LodMode::Pages {
+        render_pages(
             &painter,
             rect,
             &response,
@@ -549,14 +561,12 @@ pub fn draw(
             &graph,
             &metrics,
             state,
+            capsules,
             &visible,
             &positions,
+            selected,
             locale,
-        );
-    } else if mode == LodMode::Pages {
-        render_pages(
-            &painter, rect, &response, &transform, &graph, &metrics, state, capsules, &visible,
-            &positions, selected, locale, &mut action,
+            &mut action,
         );
     }
 
@@ -611,8 +621,7 @@ pub fn draw(
         if let Some(capsule) = capsules.get(index) {
             if graph.nodes.iter().any(|node| node.capsule == index) {
                 let card_anchor = pos2(rect.right() - 262.0, rect.top() + 14.0);
-                let max_rect =
-                    Rect::from_min_size(card_anchor, vec2(248.0, rect.height() - 28.0));
+                let max_rect = Rect::from_min_size(card_anchor, vec2(248.0, rect.height() - 28.0));
                 let mut card_ui = ui.new_child(egui::UiBuilder::new().max_rect(max_rect));
 
                 egui::Frame::new()
@@ -733,13 +742,8 @@ mod tests {
     fn bubbles_pack_without_overlap() {
         let anchors = vec![[100.0, 100.0], [105.0, 102.0], [110.0, 98.0]];
         let radii = vec![20.0, 18.0, 15.0];
-        let (centers, _) = render_clusters::pack_bubbles(
-            &anchors,
-            &radii,
-            ([0.0, 0.0], [400.0, 400.0]),
-            0.5,
-            120,
-        );
+        let (centers, _) =
+            render_clusters::pack_bubbles(&anchors, &radii, ([0.0, 0.0], [400.0, 400.0]), 0.5, 120);
         for a in 0..centers.len() {
             for b in (a + 1)..centers.len() {
                 let dx = centers[a][0] - centers[b][0];
@@ -754,13 +758,8 @@ mod tests {
     fn bubble_radii_shrink_to_area_budget() {
         let anchors = vec![[50.0, 50.0], [60.0, 50.0]];
         let radii = vec![100.0, 100.0];
-        let (_, final_radii) = render_clusters::pack_bubbles(
-            &anchors,
-            &radii,
-            ([0.0, 0.0], [100.0, 100.0]),
-            0.3,
-            20,
-        );
+        let (_, final_radii) =
+            render_clusters::pack_bubbles(&anchors, &radii, ([0.0, 0.0], [100.0, 100.0]), 0.3, 20);
         assert!(final_radii[0] < radii[0]);
     }
 
@@ -768,20 +767,10 @@ mod tests {
     fn packing_keeps_geography_and_is_deterministic() {
         let anchors = vec![[50.0, 100.0], [350.0, 100.0]];
         let radii = vec![30.0, 30.0];
-        let (first_c, _) = render_clusters::pack_bubbles(
-            &anchors,
-            &radii,
-            ([0.0, 0.0], [400.0, 400.0]),
-            0.4,
-            60,
-        );
-        let (second_c, _) = render_clusters::pack_bubbles(
-            &anchors,
-            &radii,
-            ([0.0, 0.0], [400.0, 400.0]),
-            0.4,
-            60,
-        );
+        let (first_c, _) =
+            render_clusters::pack_bubbles(&anchors, &radii, ([0.0, 0.0], [400.0, 400.0]), 0.4, 60);
+        let (second_c, _) =
+            render_clusters::pack_bubbles(&anchors, &radii, ([0.0, 0.0], [400.0, 400.0]), 0.4, 60);
         assert_eq!(first_c, second_c);
         assert!(first_c[0][0] < first_c[1][0]);
     }
@@ -818,6 +807,9 @@ mod tests {
         assert_eq!(t(Locale::En, Key::GraphContextMenuOpen), "Open note");
         assert_eq!(t(Locale::Ru, Key::GraphContextMenuOpen), "Открыть заметку");
         assert_eq!(t(Locale::En, Key::GraphContextMenuCopyLink), "Copy link");
-        assert_eq!(t(Locale::Ru, Key::GraphContextMenuCopyLink), "Копировать ссылку");
+        assert_eq!(
+            t(Locale::Ru, Key::GraphContextMenuCopyLink),
+            "Копировать ссылку"
+        );
     }
 }

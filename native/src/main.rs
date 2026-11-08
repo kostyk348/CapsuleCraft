@@ -125,10 +125,13 @@ fn main() -> eframe::Result<()> {
             }
         }
     }
+    // Window size from the previous run (ui_state.json); the CLI flag and the
+    // snapshot preset win over it.
+    let initial_ui_state = UiState::load();
     let window = launch.window_size.unwrap_or(if launch.snapshot.is_some() {
         [1440.0, 900.0]
     } else {
-        [1380.0, 880.0]
+        initial_ui_state.window_size.unwrap_or([1380.0, 880.0])
     });
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size(window)
@@ -136,7 +139,6 @@ fn main() -> eframe::Result<()> {
         .with_decorations(false)
         .with_resizable(true)
         .with_title("CapsuleCraft");
-    let initial_ui_state = UiState::load();
     if let Some(icon) = brand::window_icon(
         initial_ui_state.icon_style,
         brand::custom_icon_path().as_deref(),
@@ -228,6 +230,14 @@ impl PageSnapshot {
     }
 }
 
+/// Stock page templates for the palette ("Новая заметка о встрече" и др.).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PageTemplate {
+    Meeting,
+    Todo,
+    Journal,
+}
+
 struct NativeApp {
     vault: Vault,
     selected: Option<usize>,
@@ -247,7 +257,15 @@ struct NativeApp {
     history: history::HistoryStore,
     /// Recently focused pages (message ids), newest last — Alt+Left walks it.
     nav_stack: Vec<String>,
+    /// Pages navigated away from via Alt+Left, newest last — Alt+Right walks
+    /// it back. Cleared whenever a fresh navigation replaces the top.
+    nav_forward: Vec<String>,
     nav_last: Option<String>,
+    /// Per-page scroll offsets (Message-ID → px) remembered for the session.
+    scroll_memory: std::collections::HashMap<String, f32>,
+    /// Message-ID whose saved scroll offset should be restored on the next
+    /// document draw (set exactly once per page switch).
+    scroll_restore_for: Option<String>,
     window_title: String,
     /// Snapshot of the page as it was before the latest edit.
     snapshot: Option<(String, PageSnapshot)>,
@@ -304,6 +322,8 @@ struct NativeApp {
     components: components::Manager,
     /// Integrations modal visibility.
     show_integrations: bool,
+    /// Keyboard-shortcuts cheat sheet (Shift+/ or the palette command).
+    show_shortcuts_modal: bool,
     /// Open attachment viewer (image/PDF overlay).
     viewer: Option<viewer::ViewerState>,
     /// Inline page previews (images + PDF first pages), cached per session.
@@ -477,7 +497,10 @@ impl NativeApp {
             palette: PaletteState::default(),
             history: history::HistoryStore::default(),
             nav_stack: Vec::new(),
+            nav_forward: Vec::new(),
             nav_last: None,
+            scroll_memory: std::collections::HashMap::new(),
+            scroll_restore_for: None,
             window_title: String::new(),
             snapshot: None,
             toast: None,
@@ -514,6 +537,7 @@ impl NativeApp {
             zen_mode: false,
             components: components::Manager::load(),
             show_integrations: false,
+            show_shortcuts_modal: false,
             viewer: None,
             previews: preview::PreviewCache::default(),
             ocr: None,
@@ -1244,6 +1268,227 @@ impl NativeApp {
         self.toast(t(self.locale, Key::CopiedToClipboard));
     }
 
+    /// Plain text of the open page: the decoded plain part for imported
+    /// emails, otherwise the block texts joined.
+    fn page_body_text(&self, index: usize) -> Option<String> {
+        let capsule = self.vault.capsules.get(index)?;
+        if let Some(body) = capsule.plain_body.as_deref() {
+            if !body.trim().is_empty() {
+                return Some(body.to_string());
+            }
+        }
+        let text = capsule
+            .blocks
+            .iter()
+            .map(mime::block_data_text)
+            .filter(|part| !part.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        (!text.trim().is_empty()).then_some(text)
+    }
+
+    fn copy_page_markdown(&mut self, ctx: &egui::Context) {
+        let Some(index) = self.selected else {
+            return;
+        };
+        let Some(capsule) = self.vault.capsules.get(index) else {
+            return;
+        };
+        let markdown = export::page_markdown(capsule);
+        ctx.copy_text(markdown);
+        self.toast(t(self.locale, Key::CopiedMarkdown));
+    }
+
+    fn copy_page_body(&mut self, ctx: &egui::Context) {
+        let Some(index) = self.selected else {
+            return;
+        };
+        match self.page_body_text(index) {
+            Some(text) => {
+                ctx.copy_text(text);
+                self.toast(t(self.locale, Key::CopiedBody));
+            }
+            None => self.toast(t(self.locale, Key::NoBody)),
+        }
+    }
+
+    fn copy_vault_path(&mut self, ctx: &egui::Context) {
+        let path = self.vault.dir.display().to_string();
+        ctx.copy_text(path);
+        self.toast(t(self.locale, Key::PathCopied));
+    }
+
+    fn reveal_vault_folder(&mut self) {
+        #[cfg(target_os = "android")]
+        {
+            // A NativeActivity has no file-manager intent to reuse.
+            self.toast(t(self.locale, Key::RevealFailed));
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let dir = self.vault.dir.clone();
+            let opened = match std::env::consts::OS {
+                "windows" => std::process::Command::new("explorer")
+                    .arg(&dir)
+                    .spawn()
+                    .is_ok(),
+                "macos" => std::process::Command::new("open").arg(&dir).spawn().is_ok(),
+                _ => std::process::Command::new("xdg-open")
+                    .arg(&dir)
+                    .spawn()
+                    .is_ok(),
+            };
+            if opened {
+                self.toast(t(self.locale, Key::CommandRevealVault));
+            } else {
+                self.status_error = true;
+                self.status = t(self.locale, Key::RevealFailed).to_string();
+            }
+        }
+    }
+
+    fn toggle_pin_selected(&mut self) {
+        let Some(index) = self.selected else {
+            return;
+        };
+        let Some(capsule) = self.vault.capsules.get(index) else {
+            return;
+        };
+        let id = capsule.message_id.clone();
+        let pinned = self.ui_state.toggle_pin(&id);
+        self.ui_state.save();
+        self.toast(if pinned {
+            t(self.locale, Key::PinnedToast)
+        } else {
+            t(self.locale, Key::UnpinnedToast)
+        });
+    }
+
+    fn toggle_wrap_body(&mut self) {
+        self.ui_state.wrap_body = !self.ui_state.wrap_body;
+        self.ui_state.save();
+        let key = if self.ui_state.wrap_body {
+            Key::WrapOn
+        } else {
+            Key::WrapOff
+        };
+        self.toast(t(self.locale, key));
+    }
+
+    /// The order the sidebar shows pages in (pinned first, then the active
+    /// sort; with a search query — the ranked results). Ctrl+1..9 and the
+    /// sidebar share this so page numbers match what the user sees.
+    fn sidebar_order(&self) -> Vec<usize> {
+        if self.search.trim().is_empty() {
+            return self.ui_state.order_pages(&self.vault.capsules);
+        }
+        self.search_index
+            .rank(&self.search)
+            .iter()
+            .filter_map(|hit| {
+                self.vault
+                    .capsules
+                    .iter()
+                    .position(|capsule| capsule.message_id == hit.id)
+            })
+            .collect()
+    }
+
+    /// Total word count across the vault, for the sidebar footer.
+    fn vault_words(&self) -> usize {
+        self.page_texts
+            .iter()
+            .map(|text| text.split_whitespace().count())
+            .sum()
+    }
+
+    /// Pages taking part in a reply chain, for the sidebar footer.
+    fn vault_threads(&self) -> usize {
+        self.vault
+            .capsules
+            .iter()
+            .filter(|capsule| capsule.parent_id.is_some() || capsule.in_reply_to.is_some())
+            .count()
+    }
+
+    /// Humanized "edited 5m ago" stamp for the page meta line, from the
+    /// .eml file's mtime (hand edits on disk show up honestly).
+    fn page_edited_hint(&self, index: usize) -> Option<String> {
+        let capsule = self.vault.capsules.get(index)?;
+        let modified = std::fs::metadata(self.vault.dir.join(&capsule.file_name))
+            .ok()?
+            .modified()
+            .ok()?;
+        let elapsed = modified.elapsed().ok()?;
+        let seconds = elapsed.as_secs();
+        let (key, count) = if seconds < 60 {
+            return Some(t(self.locale, Key::EditedNow).to_string());
+        } else if seconds < 3600 {
+            (Key::EditedMinutes, seconds / 60)
+        } else if seconds < 86400 {
+            (Key::EditedHours, seconds / 3600)
+        } else {
+            (Key::EditedDays, seconds / 86400)
+        };
+        Some(t(self.locale, key).replace("{n}", &count.to_string()))
+    }
+
+    /// Create a page pre-filled with one of the stock templates.
+    fn new_page_from_template(&mut self, template: PageTemplate) {
+        if !self.save_selected() {
+            return;
+        }
+        match self.vault.create_page(None) {
+            Ok(index) => {
+                let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+                let (subject, blocks) = match template {
+                    PageTemplate::Meeting => (
+                        t(self.locale, Key::TemplateMeetingH1).to_string(),
+                        vec![
+                            json!({"id": "tpl_h1", "type": "heading", "data": {"level": 1, "text": t(self.locale, Key::TemplateMeetingH1)}}),
+                            json!({"id": "tpl_h2a", "type": "heading", "data": {"level": 2, "text": t(self.locale, Key::TemplateMeetingAgenda)}}),
+                            json!({"id": "tpl_p1", "type": "paragraph", "data": {"text": ""}}),
+                            json!({"id": "tpl_h2b", "type": "heading", "data": {"level": 2, "text": t(self.locale, Key::TemplateMeetingDecisions)}}),
+                            json!({"id": "tpl_p2", "type": "paragraph", "data": {"text": ""}}),
+                            json!({"id": "tpl_h2c", "type": "heading", "data": {"level": 2, "text": t(self.locale, Key::TemplateMeetingFollowUp)}}),
+                            json!({"id": "tpl_todo", "type": "todo_list", "data": {"title": "", "items": []}}),
+                        ],
+                    ),
+                    PageTemplate::Todo => (
+                        t(self.locale, Key::TemplateTodoTitle).to_string(),
+                        vec![
+                            json!({"id": "tpl_h1", "type": "heading", "data": {"level": 1, "text": t(self.locale, Key::TemplateTodoTitle)}}),
+                            json!({"id": "tpl_todo", "type": "todo_list", "data": {"title": "", "items": []}}),
+                        ],
+                    ),
+                    PageTemplate::Journal => (
+                        date.clone(),
+                        vec![
+                            json!({"id": "tpl_h1", "type": "heading", "data": {"level": 1, "text": date}}),
+                            json!({"id": "tpl_p1", "type": "paragraph", "data": {"text": ""}}),
+                        ],
+                    ),
+                };
+                let Some(capsule) = self.vault.capsules.get_mut(index) else {
+                    return;
+                };
+                capsule.subject = subject;
+                capsule.blocks = blocks;
+                self.selected = Some(index);
+                self.dirty = true;
+                self.status = t(self.locale, Key::TemplateCreated).to_string();
+                self.status_error = false;
+                self.save_selected();
+                self.refresh_links();
+                self.toast(t(self.locale, Key::TemplateCreated));
+            }
+            Err(err) => {
+                self.status = err;
+                self.status_error = true;
+            }
+        }
+    }
+
     fn toast(&mut self, text: impl Into<String>) {
         self.toast = Some((text.into(), Instant::now()));
     }
@@ -1310,6 +1555,50 @@ impl NativeApp {
     fn mark_dirty(&mut self) {
         self.dirty = true;
         self.last_edit = Instant::now();
+    }
+
+    /// Persists every capsule a view mutated, even when it is not the open
+    /// one: the planning board writes tasks into the inbox page and
+    /// reschedules them from the calendar while a different page (or none)
+    /// is selected. Saving only the selected page used to drop those edits
+    /// on the next reload, which looked like tasks losing ticks or
+    /// disappearing entirely.
+    fn persist_touched(&mut self, indices: Vec<usize>) {
+        let mut seen: HashSet<usize> = HashSet::new();
+        let mut saved = 0;
+        for index in indices {
+            if !seen.insert(index) {
+                continue;
+            }
+            let Some(capsule) = self.vault.capsules.get(index) else {
+                continue;
+            };
+            let id = capsule.message_id.clone();
+            let snapshot = PageSnapshot::of(capsule);
+            if let Some((snapshot_id, previous)) = &self.snapshot {
+                if snapshot_id == &id && !same_snapshot(previous, &snapshot) {
+                    self.history
+                        .maybe_push(&id, snapshot_to_string(previous), now_millis());
+                }
+            }
+            if Some(index) == self.selected {
+                self.snapshot = Some((id, snapshot));
+            }
+            match self.vault.save(index) {
+                Ok(()) => saved += 1,
+                Err(err) => {
+                    self.status = err;
+                    self.status_error = true;
+                }
+            }
+        }
+        if saved > 0 {
+            self.last_write = Instant::now();
+            self.status = format!("Saved {}", chrono::Local::now().format("%H:%M:%S"));
+            self.status_error = false;
+            // Keep search and backlinks in sync with what is on disk.
+            self.refresh_links();
+        }
     }
 
     /// Returns `false` when a dirty page could not be saved. Callers must not
@@ -2153,6 +2442,8 @@ pub(crate) struct ShellAction {
     pub(crate) switch_vault: Option<PathBuf>,
     /// Two-way folder sync was requested from the sidebar footer.
     pub(crate) sync_folder: bool,
+    /// Sidebar sort mode chosen in the sort popup (persisted in ui_state).
+    pub(crate) set_sort: Option<crate::ui_state::PageSort>,
 }
 
 impl ShellAction {
@@ -2188,6 +2479,7 @@ impl ShellAction {
         self.sync_project |= other.sync_project;
         self.switch_vault = other.switch_vault.or_else(|| self.switch_vault.take());
         self.sync_folder |= other.sync_folder;
+        self.set_sort = other.set_sort.or(self.set_sort.take());
     }
 }
 
@@ -2270,9 +2562,33 @@ impl NativeApp {
             || self.show_cothink_modal
             || self.show_faq_modal
             || self.show_integrations
+            || self.show_shortcuts_modal
             || self.encrypt.open;
+        // Escape closes the simple modals (text fields blur first: the key is
+        // only handled when nothing owns focus).
+        if modals_open
+            && !self.palette.open
+            && ctx.memory(|m| m.focused().is_none())
+            && ctx.input(|i| i.key_pressed(egui::Key::Escape))
+        {
+            if self.confirm_delete {
+                self.confirm_delete = false;
+            } else if self.show_shortcuts_modal {
+                self.show_shortcuts_modal = false;
+            } else if self.show_appearance {
+                self.show_appearance = false;
+            } else if self.show_faq_modal {
+                self.show_faq_modal = false;
+            } else if self.show_integrations {
+                self.show_integrations = false;
+            }
+        }
         if self.zen_mode && !modals_open && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.toggle_zen_mode();
+        }
+        // Shift+/ opens the shortcut cheat sheet (plain "/" focuses search).
+        if shift && !self.palette.open && ctx.input(|i| i.key_pressed(egui::Key::Slash)) {
+            self.show_shortcuts_modal = true;
         }
 
         if cmd && shift && ctx.input(|i| i.key_pressed(egui::Key::A)) {
@@ -2292,6 +2608,15 @@ impl NativeApp {
         }
         if cmd && ctx.input(|i| i.key_pressed(egui::Key::D)) && !self.palette.open {
             self.duplicate_selected();
+        }
+        // Ctrl+P pins/unpins the open page (no print dialog in this shell, so
+        // the print slot is free for it).
+        if cmd && !shift && ctx.input(|i| i.key_pressed(egui::Key::P)) && !self.palette.open {
+            self.toggle_pin_selected();
+        }
+        // Ctrl+Shift+L toggles paragraph word wrap.
+        if cmd && shift && ctx.input(|i| i.key_pressed(egui::Key::L)) && !self.palette.open {
+            self.toggle_wrap_body();
         }
         if ctx.input(|i| i.key_pressed(egui::Key::F5)) {
             self.save_selected();
@@ -2324,7 +2649,8 @@ impl NativeApp {
                 self.selected = Some((current as i32 + step).rem_euclid(count as i32) as usize);
             }
         }
-        // Alt+Left returns to the previously focused page.
+        // Alt+Left returns to the previously focused page; Alt+Right goes
+        // forward again (browser-style back/forward pair).
         if !self.palette.open
             && ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::ArrowLeft))
         {
@@ -2335,9 +2661,107 @@ impl NativeApp {
                     .iter()
                     .position(|capsule| capsule.message_id == previous)
                 {
+                    if let Some(current_id) = self
+                        .selected
+                        .and_then(|index| self.vault.capsules.get(index))
+                        .map(|capsule| capsule.message_id.clone())
+                    {
+                        self.nav_forward.push(current_id);
+                        if self.nav_forward.len() > 64 {
+                            self.nav_forward.remove(0);
+                        }
+                    }
                     self.selected = Some(index);
-                    self.nav_last = Some(previous);
+                    self.nav_last = Some(previous.clone());
+                    self.scroll_restore_for = Some(previous);
                 }
+            }
+        }
+        if !self.palette.open
+            && ctx.input(|i| i.modifiers.alt && i.key_pressed(egui::Key::ArrowRight))
+        {
+            if let Some(next) = self.nav_forward.pop() {
+                if let Some(index) = self
+                    .vault
+                    .capsules
+                    .iter()
+                    .position(|capsule| capsule.message_id == next)
+                {
+                    if let Some(current_id) = self
+                        .selected
+                        .and_then(|index| self.vault.capsules.get(index))
+                        .map(|capsule| capsule.message_id.clone())
+                    {
+                        self.nav_stack.push(current_id);
+                        if self.nav_stack.len() > 64 {
+                            self.nav_stack.remove(0);
+                        }
+                    }
+                    self.selected = Some(index);
+                    self.nav_last = Some(next.clone());
+                    self.scroll_restore_for = Some(next);
+                }
+            }
+        }
+        // Ctrl+Tab cycles the views, Ctrl+Shift+Tab cycles backwards.
+        if cmd && !self.palette.open && ctx.input(|i| i.key_pressed(egui::Key::Tab)) {
+            let views = View::all();
+            let current = views
+                .iter()
+                .position(|view| *view == self.view)
+                .unwrap_or(0);
+            let step = if shift { views.len() - 1 } else { 1 };
+            self.view = views[(current + step) % views.len()];
+        }
+        // Ctrl+1..9 jumps to the Nth page of the sidebar order (pinned pages
+        // first, then the active sort; with a search query — the results).
+        if cmd && !shift && !self.palette.open {
+            for (position, key) in [
+                egui::Key::Num1,
+                egui::Key::Num2,
+                egui::Key::Num3,
+                egui::Key::Num4,
+                egui::Key::Num5,
+                egui::Key::Num6,
+                egui::Key::Num7,
+                egui::Key::Num8,
+                egui::Key::Num9,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                if ctx.input(|i| i.key_pressed(key)) {
+                    if let Some(index) = self.sidebar_order().get(position).copied() {
+                        self.select_page(index);
+                        self.view = View::Page;
+                    }
+                }
+            }
+        }
+        // Single-letter shortcuts only fire when no text field owns the
+        // keyboard and no overlay is open.
+        let keyboard_free = ctx.memory(|m| m.focused().is_none())
+            && !self.palette.open
+            && !ctx.egui_wants_keyboard_input();
+        if keyboard_free {
+            // N — quick capture: a fresh page with the cursor in the subject.
+            if ctx.input(|i| i.key_pressed(egui::Key::N)) {
+                self.new_page(None);
+                ctx.memory_mut(|m| m.request_focus(egui::Id::new("page_subject")));
+            }
+            // F2 — rename: focus the subject of the open page.
+            if ctx.input(|i| i.key_pressed(egui::Key::F2)) && self.selected.is_some() {
+                if self.ui_state.sidebar_collapsed {
+                    self.toggle_sidebar();
+                }
+                if self.view != View::Page {
+                    self.view = View::Page;
+                }
+                ctx.memory_mut(|m| m.request_focus(egui::Id::new("page_subject")));
+            }
+            // Delete — the standard confirm-then-delete flow.
+            if ctx.input(|i| i.key_pressed(egui::Key::Delete)) && self.selected.is_some() {
+                self.confirm_delete = true;
             }
         }
         if cmd && ctx.input(|i| i.key_pressed(egui::Key::K)) {
@@ -2379,6 +2803,8 @@ impl NativeApp {
             }
         }
         if ctx.input(|i| i.viewport().close_requested()) {
+            let content = ui.ctx().content_rect();
+            self.ui_state.window_size = Some([content.width(), content.height()]);
             self.ui_state.save();
             if !self.save_selected() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -2396,12 +2822,23 @@ impl NativeApp {
         if current_id != self.nav_last {
             if let Some(previous) = self.nav_last.take() {
                 if self.nav_stack.last() != Some(&previous) {
+                    // A fresh navigation invalidates the forward history, and
+                    // the page being left keeps its scroll offset (read from
+                    // the ScrollArea state of the previous frame).
+                    self.nav_forward.clear();
+                    if let Some(state) =
+                        egui::scroll_area::State::load(&ctx, egui::Id::new("document"))
+                    {
+                        self.scroll_memory
+                            .insert(previous.clone(), state.offset().y);
+                    }
                     self.nav_stack.push(previous);
                     if self.nav_stack.len() > 64 {
                         self.nav_stack.remove(0);
                     }
                 }
             }
+            self.scroll_restore_for = current_id.clone();
             self.nav_last = current_id.clone();
         }
         let wanted_title = match current_id.as_deref().and_then(|id| {
@@ -2480,6 +2917,7 @@ impl NativeApp {
                 });
         }
 
+        let (vault_words, vault_threads) = (self.vault_words(), self.vault_threads());
         let sidebar_action = if !self.zen_mode && !self.ui_state.sidebar_collapsed {
             let sidebar_resp = egui::Panel::left("sidebar")
                 .default_size(self.ui_state.sidebar_width)
@@ -2502,6 +2940,9 @@ impl NativeApp {
                         &self.search_index,
                         &self.page_texts,
                         self.watcher.is_some(),
+                        &self.ui_state,
+                        vault_words,
+                        vault_threads,
                         self.locale,
                     )
                 });
@@ -2542,19 +2983,35 @@ impl NativeApp {
                                             .map(|c| (idx, c.subject.clone()))
                                     })
                                     .collect();
+                                // Restore the remembered scroll offset exactly
+                                // once, on the first draw after a page switch
+                                // (snapshot mode keeps its fixed offset).
+                                let edited_hint = self.page_edited_hint(index);
+                                let scroll_initial = if self.scroll_restore_for.as_deref()
+                                    == Some(self.vault.capsules[index].message_id.as_str())
+                                {
+                                    self.scroll_restore_for = None;
+                                    self.scroll_memory
+                                        .get(&self.vault.capsules[index].message_id)
+                                        .copied()
+                                } else {
+                                    self.document_scroll
+                                };
                                 editor.absorb(draw_document(
                                     ui,
                                     &mut self.vault.capsules[index],
                                     &ancestors,
                                     self.locale,
                                     &link_context,
-                                    self.document_scroll,
+                                    scroll_initial,
                                     self.ui_state.wide_canvas,
                                     &mut self.previews,
                                     self.components
                                         .lib_path(components::ComponentId::PdfEngine, "pdfium")
                                         .as_deref(),
                                     self.ocr_highlight.as_ref().map(|(id, _)| id.as_str()),
+                                    self.ui_state.wrap_body,
+                                    edited_hint.as_deref(),
                                 ));
 
                                 // Page-mode canvas: a clicked, already-selected
@@ -2647,7 +3104,14 @@ impl NativeApp {
         if let Some(old_title) = editor.rename_from.clone() {
             self.propagate_rename(&old_title);
         }
-        if view_action.changed {
+        if !view_action.touched.is_empty() {
+            // Views that mutate pages other than the open one (the planning
+            // board) must have those pages saved themselves; snapshotting the
+            // selected page here would write undo history for a page nobody
+            // changed.
+            let touched = std::mem::take(&mut view_action.touched);
+            self.persist_touched(touched);
+        } else if view_action.changed {
             self.record_change();
         }
         if let Some(toast) = view_action.toast.clone() {
@@ -2689,6 +3153,15 @@ impl NativeApp {
         if shell.sync_folder {
             let force_pick = ui.input(|i| i.modifiers.shift);
             self.sync_folder_action(force_pick);
+        }
+        if let Some(sort) = shell.set_sort {
+            self.ui_state.sort_mode = sort;
+            self.ui_state.save();
+            self.toast(format!(
+                "{}: {}",
+                t(self.locale, Key::PageSort),
+                t(self.locale, sort.key())
+            ));
         }
         if editor.new_subpage {
             let parent = self
@@ -2795,9 +3268,13 @@ impl NativeApp {
         }
 
         // Command palette: a pure overlay; the shell performs whatever it picks.
-        if let Some(command) =
-            views::palette::draw(&ctx, &self.vault.capsules, self.locale, &mut self.palette)
-        {
+        if let Some(command) = views::palette::draw(
+            &ctx,
+            &self.vault.capsules,
+            self.locale,
+            &mut self.palette,
+            &self.ui_state.palette_recents,
+        ) {
             self.run_command(&ctx, command);
         }
 
@@ -2949,6 +3426,9 @@ impl NativeApp {
         if modals::draw_faq_modal(self.show_faq_modal, self.locale, &ctx) {
             self.show_faq_modal = false;
         }
+        if modals::draw_shortcuts_modal(self.show_shortcuts_modal, self.locale, &ctx) {
+            self.show_shortcuts_modal = false;
+        }
 
         let encrypt_action = modals::draw_encrypt_modal(&mut self.encrypt, self.locale, &ctx);
         match encrypt_action {
@@ -3084,6 +3564,9 @@ impl NativeApp {
     }
 
     fn run_command(&mut self, ctx: &egui::Context, command: PaletteCommand) {
+        // Remember the command for the palette-recents ranking.
+        self.ui_state.note_palette_command(command.key());
+        self.ui_state.save();
         match command {
             PaletteCommand::NewPage => self.new_page(None),
             PaletteCommand::SavePage => {
@@ -3110,6 +3593,25 @@ impl NativeApp {
             }
             PaletteCommand::DuplicatePage => self.duplicate_selected(),
             PaletteCommand::CopyPageLink => self.copy_page_link(ctx),
+            PaletteCommand::CopyPageMarkdown => self.copy_page_markdown(ctx),
+            PaletteCommand::CopyPageBody => self.copy_page_body(ctx),
+            PaletteCommand::ToggleWrapBody => self.toggle_wrap_body(),
+            PaletteCommand::NewMeetingNote => self.new_page_from_template(PageTemplate::Meeting),
+            PaletteCommand::NewTodoList => self.new_page_from_template(PageTemplate::Todo),
+            PaletteCommand::NewJournalPage => self.new_page_from_template(PageTemplate::Journal),
+            PaletteCommand::CopyVaultPath => self.copy_vault_path(ctx),
+            PaletteCommand::RevealVaultFolder => self.reveal_vault_folder(),
+            PaletteCommand::TogglePin => self.toggle_pin_selected(),
+            PaletteCommand::ShowShortcuts => self.show_shortcuts_modal = true,
+            PaletteCommand::SortPages(sort) => {
+                self.ui_state.sort_mode = sort;
+                self.ui_state.save();
+                self.toast(format!(
+                    "{}: {}",
+                    t(self.locale, Key::PageSort),
+                    t(self.locale, sort.key())
+                ));
+            }
             PaletteCommand::ToggleLocale => {
                 let locale = self.locale.other();
                 self.set_locale(locale);
@@ -3528,6 +4030,8 @@ mod app_tests {
                 false,
                 &mut previews,
                 None,
+                None,
+                true,
                 None,
             );
             assert!(action.attachments.is_empty());

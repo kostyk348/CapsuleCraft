@@ -21,7 +21,10 @@ pub fn draw_root_drop_zone(
     let (root_drop_rect, root_drop_resp) =
         ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::hover());
     let is_already_root = tree.parent_of(dragged).is_none();
-    let hovered = root_drop_resp.hovered() && !is_already_root;
+    // `hovered()` is suppressed for every widget while a drag is in flight
+    // (egui: "while dragging or clicking something, nothing else is
+    // hovered") — the drop zone must look at the pointer position instead.
+    let hovered = root_drop_resp.contains_pointer() && !is_already_root;
 
     ui.painter().rect_stroke(
         root_drop_rect,

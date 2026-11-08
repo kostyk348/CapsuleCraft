@@ -71,9 +71,11 @@ pub fn handle_interaction(
 ) {
     if mode == LodMode::Pages && response.drag_started() {
         if let Some(pointer) = response.interact_pointer_pos() {
-            state.dragged_node = metrics
-                .grid
-                .nearest(positions, transform.to_graph(pointer), 14.0 / transform.radius);
+            state.dragged_node = metrics.grid.nearest(
+                positions,
+                transform.to_graph(pointer),
+                14.0 / transform.radius,
+            );
         }
     }
 

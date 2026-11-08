@@ -3,6 +3,115 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.12.2] — 2026-11-08 — Drag and drop actually drops
+
+The user was right: page drag-and-drop in the sidebar never delivered. Two
+defects, both fixed.
+
+### Fixed
+- **Drop targets were invisible and the drop could silently miss.** While a
+  drag is in flight, egui suppresses `hovered()` for every widget except the
+  one being dragged ("while dragging or clicking something, nothing else is
+  hovered"). The sidebar probed drop targets with `hovered()`, so during a
+  drag no row ever lit up, and the drop only registered thanks to egui
+  restoring hover on the release frame — releasing anywhere outside a row
+  (over the document, the scrollbar, the footer) cancelled the move with no
+  explanation. Drop targets and the root drop zone are now probed with
+  `contains_pointer()`, the same primitive the calendar rescheduler and the
+  block grip drag already used: the highlight follows the pointer for the
+  whole drag and the drop lands where the highlight shows.
+- **A lost release could freeze the page tree.** `dragged_page` was only
+  cleared when a release event arrived; if the button-up happened outside
+  the window or was eaten by a modal, the stale state made every row click
+  dead (row clicks are gated on the drag state being empty) and the next
+  stray release moved a page to wherever the pointer happened to be. The
+  sidebar now cancels a drag whose button is up and no release arrived —
+  the same stale-state cleanup the block drag already had.
+
+Sidebar rows carry a stable explicit id (`page-row`) now; that is what the
+new headless tests address. Tests 323 → 326: dropping one page onto another
+emits the reparent, dropping a page into its own subtree stays rejected, and
+a lost release cannot stick the drag state.
+
+## [2.12.1] — 2026-11-08 — The planning board keeps its promises
+
+User-reported defect batch against the v2.12.0 planning board.
+
+### Fixed
+- **Tasks survive a reload.** Planning edits (add, tick, reschedule) landed
+  on the inbox page while the shell only ever saved the open page, so every
+  restart — or any watcher-triggered reload — threw the edits away. Views now
+  report the capsules they touched (`ViewAction::touched`) and the shell
+  persists exactly those pages, with undo snapshots and a «Saved» status.
+- **Tasks land on a savable page.** Quick add used to drop tasks onto the
+  first page even when it was an imported read-only .eml: the write failed
+  and the task existed only in memory. The board now prefers a native inbox
+  page, then any native page, and creates a fresh page when the vault has
+  none — task creation always works.
+- **The due-date field no longer fights the keyboard.** The row rebuilds its
+  item every frame, so every keystroke that was not yet a complete date was
+  discarded and the field snapped back mid-typing. Partial input now lives in
+  a per-task draft buffer and commits as soon as the date is complete (or on
+  blur); a red tint marks invalid text while typing.
+- **Overdue is honest.** With dates typeable again, a task kept whatever
+  stale date it had; the calendar day panel now says explicitly when the
+  focused day is in the past (a new task lands in Overdue at once), and the
+  red overdue tint follows the date being typed, not just the stored one.
+
+Tests 318 → 323 (touched reporting, native-target choice, page creation
+fallback, disk round-trip, due-draft typing).
+
+## [2.12.0] — 2026-11-08 — The Android launch fix, the app icon, and the second QoL wave
+
+### Fixed
+- **The Android build stopped crashing on launch.** The crate asked eframe for
+  the `android-game-activity` backend while the manifest shipped
+  `android.app.NativeActivity`: the built `.so` exported `GameActivity_onCreate`
+  but no `ANativeActivity_onCreate`, so NativeActivity failed to bind and the
+  app died instantly on open. eframe is declared per-target now — desktop keeps
+  accesskit, Android takes `android-native-activity` (eframe 0.37 forbids that
+  backend together with accesskit, so the screen-reader bridge stays
+  desktop-only; see docs/android.md). Feature resolution is verified by
+  `cargo tree` and the CI Android job.
+- **The APK finally wears the app icon**: a generated launcher set (five
+  densities, legacy + round + adaptive `anydpi-v26` with a foreground layer)
+  in the Graphite/2D81FF brand palette, wired into the manifest. Before this
+  release the launcher showed the stock Android robot.
+
+### Added — navigation and pages
+- Browser-style back/forward: `Alt+Right` walks the forward stack that
+  `Alt+Left` fills; a fresh navigation clears it.
+- `Ctrl+1…9` jumps to the Nth page of the sidebar order — pinned first, then
+  the active sort; with a search query, the results.
+- `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle the views next to the `Alt+1…6`.
+- `N` — quick capture: a fresh page with the cursor in the subject; `F2`
+  focuses the subject for a rename; `Delete` opens confirm-delete.
+- Scroll memory per page (session-wide, incl. back/forward) and
+  `Ctrl+Home` / `Ctrl+End` jump to the very top/bottom.
+
+### Added — sidebar
+- Pinned pages section with `Ctrl+P` to pin/unpin; Recently visited section.
+- Sort menu (vault order / title A-Z / Z-A / newest / oldest) persisted in
+  ui_state.json, plus palette commands.
+- Search results are keyboard-driven: `Enter` opens the top hit, arrows walk
+  them while the field is focused.
+- Vault stats in the footer: total words and reply-chain pages.
+
+### Added — document
+- "Edited 5m ago" in the meta line, from the .eml mtime — hand edits on disk
+  show up honestly.
+- Word wrap toggle (`Ctrl+Shift+L`, palette): paragraphs become one long
+  line with a horizontal strip.
+- Copy as Markdown / Copy page text palette commands.
+- Page templates: meeting note, todo list, journal page dated today.
+
+### Added — shell
+- Palette recents: recently executed commands float up in the ranking
+  (persisted).
+- Copy vault path / Reveal vault folder commands.
+- Keyboard-shortcuts cheat sheet (`Shift+/`); the FAQ shows the app version.
+- Desktop window size persistence.
+
 ## [2.11.0] — 2026-11-08 — The five bug fixes batch, plus the QoL wave
 
 User-reported defects fixed one by one, then a quality-of-life pass across

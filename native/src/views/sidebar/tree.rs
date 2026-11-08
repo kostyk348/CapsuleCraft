@@ -36,8 +36,16 @@ pub fn draw_page_nodes(
         let depth = depth.min(4);
         let indent = depth as f32 * 12.0;
 
-        let (rect, response) =
-            ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click_and_drag());
+        let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
+        // A stable, explicit id: the drop-target probe and headless tests
+        // address the row by it. egui suppresses `hovered()` on every widget
+        // while a drag is in flight, so the row must be probed with
+        // `contains_pointer()` instead.
+        let response = ui.interact(
+            rect,
+            egui::Id::unique(("page-row", key.clone())),
+            Sense::click_and_drag(),
+        );
 
         if response.drag_started() && capsule.native {
             *dragged_page = Some(index);
@@ -49,7 +57,7 @@ pub fn draw_page_nodes(
         let mut is_valid_drop_target = false;
         let mut is_cycle_target = false;
         if let Some(dragged) = *dragged_page {
-            if dragged != index && response.hovered() {
+            if dragged != index && response.contains_pointer() {
                 if tree.is_descendant_of(index, dragged) {
                     is_cycle_target = true;
                 } else {
@@ -397,6 +405,9 @@ mod tests {
 
         assert!(!collapsed.contains("a@test"), "parent A must be expanded");
         assert!(!collapsed.contains("b@test"), "parent B must be expanded");
-        assert!(collapsed.contains("other@test"), "unrelated folder remains collapsed");
+        assert!(
+            collapsed.contains("other@test"),
+            "unrelated folder remains collapsed"
+        );
     }
 }

@@ -151,8 +151,7 @@ pub fn render_clusters(
             rect.top() + (0.08 + 0.84 * fy.clamp(0.0, 1.0)) * rect.height(),
         ]
     };
-    let cluster_radius =
-        |count: usize| -> f32 { (9.0 + (count as f32).sqrt() * 1.7).min(30.0) };
+    let cluster_radius = |count: usize| -> f32 { (9.0 + (count as f32).sqrt() * 1.7).min(30.0) };
     let count = graph.clusters.len();
     let anchors: Vec<[f32; 2]> = (0..count).map(|i| fit(metrics.centroids[i])).collect();
     let raw_radii: Vec<f32> = (0..count)
@@ -345,10 +344,12 @@ pub fn draw_cluster_panel(
                 let (row_rect, row_resp) =
                     ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::click());
                 if row_resp.hovered() {
-                    ui.painter().rect_filled(row_rect, theme::RADIUS, theme::wash());
+                    ui.painter()
+                        .rect_filled(row_rect, theme::RADIUS, theme::wash());
                 }
                 let dot_center = pos2(row_rect.left() + 7.0, row_rect.center().y);
-                ui.painter().circle_filled(dot_center, 3.5, theme::fade(dot, dim));
+                ui.painter()
+                    .circle_filled(dot_center, 3.5, theme::fade(dot, dim));
                 ui.painter().text(
                     pos2(row_rect.left() + 16.0, row_rect.center().y),
                     egui::Align2::LEFT_CENTER,

@@ -6,8 +6,8 @@ pub mod tree;
 use std::collections::HashSet;
 
 use egui::{
-    pos2, vec2, Align, Align2, FontId, Frame, Layout, Margin, Rect, Response, RichText,
-    ScrollArea, Sense, Stroke, TextEdit, Ui, UiBuilder,
+    pos2, vec2, Align, Align2, FontId, Frame, Layout, Margin, Rect, Response, RichText, ScrollArea,
+    Sense, Stroke, TextEdit, Ui, UiBuilder,
 };
 
 use crate::caps;
@@ -20,6 +20,7 @@ use crate::search;
 use crate::text_button;
 use crate::theme;
 use crate::truncate_chars;
+use crate::ui_state::{PageSort, UiState};
 use crate::vault::{PageTree, Vault};
 use crate::{menu_header, menu_row, menu_separator, popover_frame, ShellAction};
 
@@ -178,15 +179,30 @@ pub fn draw_sidebar(
     index: &search::Bm25Index,
     page_texts: &[String],
     watching: bool,
+    ui_state: &UiState,
+    words: usize,
+    threads: usize,
     locale: Locale,
 ) -> ShellAction {
     let mut action = ShellAction::default();
+    // A drag whose release never reached us (the pointer left the window, a
+    // modal ate the button-up) must not poison the list: row clicks are
+    // gated on `dragged_page` being empty, so a stuck state would make the
+    // whole tree dead, and the next stray release would move a page to
+    // wherever the pointer happens to be. Cancel when no button is down and
+    // no release arrived this frame — a real release frame keeps its drop.
+    if dragged_page.is_some()
+        && !ui.input(|i| i.pointer.any_down())
+        && !ui.input(|i| i.pointer.any_released())
+    {
+        *dragged_page = None;
+    }
     let outer = ui.max_rect();
     ui.allocate_rect(outer, Sense::hover());
     ui.set_min_width(outer.width());
     let inner = outer.shrink2(vec2(14.0, 8.0));
     let header_h = 122.0;
-    let footer_h = 122.0;
+    let footer_h = 138.0;
 
     let header_rect = Rect::from_min_max(inner.min, pos2(inner.right(), inner.top() + header_h));
     let footer_rect = Rect::from_min_max(pos2(inner.left(), inner.bottom() - footer_h), inner.max);
@@ -426,6 +442,73 @@ pub fn draw_sidebar(
             ui.spacing_mut().item_spacing.y = 1.0;
             let query = search.trim().to_lowercase();
             if query.is_empty() {
+                // Pinned pages: first, in pin order, so one click reaches the
+                // pages the user actually lives in.
+                let pinned_positions: Vec<usize> = ui_state
+                    .pinned_ids
+                    .iter()
+                    .filter_map(|id| {
+                        vault
+                            .capsules
+                            .iter()
+                            .position(|capsule| &capsule.message_id == id)
+                    })
+                    .collect();
+                if !pinned_positions.is_empty() {
+                    menu_header(ui, t(locale, Key::Pinned));
+                    for position in pinned_positions.iter() {
+                        if draw_search_row(
+                            ui,
+                            &vault.capsules,
+                            tree,
+                            *position,
+                            selected,
+                            0.0,
+                            None,
+                            search,
+                            locale,
+                        ) {
+                            action.select = Some(*position);
+                        }
+                    }
+                    ui.add_space(8.0);
+                }
+
+                // Sort control: a label-shaped popup; the choice persists in
+                // ui_state.json, so the list stops reshuffling on its own.
+                let sort_button = text_button(
+                    ui,
+                    None,
+                    &format!(
+                        "{}: {}",
+                        t(locale, Key::PageSort),
+                        t(locale, ui_state.sort_mode.key())
+                    ),
+                    false,
+                );
+                egui::Popup::menu(&sort_button)
+                    .frame(popover_frame())
+                    .align(egui::RectAlign::BOTTOM_START)
+                    .show(|ui| {
+                        ui.set_min_width(190.0);
+                        for sort in PageSort::ALL {
+                            if menu_row(
+                                ui,
+                                None,
+                                t(locale, sort.key()),
+                                None,
+                                ui_state.sort_mode == sort,
+                                true,
+                                false,
+                            )
+                            .clicked()
+                            {
+                                action.set_sort = Some(sort);
+                            }
+                        }
+                    });
+                ui.add_space(8.0);
+
                 if tree.roots().is_empty() {
                     empty_pages(ui, &mut action, vault.capsules.is_empty(), locale);
                 } else {
@@ -450,6 +533,44 @@ pub fn draw_sidebar(
                     }
 
                     handle_drag_release(ui, dragged_page, drop_target, &mut action);
+                    // Recently visited pages (excluding the open one and the
+                    // pins already shown above).
+                    let recents: Vec<usize> = ui_state
+                        .recent_page_ids
+                        .iter()
+                        .filter_map(|id| {
+                            vault
+                                .capsules
+                                .iter()
+                                .position(|capsule| &capsule.message_id == id)
+                        })
+                        .filter(|position| {
+                            Some(*position) != selected
+                                && !ui_state
+                                    .pinned_ids
+                                    .contains(&vault.capsules[*position].message_id)
+                        })
+                        .take(5)
+                        .collect();
+                    if !recents.is_empty() {
+                        ui.add_space(10.0);
+                        menu_header(ui, t(locale, Key::RecentPages));
+                        for position in recents {
+                            if draw_search_row(
+                                ui,
+                                &vault.capsules,
+                                tree,
+                                position,
+                                selected,
+                                0.0,
+                                None,
+                                search,
+                                locale,
+                            ) {
+                                action.select = Some(position);
+                            }
+                        }
+                    }
                 }
             } else {
                 let mut rows: Vec<(usize, f32, Option<String>)> = Vec::new();
@@ -492,6 +613,33 @@ pub fn draw_sidebar(
                         &format!("{} · {}", rows.len(), t(locale, Key::Results)),
                         theme::faint(),
                     );
+                    // While the search field owns the keyboard: Enter opens
+                    // the top result, ↑/↓ walk the results with the cursor.
+                    let search_focused =
+                        ui.memory(|m| m.focused()) == Some(egui::Id::new("sidebar_search"));
+                    if search_focused {
+                        let (enter, down, up) = ui.input(|i| {
+                            (
+                                i.key_pressed(egui::Key::Enter),
+                                i.key_pressed(egui::Key::ArrowDown),
+                                i.key_pressed(egui::Key::ArrowUp),
+                            )
+                        });
+                        if (enter || down || up) && !rows.is_empty() {
+                            let cursor_id = egui::Id::new("sidebar_search_cursor");
+                            let mut cursor =
+                                ui.data(|d| d.get_temp::<usize>(cursor_id)).unwrap_or(0);
+                            if down {
+                                cursor = (cursor + 1).min(rows.len() - 1);
+                            }
+                            if up {
+                                cursor = cursor.saturating_sub(1);
+                            }
+                            cursor = cursor.min(rows.len() - 1);
+                            ui.data_mut(|d| d.insert_temp(cursor_id, cursor));
+                            action.select = Some(rows[cursor].0);
+                        }
+                    }
                     for (index, score, snippet) in rows.iter().take(60) {
                         if draw_search_row(
                             ui,
@@ -565,6 +713,19 @@ pub fn draw_sidebar(
     if !vault.load_errors.is_empty() {
         counts_label.on_hover_text(vault.load_errors.join("\n"));
     }
+    footer.add_space(2.0);
+    footer.label(
+        RichText::new(format!(
+            "{} {} · {} {}",
+            words,
+            t(locale, Key::WordsShort),
+            threads,
+            t(locale, Key::FooterThreads)
+        ))
+        .family(theme::mono())
+        .size(9.5)
+        .color(theme::faint()),
+    );
     footer.add_space(8.0);
     footer.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
@@ -752,5 +913,320 @@ fn empty_pages(ui: &mut Ui, action: &mut ShellAction, no_pages: bool, locale: Lo
     ui.add_space(8.0);
     if primary_button(ui, t(locale, Key::NewPage), 28.0).clicked() {
         action.new_page = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mime::Capsule;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    fn capsule(id: &str, subject: &str) -> Capsule {
+        Capsule {
+            message_id: id.into(),
+            subject: subject.into(),
+            from: String::new(),
+            to: String::new(),
+            date: String::new(),
+            timestamp: 0,
+            in_reply_to: None,
+            parent_id: None,
+            references: Vec::new(),
+            tags: vec!["#plan".into()],
+            status: String::new(),
+            file_name: format!("{id}.eml"),
+            blocks: vec![serde_json::json!({
+                "id": format!("blk-{id}"),
+                "type": "paragraph",
+                "data": {"text": "body"}
+            })],
+            page_canvas: None,
+            attachments: Vec::new(),
+            native: true,
+            parse_note: None,
+            plain_body: None,
+            html_body: None,
+            raw_eml: None,
+        }
+    }
+
+    /// Dragging a page row onto another page must emit a reparent. This
+    /// guards the egui pitfall that silently killed the whole feature: while
+    /// a drag is in flight, `hovered()` is suppressed for every widget
+    /// except the one being dragged ("while dragging or clicking something,
+    /// nothing else is hovered"), so drop targets have to be probed with
+    /// `contains_pointer()`. Before the fix the pointer never "hovered" any
+    /// row while dragging, `drop_target` stayed empty and every release was
+    /// a no-op.
+    #[test]
+    fn dragging_a_page_onto_another_reparents_it() {
+        let ctx = egui::Context::default();
+        let vault = Vault {
+            dir: std::path::PathBuf::new(),
+            capsules: vec![capsule("msg-a", "Alpha"), capsule("msg-b", "Beta")],
+            load_errors: Vec::new(),
+        };
+        let tree = PageTree::build(&vault.capsules);
+        let b_index = 1;
+        let action: Rc<RefCell<Option<ShellAction>>> = Rc::new(RefCell::new(None));
+        let dragged: Rc<RefCell<Option<usize>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let action = action.clone();
+            let dragged = dragged.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(260.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut search = String::new();
+                let mut collapsed: HashSet<String> = HashSet::new();
+                ctx.run_pass(raw, |ctx| {
+                    egui::Area::new(egui::Id::unique("sidebar-harness"))
+                        .fixed_pos(egui::Pos2::ZERO)
+                        .show(ctx, |ui| {
+                            let mut act = draw_sidebar(
+                                ui,
+                                &vault,
+                                &tree,
+                                None,
+                                &mut dragged.borrow_mut(),
+                                &mut search,
+                                &mut collapsed,
+                                &crate::search::Bm25Index::default(),
+                                &["".to_string(), "".to_string()],
+                                false,
+                                &crate::ui_state::UiState::default(),
+                                0,
+                                0,
+                                Locale::En,
+                            );
+                            // Absorb, not overwrite: settle frames after the
+                            // release must not erase the reparent.
+                            let mut acc = action.borrow_mut();
+                            match acc.as_mut() {
+                                Some(existing) => existing.absorb(act),
+                                None => *acc = Some(act),
+                            }
+                        });
+                })
+                .textures_delta
+                .clear();
+            }
+        };
+
+        run(vec![]);
+        run(vec![]);
+        let a = ctx
+            .read_response(egui::Id::unique(("page-row", "msg-a".to_string())))
+            .expect("row Alpha response")
+            .rect;
+        let b = ctx
+            .read_response(egui::Id::unique(("page-row", "msg-b".to_string())))
+            .expect("row Beta response")
+            .rect;
+        assert!(
+            a.top() < b.top(),
+            "roots must render in vault order: Alpha above Beta"
+        );
+
+        // Press on Beta, drag over Alpha, release: Beta becomes a child of
+        // Alpha.
+        run(vec![egui::Event::PointerMoved(b.center())]);
+        run(vec![egui::Event::PointerButton {
+            pos: b.center(),
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        }]);
+        run(vec![egui::Event::PointerMoved(a.center())]);
+        run(vec![egui::Event::PointerMoved(a.center())]);
+        run(vec![egui::Event::PointerButton {
+            pos: a.center(),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        }]);
+        run(vec![]);
+        let action = action.borrow_mut().take().expect("action");
+        assert_eq!(
+            action.reparent,
+            Some((b_index, Some("msg-a".to_string()))),
+            "dropping Beta onto Alpha must request a reparent"
+        );
+        assert_eq!(*dragged.borrow(), None, "drag state must clear on release");
+    }
+
+    /// The inverse drop — onto a page inside the dragged page's own subtree —
+    /// must stay a rejected cycle and not emit a reparent.
+    #[test]
+    fn dropping_a_page_into_its_own_subtree_is_rejected() {
+        let ctx = egui::Context::default();
+        let mut vault = Vault {
+            dir: std::path::PathBuf::new(),
+            capsules: vec![capsule("msg-a", "Alpha"), capsule("msg-b", "Beta")],
+            load_errors: Vec::new(),
+        };
+        vault.capsules[1].parent_id = Some("msg-a".to_string());
+        let tree = PageTree::build(&vault.capsules);
+        let action: Rc<RefCell<Option<ShellAction>>> = Rc::new(RefCell::new(None));
+        let dragged: Rc<RefCell<Option<usize>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let action = action.clone();
+            let dragged = dragged.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(260.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut search = String::new();
+                let mut collapsed: HashSet<String> = HashSet::new();
+                ctx.run_pass(raw, |ctx| {
+                    egui::Area::new(egui::Id::unique("sidebar-harness-cycle"))
+                        .fixed_pos(egui::Pos2::ZERO)
+                        .show(ctx, |ui| {
+                            let mut act = draw_sidebar(
+                                ui,
+                                &vault,
+                                &tree,
+                                None,
+                                &mut dragged.borrow_mut(),
+                                &mut search,
+                                &mut collapsed,
+                                &crate::search::Bm25Index::default(),
+                                &["".to_string(), "".to_string()],
+                                false,
+                                &crate::ui_state::UiState::default(),
+                                0,
+                                0,
+                                Locale::En,
+                            );
+                            let mut acc = action.borrow_mut();
+                            match acc.as_mut() {
+                                Some(existing) => existing.absorb(act),
+                                None => *acc = Some(act),
+                            }
+                        });
+                })
+                .textures_delta
+                .clear();
+            }
+        };
+
+        run(vec![]);
+        run(vec![]);
+        let a = ctx
+            .read_response(egui::Id::unique(("page-row", "msg-a".to_string())))
+            .expect("row Alpha response")
+            .rect;
+        let b = ctx
+            .read_response(egui::Id::unique(("page-row", "msg-b".to_string())))
+            .expect("row Beta response")
+            .rect;
+        // Beta is Alpha's child now, so it renders indented below Alpha.
+        assert!(a.top() < b.top(), "child Beta renders below parent Alpha");
+
+        run(vec![egui::Event::PointerMoved(a.center())]);
+        run(vec![egui::Event::PointerButton {
+            pos: a.center(),
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        }]);
+        run(vec![egui::Event::PointerMoved(b.center())]);
+        run(vec![egui::Event::PointerButton {
+            pos: b.center(),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        }]);
+        run(vec![]);
+        let action = action.borrow_mut().take().expect("action");
+        assert!(
+            action.reparent.is_none(),
+            "dropping a page into its own subtree must stay a no-op"
+        );
+        assert_eq!(*dragged.borrow(), None);
+    }
+
+    /// A drag that lost its release (the pointer left the window, a modal
+    /// ate the button-up) must not stick: the tree gates row clicks on the
+    /// drag state being empty, so a stuck `dragged_page` used to make every
+    /// click dead until some later stray release moved a page.
+    #[test]
+    fn a_lost_release_does_not_stick_the_drag_state() {
+        let ctx = egui::Context::default();
+        let vault = Vault {
+            dir: std::path::PathBuf::new(),
+            capsules: vec![capsule("msg-a", "Alpha"), capsule("msg-b", "Beta")],
+            load_errors: Vec::new(),
+        };
+        let tree = PageTree::build(&vault.capsules);
+        let dragged: Rc<RefCell<Option<usize>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let dragged = dragged.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(260.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut search = String::new();
+                let mut collapsed: HashSet<String> = HashSet::new();
+                ctx.run_pass(raw, |ctx| {
+                    egui::Area::new(egui::Id::unique("sidebar-harness-stale"))
+                        .fixed_pos(egui::Pos2::ZERO)
+                        .show(ctx, |ui| {
+                            let _ = draw_sidebar(
+                                ui,
+                                &vault,
+                                &tree,
+                                None,
+                                &mut dragged.borrow_mut(),
+                                &mut search,
+                                &mut collapsed,
+                                &crate::search::Bm25Index::default(),
+                                &["".to_string(), "".to_string()],
+                                false,
+                                &crate::ui_state::UiState::default(),
+                                0,
+                                0,
+                                Locale::En,
+                            );
+                        });
+                })
+                .textures_delta
+                .clear();
+            }
+        };
+
+        run(vec![]);
+        // Simulate a drag whose release never arrived: the state points at a
+        // page while no button is down.
+        *dragged.borrow_mut() = Some(0);
+        run(vec![]);
+        assert_eq!(
+            *dragged.borrow(),
+            None,
+            "a stale drag state must be cancelled on the next frame"
+        );
     }
 }
