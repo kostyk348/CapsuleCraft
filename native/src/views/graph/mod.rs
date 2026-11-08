@@ -13,9 +13,9 @@ use crate::i18n::{t, Key, Locale};
 use crate::icons::Icon;
 use crate::mime::Capsule;
 use crate::theme;
-use crate::{ghost, hud, menu_row, popover_frame, tag_chip, truncate_chars};
+use crate::{ghost, hud, menu_header, menu_row, popover_frame, tag_chip, truncate_chars};
 
-use super::{empty_state, header, ViewAction, VIEW_PAD};
+use super::{empty_state, header, View, ViewAction, VIEW_PAD};
 use interaction::{handle_interaction, GraphTransform};
 use render_clusters::{draw_cluster_panel, render_clusters};
 use render_density::render_density;
@@ -34,6 +34,16 @@ pub struct GraphState {
     pub dragged_node: Option<u32>,
     /// Temporary position overrides for dragged nodes.
     pub drag_overrides: std::collections::HashMap<u32, [f32; 2]>,
+    /// Search query to filter/highlight matching nodes.
+    pub search_query: String,
+    /// Hide nodes with zero incident edges.
+    pub hide_orphans: bool,
+    /// Local graph mode focusing on neighborhood of selected page.
+    pub local_mode: bool,
+    /// BFS depth in local graph mode (1..=3).
+    pub local_depth: usize,
+    /// Node slot for context menu.
+    pub context_node: Option<u32>,
     /// Background layout progress channel, when a big vault is relaxing.
     layout_rx: Option<std::sync::mpsc::Receiver<graph::LayoutMsg>>,
     /// Vault signature the running job was started for — a vault edit
@@ -87,6 +97,11 @@ impl GraphState {
             focus: None,
             dragged_node: None,
             drag_overrides: std::collections::HashMap::new(),
+            search_query: String::new(),
+            hide_orphans: false,
+            local_mode: false,
+            local_depth: 1,
+            context_node: None,
             layout_rx: None,
             layout_sig: None,
             layout_done: 0,
@@ -280,6 +295,66 @@ pub fn draw(
         state.edges = !state.edges;
     }
 
+    let search_edit = egui::TextEdit::singleline(&mut state.search_query)
+        .hint_text(t(locale, Key::GraphSearchPlaceholder))
+        .desired_width(110.0);
+    bar.add(search_edit);
+    if !state.search_query.is_empty() {
+        if ghost(&mut bar, Icon::Close, None, t(locale, Key::ClearSearch), true, 26.0).clicked() {
+            state.search_query.clear();
+        }
+    }
+
+    if ghost(
+        &mut bar,
+        if state.hide_orphans {
+            Icon::Check
+        } else {
+            Icon::Doc
+        },
+        Some(t(locale, Key::GraphHideOrphans)),
+        t(locale, Key::GraphHideOrphans),
+        true,
+        26.0,
+    )
+    .clicked()
+    {
+        state.hide_orphans = !state.hide_orphans;
+    }
+
+    let local_depth = state.local_depth.clamp(1, 3);
+    let mode_label = if state.local_mode {
+        format!("{}: {} {}", t(locale, Key::GraphLocalMode), t(locale, Key::GraphDepth), local_depth)
+    } else {
+        t(locale, Key::GraphGlobalMode).to_string()
+    };
+    if ghost(
+        &mut bar,
+        Icon::Graph,
+        Some(&mode_label),
+        if state.local_mode {
+            t(locale, Key::GraphLocalMode)
+        } else {
+            t(locale, Key::GraphGlobalMode)
+        },
+        true,
+        26.0,
+    )
+    .clicked()
+    {
+        if state.local_mode {
+            if state.local_depth < 3 {
+                state.local_depth += 1;
+            } else {
+                state.local_mode = false;
+                state.local_depth = 1;
+            }
+        } else {
+            state.local_mode = true;
+            state.local_depth = 1;
+        }
+    }
+
     bar.with_layout(Layout::right_to_left(Align::Center), |ui| {
         if ghost(
             ui,
@@ -355,6 +430,95 @@ pub fn draw(
         &metrics,
         state,
     );
+
+    let context_hovered = response.hover_pos().and_then(|p| {
+        metrics
+            .grid
+            .nearest(&positions, transform.to_graph(p), 12.0 / transform.radius)
+    });
+    if response.secondary_clicked() {
+        state.context_node = context_hovered;
+    }
+
+    response.context_menu(|ui| {
+        ui.set_min_width(180.0);
+        if let Some(slot) = state.context_node {
+            if let Some(node) = graph.nodes.get(slot as usize) {
+                if let Some(capsule) = capsules.get(node.capsule) {
+                    let title = if capsule.subject.is_empty() {
+                        t(locale, Key::Untitled).to_string()
+                    } else {
+                        truncate_chars(&capsule.subject, 28)
+                    };
+                    menu_header(ui, &title);
+                    if menu_row(
+                        ui,
+                        Some(Icon::Doc),
+                        t(locale, Key::GraphContextMenuOpen),
+                        None,
+                        false,
+                        true,
+                        false,
+                    )
+                    .clicked()
+                    {
+                        action.select = Some(node.capsule);
+                        action.view = Some(View::Page);
+                        ui.close();
+                    }
+                    if menu_row(
+                        ui,
+                        Some(Icon::Copy),
+                        t(locale, Key::GraphContextMenuCopyLink),
+                        None,
+                        false,
+                        true,
+                        false,
+                    )
+                    .clicked()
+                    {
+                        ui.ctx().copy_text(format!("capsule://{}", capsule.message_id));
+                        action.toast = Some(t(locale, Key::CopiedToClipboard).to_string());
+                        ui.close();
+                    }
+                    if menu_row(
+                        ui,
+                        Some(Icon::Doc),
+                        t(locale, Key::GraphContextMenuCopyWikiLink),
+                        None,
+                        false,
+                        true,
+                        false,
+                    )
+                    .clicked()
+                    {
+                        ui.ctx().copy_text(format!("[[{}]]", capsule.subject));
+                        action.toast = Some(t(locale, Key::CopiedToClipboard).to_string());
+                        ui.close();
+                    }
+                    return;
+                }
+            }
+        }
+        if menu_row(
+            ui,
+            Some(Icon::Reload),
+            t(locale, Key::Fit),
+            None,
+            false,
+            true,
+            false,
+        )
+        .clicked()
+        {
+            state.pan = egui::Vec2::ZERO;
+            state.zoom = 1.0;
+            state.focus = None;
+            state.drag_overrides.clear();
+            state.dragged_node = None;
+            ui.close();
+        }
+    });
     painter.rect_filled(rect, 0.0, theme::bg());
 
     if mode == LodMode::Clusters && graph.clusters.len() > 1 {
@@ -600,5 +764,40 @@ mod tests {
         );
         assert_eq!(first_c, second_c);
         assert!(first_c[0][0] < first_c[1][0]);
+    }
+
+    #[test]
+    fn graph_state_defaults_and_toggles() {
+        let mut state = GraphState::new();
+        assert_eq!(state.search_query, "");
+        assert!(!state.hide_orphans);
+        assert!(!state.local_mode);
+        assert_eq!(state.local_depth, 1);
+        assert!(state.context_node.is_none());
+
+        state.hide_orphans = true;
+        state.local_mode = true;
+        state.local_depth = 2;
+        state.search_query = "project".into();
+        assert!(state.hide_orphans);
+        assert!(state.local_mode);
+        assert_eq!(state.local_depth, 2);
+        assert_eq!(state.search_query, "project");
+    }
+
+    #[test]
+    fn i18n_keys_graph_features() {
+        assert_eq!(t(Locale::En, Key::GraphLocalMode), "Local graph");
+        assert_eq!(t(Locale::Ru, Key::GraphLocalMode), "Локальный граф");
+        assert_eq!(t(Locale::En, Key::GraphGlobalMode), "Global graph");
+        assert_eq!(t(Locale::Ru, Key::GraphGlobalMode), "Глобальный граф");
+        assert_eq!(t(Locale::En, Key::GraphDepth), "Depth");
+        assert_eq!(t(Locale::Ru, Key::GraphDepth), "Глубина");
+        assert_eq!(t(Locale::En, Key::GraphHideOrphans), "Hide orphans");
+        assert_eq!(t(Locale::Ru, Key::GraphHideOrphans), "Скрыть сироты");
+        assert_eq!(t(Locale::En, Key::GraphContextMenuOpen), "Open note");
+        assert_eq!(t(Locale::Ru, Key::GraphContextMenuOpen), "Открыть заметку");
+        assert_eq!(t(Locale::En, Key::GraphContextMenuCopyLink), "Copy link");
+        assert_eq!(t(Locale::Ru, Key::GraphContextMenuCopyLink), "Копировать ссылку");
     }
 }

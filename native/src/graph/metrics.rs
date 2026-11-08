@@ -96,6 +96,30 @@ pub struct GraphMetrics {
     pub adjacency: Vec<Vec<(u32, usize)>>,
 }
 
+impl GraphMetrics {
+    /// Breadth-first search finding all nodes reachable from `start` within `depth` hops (inclusive).
+    pub fn neighborhood_bfs(&self, start: u32, depth: usize) -> std::collections::HashSet<u32> {
+        use std::collections::{HashSet, VecDeque};
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
+        visited.insert(start);
+        queue.push_back((start, 0));
+
+        while let Some((curr, d)) = queue.pop_front() {
+            if d < depth {
+                if let Some(neighbors) = self.adjacency.get(curr as usize) {
+                    for &(next, _) in neighbors {
+                        if visited.insert(next) {
+                            queue.push_back((next, d + 1));
+                        }
+                    }
+                }
+            }
+        }
+        visited
+    }
+}
+
 pub fn build_metrics(graph: &Graph) -> GraphMetrics {
     let positions: Vec<[f32; 2]> = graph.nodes.iter().map(|node| node.pos).collect();
     let ideal = ideal_distance(graph.nodes.len());
@@ -284,5 +308,26 @@ mod tests {
         assert_eq!(metrics.adjacency[1], vec![(0, 0), (2, 1)]);
         // Slot 2 (capsule 30) connects to slot 1 (edge 1)
         assert_eq!(metrics.adjacency[2], vec![(1, 1)]);
+    }
+
+    #[test]
+    fn neighborhood_bfs_respects_depth() {
+        let metrics = GraphMetrics {
+            adjacency: vec![
+                vec![(1, 0)],
+                vec![(0, 0), (2, 1)],
+                vec![(1, 1), (3, 2)],
+                vec![(2, 2)],
+            ],
+            ..GraphMetrics::default()
+        };
+        // Depth 0: only start node
+        assert_eq!(metrics.neighborhood_bfs(0, 0), [0].into_iter().collect());
+        // Depth 1: node 0 and its neighbor 1
+        assert_eq!(metrics.neighborhood_bfs(0, 1), [0, 1].into_iter().collect());
+        // Depth 2: nodes 0, 1, 2
+        assert_eq!(metrics.neighborhood_bfs(0, 2), [0, 1, 2].into_iter().collect());
+        // Depth 3: nodes 0, 1, 2, 3
+        assert_eq!(metrics.neighborhood_bfs(0, 3), [0, 1, 2, 3].into_iter().collect());
     }
 }

@@ -49,13 +49,44 @@ pub fn render_pages(
         slot_of.insert(node.capsule, slot as u32);
     }
 
+    // Active focus (hovered node takes precedence, then selected page)
+    let selected_slot = selected.and_then(|sel| slot_of.get(&sel).copied());
+
+    // Local mode neighborhood calculation
+    let local_set: Option<HashSet<u32>> = if state.local_mode {
+        let root = selected_slot.or_else(|| {
+            if !graph.nodes.is_empty() {
+                Some(0)
+            } else {
+                None
+            }
+        });
+        root.map(|r| metrics.neighborhood_bfs(r, state.local_depth.clamp(1, 3)))
+    } else {
+        None
+    };
+
+    let is_node_allowed = |slot: u32| -> bool {
+        if state.hide_orphans && graph.nodes[slot as usize].degree == 0 {
+            return false;
+        }
+        if let Some(set) = &local_set {
+            if !set.contains(&slot) {
+                return false;
+            }
+        }
+        true
+    };
+
     // Hit-testing / hover state
     let pointer = response.hover_pos();
-    let hovered = pointer.and_then(|p| {
-        metrics
-            .grid
-            .nearest(positions, transform.to_graph(p), 10.0 / transform.radius)
-    });
+    let hovered = pointer
+        .and_then(|p| {
+            metrics
+                .grid
+                .nearest(positions, transform.to_graph(p), 10.0 / transform.radius)
+        })
+        .filter(|&slot| is_node_allowed(slot));
 
     if state.dragged_node.is_some() {
         response.clone().on_hover_cursor(egui::CursorIcon::Grabbing);
@@ -63,9 +94,20 @@ pub fn render_pages(
         response.clone().on_hover_cursor(egui::CursorIcon::Grab);
     }
 
-    // Active focus (hovered node takes precedence, then selected page)
-    let selected_slot = selected.and_then(|sel| slot_of.get(&sel).copied());
-    let active_slot = hovered.or(selected_slot);
+    let active_slot = hovered.or(selected_slot).filter(|&slot| is_node_allowed(slot));
+
+    // Search query matching
+    let search_clean = state.search_query.trim().to_lowercase();
+    let has_search = !search_clean.is_empty();
+    let is_search_match = |slot: u32| -> bool {
+        if !has_search {
+            return false;
+        }
+        let capsule_idx = graph.nodes[slot as usize].capsule;
+        capsules.get(capsule_idx).map_or(false, |c| {
+            c.subject.to_lowercase().contains(&search_clean)
+        })
+    };
 
     // Connected neighborhood query O(k)
     let mut active_neighbors: HashSet<u32> = HashSet::new();
@@ -95,6 +137,9 @@ pub fn render_pages(
                 continue;
             };
             if !visible_set.contains(&a) || !visible_set.contains(&b) {
+                continue;
+            }
+            if !is_node_allowed(a) || !is_node_allowed(b) {
                 continue;
             }
             drawn += 1;
@@ -131,6 +176,9 @@ pub fn render_pages(
     let mut order: Vec<u32> = visible.to_vec();
     order.sort_by_key(|&slot| graph.nodes[slot as usize].degree);
     for &slot in &order {
+        if !is_node_allowed(slot) {
+            continue;
+        }
         let node = &graph.nodes[slot as usize];
         let pos = transform.to_screen(positions[slot as usize]);
         let node_radius = (4.5 + (node.degree as f32).sqrt() * 1.8).clamp(4.5, 12.0)
@@ -138,14 +186,21 @@ pub fn render_pages(
         let is_selected = selected == Some(node.capsule);
         let is_focus_center = active_slot == Some(slot);
         let is_connected_neighbor = active_neighbors.contains(&slot);
+        let is_match = is_search_match(slot);
         let base = cluster_color(graph.cluster_of[slot as usize]);
-        let color = if is_selected || is_focus_center {
+        let color = if is_selected || is_focus_center || is_match {
             theme::accent_ink()
         } else {
             base
         };
 
-        let dim = if has_active {
+        let dim = if has_search {
+            if is_match {
+                1.0
+            } else {
+                0.15 * dim_node(slot)
+            }
+        } else if has_active {
             if is_focus_center || is_connected_neighbor {
                 1.0
             } else {
@@ -156,7 +211,10 @@ pub fn render_pages(
         };
 
         // Outer glow
-        if is_focus_center || is_selected {
+        if is_match {
+            painter.circle_stroke(pos, node_radius + 4.0, Stroke::new(2.0, theme::accent()));
+            painter.circle_filled(pos, node_radius + 2.0, theme::fade(theme::accent(), 0.35));
+        } else if is_focus_center || is_selected {
             painter.circle_filled(pos, node_radius + 6.0, theme::fade(theme::accent(), 0.35));
             painter.circle_filled(pos, node_radius + 3.0, theme::fade(color, 0.3));
         } else if is_connected_neighbor && has_active {
@@ -176,11 +234,20 @@ pub fn render_pages(
         let size = (10.5 * state.zoom.clamp(0.85, 1.1)).clamp(9.0, 12.0);
         let font = FontId::new(size, egui::FontFamily::Proportional);
         let mut top: Vec<u32> = visible.to_vec();
-        top.sort_by_key(|&slot| std::cmp::Reverse(graph.nodes[slot as usize].degree));
+        top.sort_by(|&a, &b| {
+            let ma = is_search_match(a);
+            let mb = is_search_match(b);
+            mb.cmp(&ma).then_with(|| {
+                graph.nodes[b as usize].degree.cmp(&graph.nodes[a as usize].degree)
+            })
+        });
         let mut candidates: Vec<(u32, String, egui::Rect)> = Vec::new();
         for &slot in &top {
             if candidates.len() >= LABEL_MAX {
                 break;
+            }
+            if !is_node_allowed(slot) {
+                continue;
             }
             if hovered == Some(slot) {
                 continue;
@@ -209,8 +276,15 @@ pub fn render_pages(
         for i in keep {
             let (slot, label, label_rect) = &candidates[i];
             let node = &graph.nodes[*slot as usize];
-            let is_active_node = active_neighbors.contains(slot);
-            let alpha = if has_active {
+            let is_match = is_search_match(*slot);
+            let is_active_node = active_neighbors.contains(slot) || is_match;
+            let alpha = if has_search {
+                if is_match {
+                    1.0
+                } else {
+                    0.15 * dim_node(*slot)
+                }
+            } else if has_active {
                 if is_active_node {
                     1.0
                 } else {
@@ -224,7 +298,7 @@ pub fn render_pages(
                 egui::Align2::LEFT_TOP,
                 label,
                 font.clone(),
-                if selected == Some(node.capsule) {
+                if selected == Some(node.capsule) || is_match {
                     theme::ink()
                 } else {
                     theme::fade(theme::muted(), alpha)
