@@ -197,6 +197,11 @@ pub fn draw_sidebar(
     {
         *dragged_page = None;
     }
+    // Was the sidebar search focused at the START of this frame? A singleline
+    // TextEdit surrenders focus while processing Enter/Escape, so probes made
+    // later in the frame see `None` and the keyboard flow dies silently. The
+    // frame-start value is the honest "the user was typing in the field".
+    let search_was_focused = ui.memory(|m| m.focused()) == Some(egui::Id::new("sidebar_search"));
     let outer = ui.max_rect();
     ui.allocate_rect(outer, Sense::hover());
     ui.set_min_width(outer.width());
@@ -607,6 +612,36 @@ pub fn draw_sidebar(
                     if text_button(ui, None, t(locale, Key::ClearSearch), false).clicked() {
                         search.clear();
                     }
+                    // Create the page the search could not find: type a
+                    // title, press Enter or click — the page exists and is
+                    // open before the menu would have closed.
+                    let query = search.trim().to_string();
+                    if !query.is_empty() {
+                        let label = format!(
+                            "{} \u{201c}{}\u{201d}",
+                            t(locale, Key::CreatePageNamed),
+                            query
+                        );
+                        let create_clicked = text_button(ui, None, &label, false).clicked();
+                        let create_enter = search_was_focused
+                            && ui.input(|i| {
+                                i.events.iter().any(|e| {
+                                    matches!(
+                                        e,
+                                        egui::Event::Key {
+                                            key: egui::Key::Enter,
+                                            pressed: true,
+                                            repeat: false,
+                                            ..
+                                        }
+                                    )
+                                })
+                            });
+                        if create_clicked || create_enter {
+                            action.create_page_named = Some(query);
+                            search.clear();
+                        }
+                    }
                 } else {
                     let _ = hud(
                         ui,
@@ -615,9 +650,7 @@ pub fn draw_sidebar(
                     );
                     // While the search field owns the keyboard: Enter opens
                     // the top result, ↑/↓ walk the results with the cursor.
-                    let search_focused =
-                        ui.memory(|m| m.focused()) == Some(egui::Id::new("sidebar_search"));
-                    if search_focused {
+                    if search_was_focused {
                         let (enter, down, up) = ui.input(|i| {
                             (
                                 i.key_pressed(egui::Key::Enter),
@@ -855,9 +888,43 @@ fn search_box(ui: &mut Ui, search: &mut String, locale: Locale) -> Response {
         .desired_width(f32::INFINITY)
         .align(egui::Align2::LEFT_CENTER)
         .id(egui::Id::new("sidebar_search"));
+    // Esc with the field focused empties the query first — muscle memory
+    // from every search box; the (now unfocused) next Esc reaches the
+    // global handlers. The field's focus must come from the PREVIOUS
+    // frame's state: egui surrenders a text field's focus while still
+    // processing an incoming Escape, so `memory.focused()` is already
+    // empty by the time this frame draws.
+    let had_focus_last_frame = ui
+        .ctx()
+        .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("sidebar-search-focus")))
+        .unwrap_or(false);
+    // Probed unconditionally (no `was_focused` short-circuit): whether the
+    // event survives in the raw list depends on egui internals, but if it
+    // is visible at all it is visible before the TextEdit consumes it.
+    let esc_pressed = ui.input(|i| {
+        i.events.iter().any(|e| {
+            matches!(
+                e,
+                egui::Event::Key {
+                    key: egui::Key::Escape,
+                    pressed: true,
+                    repeat: false,
+                    ..
+                }
+            )
+        })
+    });
     let mut response = child.add(search_edit);
     if focus_search {
         response.request_focus();
+    }
+    // Read the flag before taking the context write lock: Response methods
+    // go through the same RwLock, and nesting them deadlocks.
+    let now_has_focus = response.has_focus();
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(egui::Id::new("sidebar-search-focus"), now_has_focus));
+    if esc_pressed && had_focus_last_frame && !search.is_empty() {
+        search.clear();
     }
     if !search.is_empty() {
         let clear_rect =
@@ -1228,5 +1295,134 @@ mod tests {
             None,
             "a stale drag state must be cancelled on the next frame"
         );
+    }
+
+    /// Shared harness for the keyboard-driven search tests: the search
+    /// string lives outside the frame so a test can type into it, and the
+    /// focus flag ("focus-sidebar-search", consumed by search_box) puts the
+    /// caret into the field for the frame after it is set.
+    fn run_search_frame(
+        ctx: &egui::Context,
+        vault: &Vault,
+        tree: &PageTree,
+        action: &Rc<RefCell<Option<ShellAction>>>,
+        search: &Rc<RefCell<String>>,
+        events: Vec<egui::Event>,
+    ) {
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(260.0, 900.0),
+            )),
+            events,
+            ..Default::default()
+        };
+        let mut collapsed: HashSet<String> = HashSet::new();
+        ctx.run_pass(raw, |ctx| {
+            egui::Area::new(egui::Id::unique("sidebar-harness-search"))
+                .fixed_pos(egui::Pos2::ZERO)
+                .show(ctx, |ui| {
+                    let mut act = draw_sidebar(
+                        ui,
+                        vault,
+                        tree,
+                        None,
+                        &mut None,
+                        &mut search.borrow_mut(),
+                        &mut collapsed,
+                        &crate::search::Bm25Index::default(),
+                        &["".to_string(), "".to_string()],
+                        false,
+                        &crate::ui_state::UiState::default(),
+                        0,
+                        0,
+                        Locale::En,
+                    );
+                    let mut acc = action.borrow_mut();
+                    match acc.as_mut() {
+                        Some(existing) => existing.absorb(act),
+                        None => *acc = Some(act),
+                    }
+                });
+        })
+        .textures_delta
+        .clear();
+    }
+
+    /// Type a title that matches nothing, press Enter: the no-results state
+    /// must offer (and Enter must fire) "create page" with that title, and
+    /// the field must clear.
+    #[test]
+    fn enter_in_empty_search_requests_page_creation() {
+        let ctx = egui::Context::default();
+        let vault = Vault {
+            dir: std::path::PathBuf::new(),
+            capsules: vec![capsule("msg-a", "Alpha"), capsule("msg-b", "Beta")],
+            load_errors: Vec::new(),
+        };
+        let tree = PageTree::build(&vault.capsules);
+        let action: Rc<RefCell<Option<ShellAction>>> = Rc::new(RefCell::new(None));
+        let search: Rc<RefCell<String>> = Rc::new(RefCell::new("xylophone".to_string()));
+
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("focus-sidebar-search"), true));
+        run_search_frame(&ctx, &vault, &tree, &action, &search, vec![]);
+        // Focus lands on the frame after the flag is consumed.
+        run_search_frame(
+            &ctx,
+            &vault,
+            &tree,
+            &action,
+            &search,
+            vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        let action = action.borrow_mut().take().expect("action");
+        assert_eq!(
+            action.create_page_named.as_deref(),
+            Some("xylophone"),
+            "Enter over an empty result set must request page creation"
+        );
+        assert_eq!(search.borrow().as_str(), "", "the query must clear");
+    }
+
+    /// Esc with the field focused empties the query and must NOT create
+    /// anything.
+    #[test]
+    fn escape_clears_a_focused_search_without_creating() {
+        let ctx = egui::Context::default();
+        let vault = Vault {
+            dir: std::path::PathBuf::new(),
+            capsules: vec![capsule("msg-a", "Alpha"), capsule("msg-b", "Beta")],
+            load_errors: Vec::new(),
+        };
+        let tree = PageTree::build(&vault.capsules);
+        let action: Rc<RefCell<Option<ShellAction>>> = Rc::new(RefCell::new(None));
+        let search: Rc<RefCell<String>> = Rc::new(RefCell::new("alp".to_string()));
+
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("focus-sidebar-search"), true));
+        run_search_frame(&ctx, &vault, &tree, &action, &search, vec![]);
+        run_search_frame(&ctx, &vault, &tree, &action, &search, vec![]);
+        run_search_frame(
+            &ctx,
+            &vault,
+            &tree,
+            &action,
+            &search,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        let action = action.borrow_mut().take().expect("action");
+        assert!(action.create_page_named.is_none());
+        assert_eq!(search.borrow().as_str(), "", "Esc must clear the query");
     }
 }
