@@ -92,6 +92,13 @@ pub fn draw_page_nodes(
                 0.0,
                 Color32::WHITE,
             );
+            let should_scroll = ui.ctx().data(|data| {
+                data.get_temp::<bool>(egui::Id::unique("sidebar-should-scroll"))
+                    .unwrap_or(false)
+            });
+            if should_scroll {
+                response.scroll_to_me(Some(egui::Align::Center));
+            }
         } else if response.hovered() {
             ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
         }
@@ -248,6 +255,13 @@ pub fn draw_search_row(
             0.0,
             Color32::WHITE,
         );
+        let should_scroll = ui.ctx().data(|data| {
+            data.get_temp::<bool>(egui::Id::unique("sidebar-should-scroll"))
+                .unwrap_or(false)
+        });
+        if should_scroll {
+            response.scroll_to_me(Some(egui::Align::Center));
+        }
     } else if response.hovered() {
         ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
     }
@@ -341,4 +355,48 @@ pub fn draw_search_row(
         response.on_hover_text(format!("{} (read-only)", capsule.subject))
     };
     response.clicked()
+}
+
+/// Walk up ancestors of `target` and remove each parent from `collapsed` so all folders are open.
+pub fn expand_ancestors(
+    target: usize,
+    tree: &PageTree,
+    capsules: &[Capsule],
+    collapsed: &mut HashSet<String>,
+) {
+    let mut current = target;
+    while let Some(parent) = tree.parent_of(current) {
+        if let Some(parent_capsule) = capsules.get(parent) {
+            collapsed.remove(&parent_capsule.message_id);
+        }
+        current = parent;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expand_ancestors_removes_all_parents_from_collapsed() {
+        let mut a = Capsule::blank("a@test".into(), "a.eml".into(), "A".into());
+        let mut b = Capsule::blank("b@test".into(), "b.eml".into(), "B".into());
+        let mut c = Capsule::blank("c@test".into(), "c.eml".into(), "C".into());
+        b.parent_id = Some("a@test".into());
+        c.parent_id = Some("b@test".into());
+        let capsules = vec![a, b, c];
+        let tree = PageTree::build(&capsules);
+
+        let mut collapsed = HashSet::new();
+        collapsed.insert("a@test".into());
+        collapsed.insert("b@test".into());
+        collapsed.insert("other@test".into());
+
+        // Target is c (index 2)
+        expand_ancestors(2, &tree, &capsules, &mut collapsed);
+
+        assert!(!collapsed.contains("a@test"), "parent A must be expanded");
+        assert!(!collapsed.contains("b@test"), "parent B must be expanded");
+        assert!(collapsed.contains("other@test"), "unrelated folder remains collapsed");
+    }
 }

@@ -23,8 +23,9 @@ use crate::truncate_chars;
 use crate::vault::{PageTree, Vault};
 use crate::{menu_header, menu_row, menu_separator, popover_frame, ShellAction};
 
+#[allow(unused_imports)]
 pub use dnd::{draw_drag_preview, draw_root_drop_zone, handle_drag_release};
-pub use tree::{draw_page_nodes, draw_search_row};
+pub use tree::{draw_page_nodes, draw_search_row, expand_ancestors};
 
 pub fn render_vault_menu_contents(
     ui: &mut Ui,
@@ -396,6 +397,23 @@ pub fn draw_sidebar(
     let _ = section_rect;
     action.new_page |= new_page_clicked;
 
+    let last_selected = ui
+        .ctx()
+        .data_mut(|data| data.get_temp::<Option<usize>>(egui::Id::unique("sidebar-last-selected")))
+        .flatten();
+
+    if selected != last_selected {
+        if let Some(target) = selected {
+            expand_ancestors(target, tree, &vault.capsules, collapsed);
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(egui::Id::unique("sidebar-should-scroll"), true);
+            });
+        }
+        ui.ctx().data_mut(|data| {
+            data.insert_temp(egui::Id::unique("sidebar-last-selected"), selected);
+        });
+    }
+
     let mut list = ui.new_child(
         UiBuilder::new()
             .max_rect(list_rect)
@@ -491,6 +509,10 @@ pub fn draw_sidebar(
                     }
                 }
             }
+
+            ui.ctx().data_mut(|data| {
+                data.remove_temp::<bool>(egui::Id::unique("sidebar-should-scroll"));
+            });
         });
 
     let mut footer = ui.new_child(
