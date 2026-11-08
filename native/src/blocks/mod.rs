@@ -646,17 +646,21 @@ pub fn draw_block_row(
 
     // Notion-style "+" in the gutter: appears on hover next to the grip and
     // inserts any block kind directly below this row.
+    //
+    // The interact and the popup are registered on every frame, not only
+    // while the row is hovered: egui popups die if `show()` stops being
+    // called, so gating the popup on `hovered` killed it the instant the
+    // pointer moved from the "+" down into the menu itself.
+    let plus_rect = Rect::from_min_size(pos2(row_top.x + 14.0, row_top.y + 3.0), vec2(12.0, 18.0));
+    let plus = ui
+        .interact(
+            plus_rect,
+            egui::Id::new(("block-plus", index)),
+            Sense::click(),
+        )
+        .on_hover_cursor(CursorIcon::PointingHand)
+        .on_hover_text(t(locale, Key::InsertBelow));
     if hovered && drag.is_none() {
-        let plus_rect =
-            Rect::from_min_size(pos2(row_top.x + 14.0, row_top.y + 3.0), vec2(12.0, 18.0));
-        let plus = ui
-            .interact(
-                plus_rect,
-                egui::Id::new(("block-plus", index)),
-                Sense::click(),
-            )
-            .on_hover_cursor(CursorIcon::PointingHand)
-            .on_hover_text(t(locale, Key::InsertBelow));
         icons::paint(
             ui.painter(),
             Rect::from_center_size(plus_rect.center(), vec2(12.0, 12.0)),
@@ -667,6 +671,8 @@ pub fn draw_block_row(
                 theme::faint()
             },
         );
+    }
+    if drag.is_none() {
         egui::Popup::menu(&plus)
             .frame(popover_frame())
             .align(egui::RectAlign::BOTTOM_START)

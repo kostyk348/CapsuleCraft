@@ -40,6 +40,22 @@ pub fn render_vault_menu_contents(
     menu_row(ui, Some(icon), &current_label, None, true, false, false)
         .on_hover_text(vault.dir.display().to_string());
 
+    // Two-way folder sync without any mail account: previously reachable only
+    // through the tiny footer icon, which users could not find.
+    if menu_row(
+        ui,
+        Some(Icon::Reload),
+        &t(locale, Key::SyncFolderMenu).to_string(),
+        Some(&t(locale, Key::SyncFolderMenuHint)),
+        true,
+        false,
+        false,
+    )
+    .clicked()
+    {
+        action.sync_folder = true;
+    }
+
     let recent = crate::vault::get_recent_vaults();
     let other_recent: Vec<std::path::PathBuf> =
         recent.into_iter().filter(|p| p != &vault.dir).collect();
@@ -698,15 +714,23 @@ fn search_box(ui: &mut Ui, search: &mut String, locale: Locale) -> Response {
             .max_rect(text_rect)
             .layout(Layout::left_to_right(Align::Center)),
     );
-    let response = child.add(
-        TextEdit::singleline(search)
-            .frame(Frame::NONE)
-            .margin(Margin::same(0))
-            .hint_text(t(locale, Key::SearchPagesHint))
-            .id(egui::Id::new("sidebar_search"))
-            .desired_width(f32::INFINITY)
-            .align(egui::Align2::LEFT_CENTER),
-    );
+    // Ctrl+F from the shell lands here: focus the field once, then drop the
+    // flag so the field is not re-focused on every frame.
+    let focus_search = ui
+        .ctx()
+        .data_mut(|data| data.remove_temp::<bool>(egui::Id::new("focus-sidebar-search")))
+        .unwrap_or(false);
+    let search_edit = TextEdit::singleline(search)
+        .frame(Frame::NONE)
+        .margin(Margin::same(0))
+        .hint_text(t(locale, Key::SearchPagesHint))
+        .desired_width(f32::INFINITY)
+        .align(egui::Align2::LEFT_CENTER)
+        .id(egui::Id::new("sidebar_search"));
+    let mut response = child.add(search_edit);
+    if focus_search {
+        response.request_focus();
+    }
     // One-click clear instead of backspacing through the whole query; Esc
     // clears too while the field is focused.
     if !search.is_empty() {

@@ -236,15 +236,17 @@ impl ImapSyncEngine {
         let mut pulled = 0;
         let mut pushed = 0;
         let mut skipped = 0;
+        let mut updated = 0;
 
         // 3. Match and download new/incoming capsules from server
         // Map local Message-IDs
-        let local_by_msg_id: HashMap<String, (PathBuf, i64)> = local_files
+        let local_by_msg_id: HashMap<String, (PathBuf, i64, u64)> = local_files
             .iter()
             .filter_map(|(path, _, msg_id, mod_time)| {
-                msg_id
-                    .as_ref()
-                    .map(|id| (normalize_message_id(id), (path.clone(), *mod_time)))
+                msg_id.as_ref().map(|id| {
+                    let digest = fs::read(path).map(|bytes| body_digest(&bytes)).unwrap_or(0);
+                    (normalize_message_id(id), (path.clone(), *mod_time, digest))
+                })
             })
             .collect();
 
@@ -252,14 +254,25 @@ impl ImapSyncEngine {
         for remote in &remote_messages {
             if let Some(msg_id) = &remote.message_id {
                 let norm = normalize_message_id(msg_id);
-                if !local_by_msg_id.contains_key(&norm)
-                    && !local_names.contains(&download_file_name(
-                        uidvalidity,
-                        remote.uid,
-                        Some(msg_id),
-                    ))
-                {
-                    remote_uids_to_fetch.push(remote.uid);
+                match local_by_msg_id.get(&norm) {
+                    // Same message already in the vault: the server copy is
+                    // the newer edit and the bodies disagree, so the local
+                    // letter is stale — refresh it instead of skipping it
+                    // forever (the old behavior kept a stale local copy even
+                    // after the mail was edited on the server).
+                    Some((_path, mod_time, _digest)) if remote.date_ms > *mod_time + 2_000 => {
+                        remote_uids_to_fetch.push(remote.uid);
+                    }
+                    Some(_) => skipped += 1,
+                    None => {
+                        if !local_names.contains(&download_file_name(
+                            uidvalidity,
+                            remote.uid,
+                            Some(msg_id),
+                        )) {
+                            remote_uids_to_fetch.push(remote.uid);
+                        }
+                    }
                 }
             } else {
                 // Without an envelope Message-Id the file name is the only
@@ -280,19 +293,44 @@ impl ImapSyncEngine {
                 uid,
                 envelope.and_then(|r| r.message_id.as_deref()),
             );
-            if local_names.contains(&file_name) {
-                skipped += 1;
-                continue;
-            }
+            let existing_local: Option<PathBuf> = envelope
+                .and_then(|r| r.message_id.as_deref())
+                .and_then(|id| local_by_msg_id.get(&normalize_message_id(id)))
+                .map(|(path, _, _)| path.clone())
+                .or_else(|| {
+                    if local_names.contains(&file_name) {
+                        Some(self.vault_dir.join(&file_name))
+                    } else {
+                        None
+                    }
+                });
+            let stale_local_digest = existing_local
+                .as_ref()
+                .and_then(|path| fs::read(path).ok().map(|bytes| body_digest(&bytes)));
             if let Ok(fetches) = session.uid_fetch(uid.to_string(), "BODY[]") {
                 for fetch in fetches.iter() {
                     if let Some(body) = fetch.body() {
+                        let remote_digest = body_digest(body);
+                        if let (Some(path), Some(local_digest)) =
+                            (&existing_local, stale_local_digest)
+                        {
+                            if local_digest != remote_digest {
+                                // Same identity, different content: update the
+                                // existing letter in place.
+                                if fs::write(path, body).is_ok() {
+                                    updated += 1;
+                                }
+                            } else {
+                                skipped += 1;
+                            }
+                            break;
+                        }
                         // The duplicate flood of v2.3: a capsule already in
                         // the vault (same bytes, any name — uploaded by a
                         // previous sync without a Message-Id, or renamed by
                         // the user) was appended again on every sync because
                         // only file names were compared. Content decides now.
-                        if local_bodies.contains(&body_digest(body)) {
+                        if local_bodies.contains(&remote_digest) {
                             skipped += 1;
                             break;
                         }
@@ -300,7 +338,7 @@ impl ImapSyncEngine {
                         if !path.exists() {
                             if fs::write(&path, body).is_ok() {
                                 local_names.insert(file_name.clone());
-                                local_bodies.insert(body_digest(body));
+                                local_bodies.insert(remote_digest);
                                 pulled += 1;
                             }
                         }
@@ -334,13 +372,14 @@ impl ImapSyncEngine {
 
         let _ = session.logout();
 
-        if skipped > 0 {
-            Ok(format!(
-                "Synced: +{pulled} downloaded, +{pushed} uploaded, {skipped} already in sync"
-            ))
-        } else {
-            Ok(format!("Synced: +{pulled} downloaded, +{pushed} uploaded"))
+        let mut report = format!("Synced: +{pulled} downloaded, +{pushed} uploaded");
+        if updated > 0 {
+            report.push_str(&format!(", {updated} updated"));
         }
+        if skipped > 0 {
+            report.push_str(&format!(", {skipped} already in sync"));
+        }
+        Ok(report)
     }
 }
 
