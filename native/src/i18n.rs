@@ -83,9 +83,12 @@ pub fn settings_dir() -> Option<PathBuf> {
     if let Ok(home) = std::env::var("XDG_CONFIG_HOME") {
         return Some(PathBuf::from(home).join("capsuleos"));
     }
-    std::env::var("HOME")
-        .ok()
-        .map(|home| PathBuf::from(home).join(".config").join("capsuleos"))
+    if let Ok(home) = std::env::var("HOME") {
+        return Some(PathBuf::from(home).join(".config").join("capsuleos"));
+    }
+    // Mobile / container fallback: when standard desktop env vars are unset,
+    // root settings under the app-private data directory (e.g. Android internal storage).
+    Some(crate::vault::app_data_dir())
 }
 
 fn read_settings() -> Option<String> {
@@ -194,6 +197,7 @@ strings! {
     NavPlanning => ("Задачи", "Planning"),
     NavGraph => ("Граф", "Graph"),
     NavThreads => ("Треды", "Threads"),
+    NavSearch => ("Поиск", "Search"),
     NavMime => ("MIME", "MIME"),
     NavPreview => ("Письмо", "Email"),
     PaletteHint => ("Команды и страницы", "Commands and pages"),

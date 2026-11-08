@@ -15,7 +15,7 @@ pub const TITLEBAR_HEIGHT: f32 = 32.0;
 pub const WORKSPACE_STRIP_HEIGHT: f32 = 34.0;
 
 pub fn custom_caption_buttons() -> bool {
-    !cfg!(target_os = "macos")
+    !cfg!(any(target_os = "macos", target_os = "android"))
 }
 
 pub fn leading_inset() -> f32 {
@@ -28,6 +28,9 @@ pub fn leading_inset() -> f32 {
 
 /// Dragging empty title-bar space moves the window; double-click maximizes.
 pub fn title_bar_drag(ui: &mut Ui) {
+    if cfg!(target_os = "android") {
+        return;
+    }
     let r = ui.max_rect();
     let rect = Rect::from_min_max(
         r.min + vec2(RESIZE_EDGE, RESIZE_EDGE),
@@ -50,6 +53,9 @@ pub fn title_bar_drag(ui: &mut Ui) {
 
 /// Dragging a specific title-bar rectangle moves the window; double-click maximizes.
 pub fn title_bar_drag_rect(ui: &mut Ui, rect: Rect) {
+    if cfg!(target_os = "android") {
+        return;
+    }
     if rect.width() <= 10.0 || rect.height() <= 10.0 {
         return;
     }

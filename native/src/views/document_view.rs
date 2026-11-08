@@ -142,7 +142,11 @@ pub fn draw_document(
             ui.scroll_to_cursor(Some(Align::TOP));
         }
         let available = ui.available_width();
-        let (content_w, pad) = if wide_canvas {
+        let (content_w, pad) = if available < 600.0 {
+            let p = 14.0;
+            let w = (available - 2.0 * p).max(120.0);
+            (w, p)
+        } else if wide_canvas {
             let w = (available - 96.0).max(480.0);
             let p = ((available - w) / 2.0).max(48.0);
             (w, p)
@@ -166,10 +170,11 @@ pub fn draw_document(
                         capsule.subject = capsule.subject.replace(['\r', '\n'], " ");
                         action.changed = true;
                     }
+                    let title_font_size = if available < 600.0 { 26.0 } else { 34.0 };
                     let response = ui.add(
                         TextEdit::multiline(&mut capsule.subject)
                             .id_salt("page_subject")
-                            .font(FontId::new(34.0, theme::display()))
+                            .font(FontId::new(title_font_size, theme::display()))
                             .text_color(theme::ink())
                             .frame(Frame::NONE)
                             .margin(Margin::same(0))
