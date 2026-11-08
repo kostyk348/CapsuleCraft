@@ -582,6 +582,21 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: cargo ndk -t arm64-v8a -o ../android/app/src/main/jniLibs build --release --lib
 
+      # cpal pulls in oboe (C++), so libcapsuleos_native.so carries a
+      # DT_NEEDED on libc++_shared.so — but cargo-ndk does not copy that
+      # runtime from the NDK into jniLibs. Without it dlopen fails and the
+      # app dies instantly on launch (v2.12.3 shipped exactly that).
+      - name: Bundle libc++_shared.so (oboe/cpal runtime)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          set -e
+          SRC="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"
+          DST="android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so"
+          test -f "$SRC" || { echo "libc++_shared.so not found in the NDK sysroot"; exit 1; }
+          cp -f "$SRC" "$DST"
+          ls -la android/app/src/main/jniLibs/arm64-v8a/
+
       - name: Assemble signed release APK
         working-directory: android
         env:
@@ -590,6 +605,12 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ env.KS_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ env.KS_PASS }}
         run: gradle assembleRelease --no-daemon
+      # Gate: every DT_NEEDED of every packaged .so must be a system lib or
+      # be packaged too (plus 16 KB alignment and the NativeActivity export).
+      # This is what catches a repeat of the v2.12.3 launch crash.
+      - name: Verify APK native dependencies
+        run: python3 scripts/check_apk_native_deps.py android/app/build/outputs/apk/release/*.apk
+
 
       - name: Upload APK to the release
         env:
