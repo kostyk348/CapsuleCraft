@@ -67,37 +67,40 @@ pub fn draw(
     );
 
     let (_, bar_rect) = super::toolbar(ui);
+    let is_compact = bar_rect.width() < 600.0;
     let mut bar = ui.new_child(
         egui::UiBuilder::new()
             .max_rect(bar_rect.shrink2(vec2(VIEW_PAD, 0.0)))
             .layout(Layout::left_to_right(Align::Center)),
     );
-    let _ = hud(
-        &mut bar,
-        &format!(
-            "{} · {} · {}",
-            crate::i18n::plural(
-                locale,
-                shown.len(),
-                Key::PageOne,
-                Key::PageFew,
-                Key::PageMany
+    if !is_compact {
+        let _ = hud(
+            &mut bar,
+            &format!(
+                "{} · {} · {}",
+                crate::i18n::plural(
+                    locale,
+                    shown.len(),
+                    Key::PageOne,
+                    Key::PageFew,
+                    Key::PageMany
+                ),
+                crate::i18n::plural(
+                    locale,
+                    replies,
+                    Key::ReplyOne,
+                    Key::ReplyFew,
+                    Key::ReplyMany
+                ),
+                if state.show_all {
+                    t(locale, Key::AllPages)
+                } else {
+                    t(locale, Key::ThreadsOnly)
+                },
             ),
-            crate::i18n::plural(
-                locale,
-                replies,
-                Key::ReplyOne,
-                Key::ReplyFew,
-                Key::ReplyMany
-            ),
-            if state.show_all {
-                t(locale, Key::AllPages)
-            } else {
-                t(locale, Key::ThreadsOnly)
-            },
-        ),
-        theme::faint(),
-    );
+            theme::faint(),
+        );
+    }
     bar.with_layout(
         Layout::right_to_left(Align::Center),
         |ui| match super::segments(

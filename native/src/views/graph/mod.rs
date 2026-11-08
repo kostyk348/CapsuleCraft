@@ -230,6 +230,7 @@ pub fn draw(
     );
 
     let (_, bar_rect) = super::toolbar(ui);
+    let is_compact = bar_rect.width() < 600.0;
     let mut bar = ui.new_child(
         egui::UiBuilder::new()
             .max_rect(bar_rect.shrink2(vec2(VIEW_PAD, 0.0)))
@@ -288,6 +289,11 @@ pub fn draw(
             }
         });
 
+    let edge_label = if is_compact {
+        None
+    } else {
+        Some(if state.edges { "edges on" } else { "edges off" })
+    };
     if ghost(
         &mut bar,
         if state.edges {
@@ -295,7 +301,7 @@ pub fn draw(
         } else {
             Icon::Close
         },
-        Some(if state.edges { "edges on" } else { "edges off" }),
+        edge_label,
         "Toggle relation edges",
         true,
         26.0,
@@ -307,7 +313,7 @@ pub fn draw(
 
     let search_edit = egui::TextEdit::singleline(&mut state.search_query)
         .hint_text(t(locale, Key::GraphSearchPlaceholder))
-        .desired_width(110.0);
+        .desired_width(if is_compact { 75.0 } else { 110.0 });
     bar.add(search_edit);
     if !state.search_query.is_empty() {
         if ghost(
@@ -331,7 +337,7 @@ pub fn draw(
         } else {
             Icon::Doc
         },
-        Some(t(locale, Key::GraphHideOrphans)),
+        if is_compact { None } else { Some(t(locale, Key::GraphHideOrphans)) },
         t(locale, Key::GraphHideOrphans),
         true,
         26.0,
@@ -342,20 +348,22 @@ pub fn draw(
     }
 
     let local_depth = state.local_depth.clamp(1, 3);
-    let mode_label = if state.local_mode {
-        format!(
+    let mode_label = if is_compact {
+        None
+    } else if state.local_mode {
+        Some(format!(
             "{}: {} {}",
             t(locale, Key::GraphLocalMode),
             t(locale, Key::GraphDepth),
             local_depth
-        )
+        ))
     } else {
-        t(locale, Key::GraphGlobalMode).to_string()
+        Some(t(locale, Key::GraphGlobalMode).to_string())
     };
     if ghost(
         &mut bar,
         Icon::Graph,
-        Some(&mode_label),
+        mode_label.as_deref(),
         if state.local_mode {
             t(locale, Key::GraphLocalMode)
         } else {
@@ -383,7 +391,7 @@ pub fn draw(
         if ghost(
             ui,
             Icon::Reload,
-            Some(t(locale, Key::Fit)),
+            if is_compact { None } else { Some(t(locale, Key::Fit)) },
             t(locale, Key::GraphHint),
             true,
             26.0,
@@ -396,17 +404,19 @@ pub fn draw(
             state.drag_overrides.clear();
             state.dragged_node = None;
         }
-        ui.add_space(8.0);
-        let hint = if state.layout_rx.is_some() {
-            format!(
-                "{} · {}",
-                t(locale, Key::GraphLayingOut),
-                t(locale, Key::GraphHint)
-            )
-        } else {
-            t(locale, Key::GraphHint).to_string()
-        };
-        let _ = hud(ui, &hint, theme::faint());
+        if !is_compact {
+            ui.add_space(8.0);
+            let hint = if state.layout_rx.is_some() {
+                format!(
+                    "{} · {}",
+                    t(locale, Key::GraphLayingOut),
+                    t(locale, Key::GraphHint)
+                )
+            } else {
+                t(locale, Key::GraphHint).to_string()
+            };
+            let _ = hud(ui, &hint, theme::faint());
+        }
     });
 
     if graph.nodes.is_empty() {

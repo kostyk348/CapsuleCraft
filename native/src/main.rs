@@ -2477,6 +2477,7 @@ pub(crate) struct ShellAction {
     pub(crate) switch_vault: Option<PathBuf>,
     /// Two-way folder sync was requested from the sidebar footer.
     pub(crate) sync_folder: bool,
+    pub(crate) appearance: bool,
     /// Sidebar sort mode chosen in the sort popup (persisted in ui_state).
     pub(crate) set_sort: Option<crate::ui_state::PageSort>,
 }
@@ -2500,6 +2501,7 @@ impl ShellAction {
         self.faq |= other.faq;
         self.open_imap |= other.open_imap;
         self.sync_imap |= other.sync_imap;
+        self.appearance |= other.appearance;
         self.import |= other.import;
         self.export_vault |= other.export_vault;
         self.export_page |= other.export_page;
@@ -3370,6 +3372,9 @@ impl NativeApp {
         }
         if shell.faq {
             self.show_faq_modal = true;
+        }
+        if shell.appearance {
+            self.show_appearance = true;
         }
         if shell.open_imap {
             self.show_imap_modal = true;

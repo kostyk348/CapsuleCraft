@@ -70,16 +70,28 @@ pub fn draw_titlebar(
             .frame(popover_frame())
             .align(egui::RectAlign::BOTTOM_END)
             .show(|ui| {
-                if ui.button(format!("{} (Ctrl+K)", t(locale, Key::PaletteHint))).clicked() {
-                    action.palette = true;
+                if ui.button(t(locale, Key::SyncFolderMenu)).clicked() {
+                    action.sync_folder = true;
                     ui.close();
                 }
-                if ui.button(t(locale, Key::FaqTitle)).clicked() {
-                    action.faq = true;
+                if ui.button(t(locale, Key::ImapSyncTitle)).clicked() {
+                    action.open_imap = true;
+                    ui.close();
+                }
+                if ui.button(t(locale, Key::AppearanceTitle)).clicked() {
+                    action.appearance = true;
+                    ui.close();
+                }
+                if ui.button(t(locale, Key::PaletteHint)).clicked() {
+                    action.palette = true;
                     ui.close();
                 }
                 if ui.button(t(locale, Key::IntegrationsOpen)).clicked() {
                     action.open_integrations = true;
+                    ui.close();
+                }
+                if ui.button(t(locale, Key::FaqTitle)).clicked() {
+                    action.faq = true;
                     ui.close();
                 }
                 if ui.button(t(locale, Key::CommandLocale)).clicked() {
