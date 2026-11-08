@@ -3,12 +3,14 @@
 //! user did, so the shell stays the only owner of the vault and app state.
 
 pub mod document_view;
-pub mod graph_view;
+pub mod graph;
+pub use graph as graph_view;
 pub mod mail_view;
 pub mod mime_view;
 pub mod palette;
 pub mod planning_view;
-pub mod sidebar_view;
+pub mod sidebar;
+pub use sidebar as sidebar_view;
 pub mod threads_view;
 
 pub use document_view::{draw_document, draw_empty_state, EditorAction, LinkContext};

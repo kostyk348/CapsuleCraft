@@ -1,17 +1,20 @@
+//! Sidebar view: vault navigation, page hierarchy tree, drag-and-drop, and full-text search.
+
+pub mod dnd;
+pub mod tree;
+
 use std::collections::HashSet;
 
 use egui::{
-    pos2, vec2, Align, Align2, Color32, FontFamily, FontId, Frame, Layout, Margin, Rect, Response,
-    RichText, ScrollArea, Sense, Stroke, TextEdit, Ui, UiBuilder,
+    pos2, vec2, Align, Align2, FontId, Frame, Layout, Margin, Rect, Response, RichText, ScrollArea,
+    Sense, Stroke, TextEdit, Ui, UiBuilder,
 };
 
 use crate::caps;
-use crate::folder_name;
 use crate::hud;
 use crate::i18n::{self, t, Key, Locale};
 use crate::icon_button;
 use crate::icons::{self, Icon};
-use crate::mime::Capsule;
 use crate::primary_button;
 use crate::search;
 use crate::text_button;
@@ -20,6 +23,10 @@ use crate::truncate_chars;
 use crate::ui_state::{PageSort, UiState};
 use crate::vault::{PageTree, Vault};
 use crate::{menu_header, menu_row, menu_separator, popover_frame, ShellAction};
+
+#[allow(unused_imports)]
+pub use dnd::{draw_drag_preview, draw_root_drop_zone, handle_drag_release};
+pub use tree::{draw_page_nodes, draw_search_row, expand_ancestors};
 
 pub fn render_vault_menu_contents(
     ui: &mut Ui,
@@ -41,8 +48,6 @@ pub fn render_vault_menu_contents(
     menu_row(ui, Some(icon), &current_label, None, true, false, false)
         .on_hover_text(vault.dir.display().to_string());
 
-    // Two-way folder sync without any mail account: previously reachable only
-    // through the tiny footer icon, which users could not find.
     if menu_row(
         ui,
         Some(Icon::Reload),
@@ -162,10 +167,6 @@ pub fn vault_switcher(ui: &mut Ui, vault: &Vault) -> Response {
         .on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-// ---------------------------------------------------------------------------
-// Shell: sidebar
-// ---------------------------------------------------------------------------
-
 #[allow(clippy::too_many_arguments)]
 pub fn draw_sidebar(
     ui: &mut Ui,
@@ -257,7 +258,6 @@ pub fn draw_sidebar(
 
         let is_project = crate::vault::is_project_vault(&vault.dir);
 
-        // Subfolders toggle button (collapse/expand all subfolders)
         let subfolder_ids: Vec<String> = (0..vault.capsules.len())
             .filter(|&idx| !tree.children_of(Some(idx)).is_empty() && !tree.roots().contains(&idx))
             .map(|idx| vault.capsules[idx].message_id.clone())
@@ -311,7 +311,6 @@ pub fn draw_sidebar(
             }
         }
 
-        // Project sync button
         let mut x_offset = 59.0;
         if is_project {
             let sync_rect = Rect::from_center_size(
@@ -414,6 +413,23 @@ pub fn draw_sidebar(
     let _ = section_rect;
     action.new_page |= new_page_clicked;
 
+    let last_selected = ui
+        .ctx()
+        .data_mut(|data| data.get_temp::<Option<usize>>(egui::Id::unique("sidebar-last-selected")))
+        .flatten();
+
+    if selected != last_selected {
+        if let Some(target) = selected {
+            expand_ancestors(target, tree, &vault.capsules, collapsed);
+            ui.ctx().data_mut(|data| {
+                data.insert_temp(egui::Id::unique("sidebar-should-scroll"), true);
+            });
+        }
+        ui.ctx().data_mut(|data| {
+            data.insert_temp(egui::Id::unique("sidebar-last-selected"), selected);
+        });
+    }
+
     let mut list = ui.new_child(
         UiBuilder::new()
             .max_rect(list_rect)
@@ -512,65 +528,11 @@ pub fn draw_sidebar(
                         action.select = Some(index);
                     }
 
-                    // Promote to root drop zone at the bottom of the list
                     if let Some(dragged) = *dragged_page {
-                        ui.add_space(8.0);
-                        let (root_drop_rect, root_drop_resp) = ui
-                            .allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::hover());
-                        let is_already_root = tree.parent_of(dragged).is_none();
-                        // `hovered()` is suppressed for every widget while a
-                        // drag is in flight (egui: "while dragging or clicking
-                        // something, nothing else is hovered") — the drop zone
-                        // must look at the pointer position instead.
-                        let hovered = root_drop_resp.contains_pointer() && !is_already_root;
-
-                        ui.painter().rect_stroke(
-                            root_drop_rect,
-                            theme::RADIUS,
-                            Stroke::new(
-                                1.0,
-                                if hovered {
-                                    theme::accent()
-                                } else {
-                                    theme::fade(theme::line(), 0.4)
-                                },
-                            ),
-                            egui::StrokeKind::Inside,
-                        );
-
-                        if hovered {
-                            ui.painter().rect_filled(
-                                root_drop_rect,
-                                theme::RADIUS,
-                                theme::fade(theme::accent(), 0.1),
-                            );
-                            drop_target = Some(None);
-                        }
-
-                        let text = t(locale, Key::MoveToRoot);
-                        ui.painter().text(
-                            root_drop_rect.center(),
-                            Align2::CENTER_CENTER,
-                            text,
-                            FontId::new(11.0, theme::mono()),
-                            if hovered {
-                                theme::accent()
-                            } else {
-                                theme::faint()
-                            },
-                        );
+                        draw_root_drop_zone(ui, tree, dragged, &mut drop_target, locale);
                     }
 
-                    // If user was dragging and releases mouse button
-                    if let Some(dragged) = *dragged_page {
-                        if ui.input(|i| i.pointer.any_released()) {
-                            if let Some(target) = drop_target {
-                                action.reparent = Some((dragged, target));
-                            }
-                            *dragged_page = None;
-                        }
-                    }
-
+                    handle_drag_release(ui, dragged_page, drop_target, &mut action);
                     // Recently visited pages (excluding the open one and the
                     // pins already shown above).
                     let recents: Vec<usize> = ui_state
@@ -611,8 +573,6 @@ pub fn draw_sidebar(
                     }
                 }
             } else {
-                // BM25 over the whole page text, not a substring of the
-                // subject: a query must be able to find prose.
                 let mut rows: Vec<(usize, f32, Option<String>)> = Vec::new();
                 for hit in index.rank(search) {
                     let Some(position) = vault
@@ -697,6 +657,10 @@ pub fn draw_sidebar(
                     }
                 }
             }
+
+            ui.ctx().data_mut(|data| {
+                data.remove_temp::<bool>(egui::Id::unique("sidebar-should-scroll"));
+            });
         });
 
     let mut footer = ui.new_child(
@@ -880,8 +844,6 @@ fn search_box(ui: &mut Ui, search: &mut String, locale: Locale) -> Response {
             .max_rect(text_rect)
             .layout(Layout::left_to_right(Align::Center)),
     );
-    // Ctrl+F from the shell lands here: focus the field once, then drop the
-    // flag so the field is not re-focused on every frame.
     let focus_search = ui
         .ctx()
         .data_mut(|data| data.remove_temp::<bool>(egui::Id::new("focus-sidebar-search")))
@@ -897,8 +859,6 @@ fn search_box(ui: &mut Ui, search: &mut String, locale: Locale) -> Response {
     if focus_search {
         response.request_focus();
     }
-    // One-click clear instead of backspacing through the whole query; Esc
-    // clears too while the field is focused.
     if !search.is_empty() {
         let clear_rect =
             Rect::from_center_size(pos2(rect.right() - 14.0, rect.center().y), vec2(18.0, 18.0));
@@ -954,373 +914,6 @@ fn empty_pages(ui: &mut Ui, action: &mut ShellAction, no_pages: bool, locale: Lo
     if primary_button(ui, t(locale, Key::NewPage), 28.0).clicked() {
         action.new_page = true;
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn draw_page_nodes(
-    ui: &mut Ui,
-    capsules: &[Capsule],
-    tree: &PageTree,
-    parent: Option<usize>,
-    depth: usize,
-    selected: Option<usize>,
-    collapsed: &mut HashSet<String>,
-    dragged_page: &mut Option<usize>,
-    drop_target: &mut Option<Option<String>>,
-    locale: Locale,
-) -> Option<usize> {
-    let mut clicked = None;
-    for &index in tree.children_of(parent) {
-        let capsule = &capsules[index];
-        let has_children = !tree.children_of(Some(index)).is_empty();
-        let key = capsule.message_id.clone();
-        let is_collapsed = collapsed.contains(&key);
-        let depth = depth.min(4);
-        let indent = depth as f32 * 12.0;
-
-        let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
-        // A stable, explicit id: the drop-target probe and headless tests
-        // need to address the row, and egui suppresses `hovered()` on every
-        // widget while a drag is in flight — the row must be probed with
-        // `contains_pointer()` instead.
-        let response = ui.interact(
-            rect,
-            egui::Id::unique(("page-row", key.clone())),
-            Sense::click_and_drag(),
-        );
-
-        // Drag start / update
-        if response.drag_started() && capsule.native {
-            *dragged_page = Some(index);
-        }
-
-        let is_selected = selected == Some(index);
-        let is_dragged = *dragged_page == Some(index);
-
-        // Check drop target if something is currently being dragged
-        let mut is_valid_drop_target = false;
-        let mut is_cycle_target = false;
-        if let Some(dragged) = *dragged_page {
-            if dragged != index && response.contains_pointer() {
-                if tree.is_descendant_of(index, dragged) {
-                    is_cycle_target = true;
-                } else {
-                    is_valid_drop_target = true;
-                    *drop_target = Some(Some(capsule.message_id.clone()));
-                }
-            }
-        }
-
-        if is_dragged {
-            ui.painter().rect_stroke(
-                rect,
-                theme::RADIUS,
-                Stroke::new(1.0, theme::fade(theme::line(), 0.4)),
-                egui::StrokeKind::Inside,
-            );
-        } else if is_valid_drop_target {
-            ui.painter().rect_stroke(
-                rect,
-                theme::RADIUS,
-                Stroke::new(1.5, theme::accent()),
-                egui::StrokeKind::Inside,
-            );
-            ui.painter()
-                .rect_filled(rect, theme::RADIUS, theme::fade(theme::accent(), 0.15));
-        } else if is_cycle_target {
-            ui.painter().rect_stroke(
-                rect,
-                theme::RADIUS,
-                Stroke::new(1.5, theme::bad()),
-                egui::StrokeKind::Inside,
-            );
-            ui.painter()
-                .rect_filled(rect, theme::RADIUS, theme::fade(theme::bad(), 0.15));
-        } else if is_selected {
-            ui.painter()
-                .rect_filled(rect, theme::RADIUS, theme::wash_selected());
-            ui.painter().rect_filled(
-                Rect::from_min_size(pos2(rect.left() - 7.0, rect.top() + 7.0), vec2(2.0, 16.0)),
-                0.0,
-                Color32::WHITE,
-            );
-        } else if response.hovered() {
-            ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
-        }
-
-        let chevron_rect = Rect::from_center_size(
-            pos2(rect.left() + indent + 8.0, rect.center().y),
-            vec2(14.0, 14.0),
-        );
-        let mut toggle = false;
-        if has_children {
-            let chev = ui
-                .interact(
-                    chevron_rect,
-                    ui.scope_id().with(("page-chevron", index)),
-                    Sense::click(),
-                )
-                .on_hover_cursor(egui::CursorIcon::PointingHand);
-            icons::paint(
-                ui.painter(),
-                Rect::from_center_size(chevron_rect.center(), vec2(10.0, 10.0)),
-                if is_collapsed {
-                    Icon::ChevronRight
-                } else {
-                    Icon::ChevronDown
-                },
-                theme::faint(),
-            );
-            toggle = chev.clicked();
-        }
-
-        let ink = if is_selected || response.hovered() || is_valid_drop_target {
-            Color32::WHITE
-        } else if is_dragged {
-            theme::faint()
-        } else {
-            theme::sidebar_ink()
-        };
-        icons::paint(
-            ui.painter(),
-            Rect::from_center_size(
-                pos2(rect.left() + indent + 25.0, rect.center().y),
-                vec2(13.0, 13.0),
-            ),
-            Icon::Doc,
-            ink,
-        );
-
-        let title_x = rect.left() + indent + 40.0;
-        let title = if capsule.subject.trim().is_empty() {
-            t(locale, Key::Untitled).to_string()
-        } else {
-            capsule.subject.clone()
-        };
-        let font = FontId::new(
-            12.5,
-            if is_selected {
-                theme::medium()
-            } else {
-                FontFamily::Proportional
-            },
-        );
-        let clip = Rect::from_min_max(
-            pos2(title_x, rect.top()),
-            pos2(rect.right() - 18.0, rect.bottom()),
-        );
-        ui.painter().with_clip_rect(clip).text(
-            pos2(title_x, rect.center().y),
-            Align2::LEFT_CENTER,
-            &title,
-            font,
-            ink,
-        );
-
-        if !capsule.native {
-            icons::paint(
-                ui.painter(),
-                Rect::from_center_size(
-                    pos2(rect.right() - 12.0, rect.center().y),
-                    vec2(11.0, 11.0),
-                ),
-                Icon::Lock,
-                theme::badge_beta(),
-            );
-        }
-
-        if toggle {
-            if is_collapsed {
-                collapsed.remove(&key);
-            } else {
-                collapsed.insert(key.clone());
-            }
-        } else if response.clicked() && dragged_page.is_none() {
-            clicked = Some(index);
-        }
-
-        // Floating drag preview badge when dragging this page
-        if is_dragged {
-            if let Some(pointer_pos) = ui.input(|i| i.pointer.hover_pos()) {
-                let painter = ui.ctx().layer_painter(egui::LayerId::new(
-                    egui::Order::Tooltip,
-                    egui::Id::new("page-drag-preview"),
-                ));
-                let preview_rect = Rect::from_min_size(
-                    pos2(pointer_pos.x + 12.0, pointer_pos.y + 12.0),
-                    vec2(140.0, 24.0),
-                );
-                painter.rect_filled(preview_rect, theme::RADIUS, theme::wash_selected());
-                painter.rect_stroke(
-                    preview_rect,
-                    theme::RADIUS,
-                    Stroke::new(1.0, theme::accent()),
-                    egui::StrokeKind::Inside,
-                );
-                painter.text(
-                    pos2(preview_rect.left() + 8.0, preview_rect.center().y),
-                    Align2::LEFT_CENTER,
-                    truncate_chars(&capsule.subject, 18),
-                    FontId::new(11.0, theme::medium()),
-                    Color32::WHITE,
-                );
-            }
-        }
-
-        let response = if is_cycle_target {
-            response.on_hover_text(t(locale, Key::CannotDropInsideSelf))
-        } else if is_valid_drop_target {
-            response.on_hover_text(format!(
-                "{} «{}»",
-                t(locale, Key::MakeChildOf),
-                capsule.subject
-            ))
-        } else if !capsule.native {
-            response.on_hover_text(format!("{} (read-only)", capsule.subject))
-        } else {
-            response.on_hover_text(&capsule.subject)
-        };
-        let _ = response;
-
-        if has_children && !is_collapsed {
-            if let Some(child) = draw_page_nodes(
-                ui,
-                capsules,
-                tree,
-                Some(index),
-                depth + 1,
-                selected,
-                collapsed,
-                dragged_page,
-                drop_target,
-                locale,
-            ) {
-                clicked = Some(child);
-            }
-        }
-    }
-    clicked
-}
-
-fn draw_search_row(
-    ui: &mut Ui,
-    capsules: &[Capsule],
-    tree: &PageTree,
-    index: usize,
-    selected: Option<usize>,
-    score: f32,
-    snippet: Option<&str>,
-    query: &str,
-    locale: Locale,
-) -> bool {
-    let capsule = &capsules[index];
-    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 42.0), Sense::click());
-    let is_selected = selected == Some(index);
-    if is_selected {
-        ui.painter()
-            .rect_filled(rect, theme::RADIUS, theme::wash_selected());
-        ui.painter().rect_filled(
-            Rect::from_min_size(pos2(rect.left() - 7.0, rect.top() + 10.0), vec2(2.0, 18.0)),
-            0.0,
-            Color32::WHITE,
-        );
-    } else if response.hovered() {
-        ui.painter().rect_filled(rect, theme::RADIUS, theme::wash());
-    }
-    let ink = if is_selected || response.hovered() {
-        Color32::WHITE
-    } else {
-        theme::sidebar_ink()
-    };
-    icons::paint(
-        ui.painter(),
-        Rect::from_center_size(
-            pos2(rect.left() + 15.0, rect.top() + 16.0),
-            vec2(13.0, 13.0),
-        ),
-        Icon::Doc,
-        ink,
-    );
-    let title = if capsule.subject.trim().is_empty() {
-        t(locale, Key::Untitled).to_string()
-    } else {
-        capsule.subject.clone()
-    };
-    let title_clip = Rect::from_min_max(
-        pos2(rect.left() + 30.0, rect.top()),
-        pos2(rect.right() - 34.0, rect.top() + 24.0),
-    );
-    ui.painter().with_clip_rect(title_clip).text(
-        pos2(rect.left() + 30.0, rect.top() + 15.0),
-        Align2::LEFT_CENTER,
-        &title,
-        FontId::new(12.5, theme::medium()),
-        ink,
-    );
-    let second = match snippet {
-        Some(snippet) => truncate_chars(snippet, 40),
-        None => tree
-            .parent_of(index)
-            .and_then(|parent| capsules.get(parent))
-            .map(|parent| format!("in {}", truncate_chars(&parent.subject, 26)))
-            .unwrap_or_else(|| "Root page".to_string()),
-    };
-    // Paint the excerpt in segments so the matched words stand out from the
-    // surrounding text instead of being one flat muted string. The row clips
-    // rather than dropping the whole line when the excerpt is wider than the
-    // sidebar.
-    let clip = Rect::from_min_max(
-        pos2(rect.left() + 30.0, rect.top() + 22.0),
-        pos2(rect.right() - 4.0, rect.bottom()),
-    );
-    let painter = ui.painter().with_clip_rect(clip);
-    let mut x = rect.left() + 30.0;
-    let baseline = rect.top() + 30.0;
-    for (segment, is_match) in search::highlight_matches(&second, query) {
-        if segment.is_empty() {
-            continue;
-        }
-        let color = if is_match {
-            if is_selected || response.hovered() {
-                Color32::WHITE
-            } else {
-                theme::ink()
-            }
-        } else {
-            theme::faint()
-        };
-        let galley = painter.layout_no_wrap(segment, FontId::new(9.5, theme::mono()), color);
-        let width = galley.size().x;
-        if x > clip.right() {
-            break;
-        }
-        painter.galley(pos2(x, baseline - galley.size().y / 2.0), galley, color);
-        x += width;
-    }
-    ui.painter().text(
-        pos2(rect.right() - 10.0, rect.top() + 15.0),
-        Align2::RIGHT_CENTER,
-        format!("{score:.1}"),
-        FontId::new(9.0, theme::mono()),
-        theme::faint(),
-    );
-    if !capsule.native {
-        icons::paint(
-            ui.painter(),
-            Rect::from_center_size(
-                pos2(rect.right() - 12.0, rect.top() + 30.0),
-                vec2(11.0, 11.0),
-            ),
-            Icon::Lock,
-            theme::badge_beta(),
-        );
-    }
-    let response = if capsule.native {
-        response.on_hover_text(&capsule.subject)
-    } else {
-        response.on_hover_text(format!("{} (read-only)", capsule.subject))
-    };
-    response.clicked()
 }
 
 #[cfg(test)]
