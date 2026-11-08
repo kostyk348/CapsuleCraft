@@ -1,6 +1,6 @@
 //! Individual node, edge, and label rendering for the detailed `LodMode::Pages` view.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use egui::{pos2, vec2, FontId, Painter, Rect, Response, Stroke, StrokeKind};
 
@@ -20,7 +20,7 @@ const NEAR_EDGE_CAP: usize = 6000;
 
 pub fn render_pages(
     painter: &Painter,
-    rect: Rect,
+    _rect: Rect,
     response: &Response,
     transform: &GraphTransform,
     graph: &Graph,
@@ -43,39 +43,91 @@ pub fn render_pages(
         }
     };
 
+    // Slot lookup by capsule index
+    let mut slot_of: HashMap<usize, u32> = HashMap::with_capacity(graph.nodes.len());
+    for (slot, node) in graph.nodes.iter().enumerate() {
+        slot_of.insert(node.capsule, slot as u32);
+    }
+
+    // Hit-testing / hover state
+    let pointer = response.hover_pos();
+    let hovered = pointer.and_then(|p| {
+        metrics
+            .grid
+            .nearest(positions, transform.to_graph(p), 10.0 / transform.radius)
+    });
+
+    if state.dragged_node.is_some() {
+        response.clone().on_hover_cursor(egui::CursorIcon::Grabbing);
+    } else if hovered.is_some() {
+        response.clone().on_hover_cursor(egui::CursorIcon::Grab);
+    }
+
+    // Active focus (hovered node takes precedence, then selected page)
+    let selected_slot = selected.and_then(|sel| slot_of.get(&sel).copied());
+    let active_slot = hovered.or(selected_slot);
+
+    // Connected neighborhood query O(k)
+    let mut active_neighbors: HashSet<u32> = HashSet::new();
+    let mut active_edges: HashSet<usize> = HashSet::new();
+    if let Some(focus_slot) = active_slot {
+        active_neighbors.insert(focus_slot);
+        if let Some(neighbors) = metrics.adjacency.get(focus_slot as usize) {
+            for &(neighbor, edge_idx) in neighbors {
+                active_neighbors.insert(neighbor);
+                active_edges.insert(edge_idx);
+            }
+        }
+    }
+    let has_active = active_slot.is_some();
+
+    // 1. Render edges
     if state.edges {
         let mut drawn = 0usize;
-        for edge in &graph.edges {
+        let mut active_draw_queue: Vec<(egui::Pos2, egui::Pos2)> = Vec::new();
+
+        for (edge_idx, edge) in graph.edges.iter().enumerate() {
             if drawn >= NEAR_EDGE_CAP {
                 break;
             }
-            let (a, b) = (edge.source as u32, edge.target as u32);
+            let (Some(&a), Some(&b)) = (slot_of.get(&edge.source), slot_of.get(&edge.target))
+            else {
+                continue;
+            };
             if !visible_set.contains(&a) || !visible_set.contains(&b) {
                 continue;
             }
             drawn += 1;
             let pa = transform.to_screen(positions[a as usize]);
             let pb = transform.to_screen(positions[b as usize]);
-            let color = match edge.kind {
-                EdgeKind::PageParent => theme::fade(theme::accent(), 0.55),
-                EdgeKind::Reply => theme::fade(theme::ink(), 0.3),
-                EdgeKind::Reference => theme::fade(theme::ink(), 0.18),
-                EdgeKind::TagCluster => theme::fade(theme::accent_ink(), 0.12),
-            };
-            painter.line_segment(
-                [pa, pb],
-                Stroke::new(1.0, theme::fade(color, dim_node(a).min(dim_node(b)))),
-            );
+
+            if has_active && active_edges.contains(&edge_idx) {
+                active_draw_queue.push((pa, pb));
+            } else {
+                let color = match edge.kind {
+                    EdgeKind::PageParent => theme::fade(theme::accent(), 0.55),
+                    EdgeKind::Reply => theme::fade(theme::ink(), 0.3),
+                    EdgeKind::Reference => theme::fade(theme::ink(), 0.18),
+                    EdgeKind::TagCluster => theme::fade(theme::accent_ink(), 0.12),
+                };
+                let alpha_mult = if has_active { 0.10 } else { 1.0 };
+                painter.line_segment(
+                    [pa, pb],
+                    Stroke::new(
+                        1.0,
+                        theme::fade(color, dim_node(a).min(dim_node(b)) * alpha_mult),
+                    ),
+                );
+            }
+        }
+
+        // Active edges drawn on top with 2.2px accent stroke
+        for (pa, pb) in active_draw_queue {
+            painter.line_segment([pa, pb], Stroke::new(2.2, theme::accent()));
         }
     }
 
-    let mut hovered: Option<u32> = None;
-    let pointer = response.hover_pos();
-    if let Some(pointer) = pointer {
-        hovered = metrics
-            .grid
-            .nearest(positions, transform.to_graph(pointer), 10.0 / transform.radius);
-    }
+    // 2. Render nodes
     let mut order: Vec<u32> = visible.to_vec();
     order.sort_by_key(|&slot| graph.nodes[slot as usize].degree);
     for &slot in &order {
@@ -84,16 +136,33 @@ pub fn render_pages(
         let node_radius = (4.5 + (node.degree as f32).sqrt() * 1.8).clamp(4.5, 12.0)
             * state.zoom.clamp(0.7, 1.15);
         let is_selected = selected == Some(node.capsule);
+        let is_focus_center = active_slot == Some(slot);
+        let is_connected_neighbor = active_neighbors.contains(&slot);
         let base = cluster_color(graph.cluster_of[slot as usize]);
-        let color = if is_selected {
+        let color = if is_selected || is_focus_center {
             theme::accent_ink()
         } else {
             base
         };
-        let dim = dim_node(slot);
-        if is_selected || hovered == Some(slot) {
-            painter.circle_filled(pos, node_radius + 4.0, theme::fade(color, 0.18 * dim));
+
+        let dim = if has_active {
+            if is_focus_center || is_connected_neighbor {
+                1.0
+            } else {
+                0.20 * dim_node(slot)
+            }
+        } else {
+            dim_node(slot)
+        };
+
+        // Outer glow
+        if is_focus_center || is_selected {
+            painter.circle_filled(pos, node_radius + 6.0, theme::fade(theme::accent(), 0.35));
+            painter.circle_filled(pos, node_radius + 3.0, theme::fade(color, 0.3));
+        } else if is_connected_neighbor && has_active {
+            painter.circle_filled(pos, node_radius + 3.0, theme::fade(color, 0.25));
         }
+
         painter.circle_filled(pos, node_radius, theme::fade(color, dim));
         painter.circle_stroke(
             pos,
@@ -102,6 +171,7 @@ pub fn render_pages(
         );
     }
 
+    // 3. Render labels
     if state.zoom >= 0.55 {
         let size = (10.5 * state.zoom.clamp(0.85, 1.1)).clamp(9.0, 12.0);
         let font = FontId::new(size, egui::FontFamily::Proportional);
@@ -139,6 +209,16 @@ pub fn render_pages(
         for i in keep {
             let (slot, label, label_rect) = &candidates[i];
             let node = &graph.nodes[*slot as usize];
+            let is_active_node = active_neighbors.contains(slot);
+            let alpha = if has_active {
+                if is_active_node {
+                    1.0
+                } else {
+                    0.15 * dim_node(*slot)
+                }
+            } else {
+                0.9 * dim_node(*slot)
+            };
             painter.text(
                 label_rect.min + vec2(2.0, 0.0),
                 egui::Align2::LEFT_TOP,
@@ -147,12 +227,13 @@ pub fn render_pages(
                 if selected == Some(node.capsule) {
                     theme::ink()
                 } else {
-                    theme::fade(theme::muted(), 0.9 * dim_node(*slot))
+                    theme::fade(theme::muted(), alpha)
                 },
             );
         }
     }
 
+    // 4. Hover card
     if let Some(slot) = hovered {
         let node = &graph.nodes[slot as usize];
         let capsule = &capsules[node.capsule];

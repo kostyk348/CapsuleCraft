@@ -1,6 +1,6 @@
 //! Cluster-level rendering and packing for the graph view.
 
-use egui::{pos2, vec2, Align, Color32, FontId, Layout, Painter, Rect, Response, RichText, Stroke, Ui};
+use egui::{pos2, vec2, Color32, FontId, Painter, Rect, Response, RichText, Sense, Stroke, Ui};
 
 use crate::graph::{Graph, GraphMetrics};
 use crate::i18n::{t, Key, Locale};
@@ -279,7 +279,7 @@ pub fn render_clusters(
 
 pub fn draw_cluster_panel(
     ui: &mut Ui,
-    painter: &Painter,
+    _painter: &Painter,
     rect: Rect,
     graph: &Graph,
     metrics: &GraphMetrics,
@@ -291,48 +291,11 @@ pub fn draw_cluster_panel(
     }
     let mut top: Vec<u32> = (0..graph.clusters.len() as u32).collect();
     top.sort_by_key(|&index| std::cmp::Reverse(graph.clusters[index as usize].members.len()));
-    let rows = top.len().min(8);
-    let panel_rect = Rect::from_min_size(
-        pos2(rect.left() + 12.0, rect.top() + 12.0),
-        vec2(
-            216.0,
-            12.0 + (rows + usize::from(state.focus.is_some())) as f32 * 21.0 + 10.0,
-        ),
-    );
-    painter.rect(
-        panel_rect,
-        theme::RADIUS,
-        theme::fade(theme::panel(), 0.94),
-        theme::hairline(),
-        egui::StrokeKind::Inside,
-    );
-    let mut panel = ui.new_child(
-        egui::UiBuilder::new()
-            .max_rect(panel_rect.shrink(8.0))
-            .layout(Layout::top_down(Align::Min)),
-    );
-    panel.label(
-        RichText::new(t(locale, Key::GraphClustersPanel))
-            .size(9.5)
-            .color(theme::faint()),
-    );
-    if let Some(focus) = state.focus {
-        if panel
-            .add(
-                egui::Button::new(
-                    RichText::new(format!("← {}", t(locale, Key::All)))
-                        .size(10.5)
-                        .color(theme::accent_ink()),
-                )
-                .fill(Color32::TRANSPARENT)
-                .frame(false),
-            )
-            .clicked()
-        {
-            state.focus = None;
-        }
-        let _ = focus;
-    }
+
+    let panel_anchor = pos2(rect.left() + 12.0, rect.top() + 12.0);
+    let max_rect = Rect::from_min_size(panel_anchor, vec2(220.0, rect.height() - 24.0));
+    let mut panel_ui = ui.new_child(egui::UiBuilder::new().max_rect(max_rect));
+
     let focus = state.focus;
     let dim_cluster = |index: u32| -> f32 {
         match focus {
@@ -340,20 +303,62 @@ pub fn draw_cluster_panel(
             _ => 1.0,
         }
     };
-    for &index in top.iter().take(8) {
-        let cluster = &graph.clusters[index as usize];
-        let name = cluster_display_name(&cluster.key, locale);
-        let row_label = format!("{} · {}", truncate_chars(&name, 16), cluster.members.len());
-        let dot = cluster_color(index);
-        let button = egui::Button::new(
-            RichText::new(format!("● {}", row_label))
-                .size(10.5)
-                .color(theme::fade(dot, dim_cluster(index))),
-        )
-        .fill(Color32::TRANSPARENT)
-        .frame(false);
-        if panel.add(button).clicked() {
-            focus_cluster(state, rect, metrics, index);
-        }
-    }
+
+    egui::Frame::new()
+        .fill(theme::fade(theme::panel(), 0.94))
+        .corner_radius(theme::RADIUS)
+        .stroke(theme::hairline())
+        .inner_margin(egui::Margin::same(10))
+        .show(&mut panel_ui, |ui| {
+            ui.set_width(196.0);
+            ui.label(
+                RichText::new(t(locale, Key::GraphClustersPanel))
+                    .size(9.5)
+                    .color(theme::faint()),
+            );
+            if state.focus.is_some() {
+                ui.add_space(4.0);
+                if ui
+                    .add(
+                        egui::Button::new(
+                            RichText::new(format!("← {}", t(locale, Key::All)))
+                                .size(10.5)
+                                .color(theme::accent_ink()),
+                        )
+                        .fill(Color32::TRANSPARENT)
+                        .frame(false),
+                    )
+                    .clicked()
+                {
+                    state.focus = None;
+                }
+            }
+            ui.add_space(4.0);
+            for &index in top.iter().take(8) {
+                let cluster = &graph.clusters[index as usize];
+                let name = cluster_display_name(&cluster.key, locale);
+                let row_label =
+                    format!("{} · {}", truncate_chars(&name, 16), cluster.members.len());
+                let dot = cluster_color(index);
+                let dim = dim_cluster(index);
+
+                let (row_rect, row_resp) =
+                    ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::click());
+                if row_resp.hovered() {
+                    ui.painter().rect_filled(row_rect, theme::RADIUS, theme::wash());
+                }
+                let dot_center = pos2(row_rect.left() + 7.0, row_rect.center().y);
+                ui.painter().circle_filled(dot_center, 3.5, theme::fade(dot, dim));
+                ui.painter().text(
+                    pos2(row_rect.left() + 16.0, row_rect.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    &row_label,
+                    FontId::new(10.5, theme::medium()),
+                    theme::fade(dot, dim),
+                );
+                if row_resp.clicked() {
+                    focus_cluster(state, rect, metrics, index);
+                }
+            }
+        });
 }

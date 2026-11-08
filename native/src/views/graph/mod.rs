@@ -16,7 +16,7 @@ use crate::theme;
 use crate::{ghost, hud, menu_row, popover_frame, tag_chip, truncate_chars};
 
 use super::{empty_state, header, ViewAction, VIEW_PAD};
-use interaction::{handle_pan_and_zoom, GraphTransform};
+use interaction::{handle_interaction, GraphTransform};
 use render_clusters::{draw_cluster_panel, render_clusters};
 use render_density::render_density;
 use render_pages::{draw_page_legend, render_pages};
@@ -30,6 +30,10 @@ pub struct GraphState {
     /// Focused cluster: members render at full strength, everything else
     /// fades; entering a cluster centres and zooms onto its bounds.
     pub focus: Option<u32>,
+    /// Currently dragged node slot (in `LodMode::Pages`).
+    pub dragged_node: Option<u32>,
+    /// Temporary position overrides for dragged nodes.
+    pub drag_overrides: std::collections::HashMap<u32, [f32; 2]>,
     /// Background layout progress channel, when a big vault is relaxing.
     layout_rx: Option<std::sync::mpsc::Receiver<graph::LayoutMsg>>,
     /// Vault signature the running job was started for — a vault edit
@@ -81,6 +85,8 @@ impl GraphState {
             zoom: 1.0,
             edges: true,
             focus: None,
+            dragged_node: None,
+            drag_overrides: std::collections::HashMap::new(),
             layout_rx: None,
             layout_sig: None,
             layout_done: 0,
@@ -234,6 +240,8 @@ pub fn draw(
             {
                 state.tag = None;
                 state.focus = None;
+                state.drag_overrides.clear();
+                state.dragged_node = None;
             }
             for tag in &graph.tags {
                 if menu_row(
@@ -249,6 +257,8 @@ pub fn draw(
                 {
                     state.tag = Some(tag.clone());
                     state.focus = None;
+                    state.drag_overrides.clear();
+                    state.dragged_node = None;
                 }
             }
         });
@@ -284,6 +294,8 @@ pub fn draw(
             state.pan = egui::Vec2::ZERO;
             state.zoom = 1.0;
             state.focus = None;
+            state.drag_overrides.clear();
+            state.dragged_node = None;
         }
         ui.add_space(8.0);
         let hint = if state.layout_rx.is_some() {
@@ -315,14 +327,35 @@ pub fn draw(
     let response = ui.allocate_rect(rect, Sense::click_and_drag());
     let painter = ui.painter_at(rect);
 
-    handle_pan_and_zoom(ui, &response, state);
-    painter.rect_filled(rect, 0.0, theme::bg());
-
     let transform = GraphTransform::new(rect, state.pan, state.zoom);
     let (world_min, world_max) = transform.world_bounds(rect);
-    let positions: Vec<[f32; 2]> = graph.nodes.iter().map(|node| node.pos).collect();
+    let positions: Vec<[f32; 2]> = graph
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(slot, node)| {
+            state
+                .drag_overrides
+                .get(&(slot as u32))
+                .copied()
+                .unwrap_or(node.pos)
+        })
+        .collect();
     let visible = metrics.grid.query(world_min, world_max);
     let mode = graph::pick_mode(state.zoom, visible.len());
+
+    handle_interaction(
+        ui,
+        &response,
+        &transform,
+        mode,
+        &positions,
+        &graph,
+        capsules,
+        &metrics,
+        state,
+    );
+    painter.rect_filled(rect, 0.0, theme::bg());
 
     if mode == LodMode::Clusters && graph.clusters.len() > 1 {
         render_clusters(&painter, rect, &response, &graph, &metrics, state, locale);
@@ -456,6 +489,18 @@ mod tests {
         assert_eq!(state.pan, egui::Vec2::ZERO);
         assert!(state.edges);
         assert!(state.focus.is_none());
+        assert!(state.dragged_node.is_none());
+        assert!(state.drag_overrides.is_empty());
+    }
+
+    #[test]
+    fn drag_overrides_priority_and_reset() {
+        let mut state = GraphState::new();
+        state.drag_overrides.insert(2, [0.42, -0.42]);
+        assert_eq!(state.drag_overrides.get(&2), Some(&[0.42, -0.42]));
+        assert_eq!(state.drag_overrides.get(&0), None);
+        state.drag_overrides.clear();
+        assert!(state.drag_overrides.is_empty());
     }
 
     #[test]

@@ -92,6 +92,8 @@ pub struct GraphMetrics {
     pub centroids: Vec<[f32; 2]>,
     /// Bounding box `(min, max)` per cluster, in world units.
     pub bounds: Vec<([f32; 2], [f32; 2])>,
+    /// Incident edges and neighbors per node slot: `slot -> Vec<(neighbor_slot, edge_index)>`.
+    pub adjacency: Vec<Vec<(u32, usize)>>,
 }
 
 pub fn build_metrics(graph: &Graph) -> GraphMetrics {
@@ -101,13 +103,17 @@ pub fn build_metrics(graph: &Graph) -> GraphMetrics {
     let mut bounds = vec![([f32::INFINITY; 2], [f32::NEG_INFINITY; 2]); graph.clusters.len()];
     let mut sums = vec![[0.0f64; 2]; graph.clusters.len()];
     for (slot, pos) in positions.iter().enumerate() {
-        let cluster = graph.cluster_of[slot] as usize;
-        sums[cluster][0] += pos[0] as f64;
-        sums[cluster][1] += pos[1] as f64;
-        bounds[cluster].0[0] = bounds[cluster].0[0].min(pos[0]);
-        bounds[cluster].0[1] = bounds[cluster].0[1].min(pos[1]);
-        bounds[cluster].1[0] = bounds[cluster].1[0].max(pos[0]);
-        bounds[cluster].1[1] = bounds[cluster].1[1].max(pos[1]);
+        if let Some(&cluster) = graph.cluster_of.get(slot) {
+            let cluster = cluster as usize;
+            if cluster < graph.clusters.len() {
+                sums[cluster][0] += pos[0] as f64;
+                sums[cluster][1] += pos[1] as f64;
+                bounds[cluster].0[0] = bounds[cluster].0[0].min(pos[0]);
+                bounds[cluster].0[1] = bounds[cluster].0[1].min(pos[1]);
+                bounds[cluster].1[0] = bounds[cluster].1[0].max(pos[0]);
+                bounds[cluster].1[1] = bounds[cluster].1[1].max(pos[1]);
+            }
+        }
     }
     for (index, cluster) in graph.clusters.iter().enumerate() {
         if !cluster.members.is_empty() {
@@ -115,10 +121,26 @@ pub fn build_metrics(graph: &Graph) -> GraphMetrics {
             centroids[index] = [(sums[index][0] / n) as f32, (sums[index][1] / n) as f32];
         }
     }
+
+    let mut slot_of: HashMap<usize, u32> = HashMap::with_capacity(graph.nodes.len());
+    for (slot, node) in graph.nodes.iter().enumerate() {
+        slot_of.insert(node.capsule, slot as u32);
+    }
+    let mut adjacency: Vec<Vec<(u32, usize)>> = vec![Vec::new(); graph.nodes.len()];
+    for (edge_idx, edge) in graph.edges.iter().enumerate() {
+        if let (Some(&src_slot), Some(&tgt_slot)) =
+            (slot_of.get(&edge.source), slot_of.get(&edge.target))
+        {
+            adjacency[src_slot as usize].push((tgt_slot, edge_idx));
+            adjacency[tgt_slot as usize].push((src_slot, edge_idx));
+        }
+    }
+
     GraphMetrics {
         grid: NodeGrid::build(&positions, ideal * 3.0),
         centroids,
         bounds,
+        adjacency,
     }
 }
 
@@ -233,5 +255,34 @@ mod tests {
         }
         let nearest = grid.nearest(&positions, [0.12, 0.11], 0.05);
         assert_eq!(nearest, Some(11));
+    }
+
+    #[test]
+    fn adjacency_map_matches_edges() {
+        use super::super::{EdgeKind, Graph, GraphCluster, GraphEdge, GraphNode};
+        let nodes = vec![
+            GraphNode { capsule: 10, degree: 1, pos: [0.0, 0.0] },
+            GraphNode { capsule: 20, degree: 2, pos: [0.5, 0.5] },
+            GraphNode { capsule: 30, degree: 1, pos: [1.0, 1.0] },
+        ];
+        let edges = vec![
+            GraphEdge { source: 10, target: 20, kind: EdgeKind::PageParent, label: None },
+            GraphEdge { source: 20, target: 30, kind: EdgeKind::Reply, label: None },
+        ];
+        let graph = Graph {
+            nodes,
+            edges,
+            clusters: vec![GraphCluster { key: "".into(), members: vec![0, 1, 2] }],
+            cluster_of: vec![0, 0, 0],
+            ..Graph::default()
+        };
+        let metrics = build_metrics(&graph);
+        assert_eq!(metrics.adjacency.len(), 3);
+        // Slot 0 (capsule 10) connects to slot 1 (capsule 20) via edge 0
+        assert_eq!(metrics.adjacency[0], vec![(1, 0)]);
+        // Slot 1 (capsule 20) connects to slot 0 (edge 0) and slot 2 (edge 1)
+        assert_eq!(metrics.adjacency[1], vec![(0, 0), (2, 1)]);
+        // Slot 2 (capsule 30) connects to slot 1 (edge 1)
+        assert_eq!(metrics.adjacency[2], vec![(1, 1)]);
     }
 }
