@@ -184,6 +184,18 @@ pub fn draw_sidebar(
     locale: Locale,
 ) -> ShellAction {
     let mut action = ShellAction::default();
+    // A drag whose release never reached us (the pointer left the window, a
+    // modal ate the button-up) must not poison the list: row clicks are
+    // gated on `dragged_page` being empty, so a stuck state would make the
+    // whole tree dead, and the next stray release would move a page to
+    // wherever the pointer happens to be. Cancel when no button is down and
+    // no release arrived this frame — a real release frame keeps its drop.
+    if dragged_page.is_some()
+        && !ui.input(|i| i.pointer.any_down())
+        && !ui.input(|i| i.pointer.any_released())
+    {
+        *dragged_page = None;
+    }
     let outer = ui.max_rect();
     ui.allocate_rect(outer, Sense::hover());
     ui.set_min_width(outer.width());
@@ -506,7 +518,11 @@ pub fn draw_sidebar(
                         let (root_drop_rect, root_drop_resp) = ui
                             .allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::hover());
                         let is_already_root = tree.parent_of(dragged).is_none();
-                        let hovered = root_drop_resp.hovered() && !is_already_root;
+                        // `hovered()` is suppressed for every widget while a
+                        // drag is in flight (egui: "while dragging or clicking
+                        // something, nothing else is hovered") — the drop zone
+                        // must look at the pointer position instead.
+                        let hovered = root_drop_resp.contains_pointer() && !is_already_root;
 
                         ui.painter().rect_stroke(
                             root_drop_rect,
@@ -962,8 +978,16 @@ fn draw_page_nodes(
         let depth = depth.min(4);
         let indent = depth as f32 * 12.0;
 
-        let (rect, response) =
-            ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click_and_drag());
+        let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
+        // A stable, explicit id: the drop-target probe and headless tests
+        // need to address the row, and egui suppresses `hovered()` on every
+        // widget while a drag is in flight — the row must be probed with
+        // `contains_pointer()` instead.
+        let response = ui.interact(
+            rect,
+            egui::Id::unique(("page-row", key.clone())),
+            Sense::click_and_drag(),
+        );
 
         // Drag start / update
         if response.drag_started() && capsule.native {
@@ -977,7 +1001,7 @@ fn draw_page_nodes(
         let mut is_valid_drop_target = false;
         let mut is_cycle_target = false;
         if let Some(dragged) = *dragged_page {
-            if dragged != index && response.hovered() {
+            if dragged != index && response.contains_pointer() {
                 if tree.is_descendant_of(index, dragged) {
                     is_cycle_target = true;
                 } else {
@@ -1297,4 +1321,319 @@ fn draw_search_row(
         response.on_hover_text(format!("{} (read-only)", capsule.subject))
     };
     response.clicked()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mime::Capsule;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    fn capsule(id: &str, subject: &str) -> Capsule {
+        Capsule {
+            message_id: id.into(),
+            subject: subject.into(),
+            from: String::new(),
+            to: String::new(),
+            date: String::new(),
+            timestamp: 0,
+            in_reply_to: None,
+            parent_id: None,
+            references: Vec::new(),
+            tags: vec!["#plan".into()],
+            status: String::new(),
+            file_name: format!("{id}.eml"),
+            blocks: vec![serde_json::json!({
+                "id": format!("blk-{id}"),
+                "type": "paragraph",
+                "data": {"text": "body"}
+            })],
+            page_canvas: None,
+            attachments: Vec::new(),
+            native: true,
+            parse_note: None,
+            plain_body: None,
+            html_body: None,
+            raw_eml: None,
+        }
+    }
+
+    /// Dragging a page row onto another page must emit a reparent. This
+    /// guards the egui pitfall that silently killed the whole feature: while
+    /// a drag is in flight, `hovered()` is suppressed for every widget
+    /// except the one being dragged ("while dragging or clicking something,
+    /// nothing else is hovered"), so drop targets have to be probed with
+    /// `contains_pointer()`. Before the fix the pointer never "hovered" any
+    /// row while dragging, `drop_target` stayed empty and every release was
+    /// a no-op.
+    #[test]
+    fn dragging_a_page_onto_another_reparents_it() {
+        let ctx = egui::Context::default();
+        let vault = Vault {
+            dir: std::path::PathBuf::new(),
+            capsules: vec![capsule("msg-a", "Alpha"), capsule("msg-b", "Beta")],
+            load_errors: Vec::new(),
+        };
+        let tree = PageTree::build(&vault.capsules);
+        let b_index = 1;
+        let action: Rc<RefCell<Option<ShellAction>>> = Rc::new(RefCell::new(None));
+        let dragged: Rc<RefCell<Option<usize>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let action = action.clone();
+            let dragged = dragged.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(260.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut search = String::new();
+                let mut collapsed: HashSet<String> = HashSet::new();
+                ctx.run_pass(raw, |ctx| {
+                    egui::Area::new(egui::Id::unique("sidebar-harness"))
+                        .fixed_pos(egui::Pos2::ZERO)
+                        .show(ctx, |ui| {
+                            let mut act = draw_sidebar(
+                                ui,
+                                &vault,
+                                &tree,
+                                None,
+                                &mut dragged.borrow_mut(),
+                                &mut search,
+                                &mut collapsed,
+                                &crate::search::Bm25Index::default(),
+                                &["".to_string(), "".to_string()],
+                                false,
+                                &crate::ui_state::UiState::default(),
+                                0,
+                                0,
+                                Locale::En,
+                            );
+                            // Absorb, not overwrite: settle frames after the
+                            // release must not erase the reparent.
+                            let mut acc = action.borrow_mut();
+                            match acc.as_mut() {
+                                Some(existing) => existing.absorb(act),
+                                None => *acc = Some(act),
+                            }
+                        });
+                })
+                .textures_delta
+                .clear();
+            }
+        };
+
+        run(vec![]);
+        run(vec![]);
+        let a = ctx
+            .read_response(egui::Id::unique(("page-row", "msg-a".to_string())))
+            .expect("row Alpha response")
+            .rect;
+        let b = ctx
+            .read_response(egui::Id::unique(("page-row", "msg-b".to_string())))
+            .expect("row Beta response")
+            .rect;
+        assert!(
+            a.top() < b.top(),
+            "roots must render in vault order: Alpha above Beta"
+        );
+
+        // Press on Beta, drag over Alpha, release: Beta becomes a child of
+        // Alpha.
+        run(vec![egui::Event::PointerMoved(b.center())]);
+        run(vec![egui::Event::PointerButton {
+            pos: b.center(),
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        }]);
+        run(vec![egui::Event::PointerMoved(a.center())]);
+        run(vec![egui::Event::PointerMoved(a.center())]);
+        run(vec![egui::Event::PointerButton {
+            pos: a.center(),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        }]);
+        run(vec![]);
+        let action = action.borrow_mut().take().expect("action");
+        assert_eq!(
+            action.reparent,
+            Some((b_index, Some("msg-a".to_string()))),
+            "dropping Beta onto Alpha must request a reparent"
+        );
+        assert_eq!(*dragged.borrow(), None, "drag state must clear on release");
+    }
+
+    /// The inverse drop — onto a page inside the dragged page's own subtree —
+    /// must stay a rejected cycle and not emit a reparent.
+    #[test]
+    fn dropping_a_page_into_its_own_subtree_is_rejected() {
+        let ctx = egui::Context::default();
+        let mut vault = Vault {
+            dir: std::path::PathBuf::new(),
+            capsules: vec![capsule("msg-a", "Alpha"), capsule("msg-b", "Beta")],
+            load_errors: Vec::new(),
+        };
+        vault.capsules[1].parent_id = Some("msg-a".to_string());
+        let tree = PageTree::build(&vault.capsules);
+        let action: Rc<RefCell<Option<ShellAction>>> = Rc::new(RefCell::new(None));
+        let dragged: Rc<RefCell<Option<usize>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let action = action.clone();
+            let dragged = dragged.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(260.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut search = String::new();
+                let mut collapsed: HashSet<String> = HashSet::new();
+                ctx.run_pass(raw, |ctx| {
+                    egui::Area::new(egui::Id::unique("sidebar-harness-cycle"))
+                        .fixed_pos(egui::Pos2::ZERO)
+                        .show(ctx, |ui| {
+                            let mut act = draw_sidebar(
+                                ui,
+                                &vault,
+                                &tree,
+                                None,
+                                &mut dragged.borrow_mut(),
+                                &mut search,
+                                &mut collapsed,
+                                &crate::search::Bm25Index::default(),
+                                &["".to_string(), "".to_string()],
+                                false,
+                                &crate::ui_state::UiState::default(),
+                                0,
+                                0,
+                                Locale::En,
+                            );
+                            let mut acc = action.borrow_mut();
+                            match acc.as_mut() {
+                                Some(existing) => existing.absorb(act),
+                                None => *acc = Some(act),
+                            }
+                        });
+                })
+                .textures_delta
+                .clear();
+            }
+        };
+
+        run(vec![]);
+        run(vec![]);
+        let a = ctx
+            .read_response(egui::Id::unique(("page-row", "msg-a".to_string())))
+            .expect("row Alpha response")
+            .rect;
+        let b = ctx
+            .read_response(egui::Id::unique(("page-row", "msg-b".to_string())))
+            .expect("row Beta response")
+            .rect;
+        // Beta is Alpha's child now, so it renders indented below Alpha.
+        assert!(a.top() < b.top(), "child Beta renders below parent Alpha");
+
+        run(vec![egui::Event::PointerMoved(a.center())]);
+        run(vec![egui::Event::PointerButton {
+            pos: a.center(),
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        }]);
+        run(vec![egui::Event::PointerMoved(b.center())]);
+        run(vec![egui::Event::PointerButton {
+            pos: b.center(),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        }]);
+        run(vec![]);
+        let action = action.borrow_mut().take().expect("action");
+        assert!(
+            action.reparent.is_none(),
+            "dropping a page into its own subtree must stay a no-op"
+        );
+        assert_eq!(*dragged.borrow(), None);
+    }
+
+    /// A drag that lost its release (the pointer left the window, a modal
+    /// ate the button-up) must not stick: the tree gates row clicks on the
+    /// drag state being empty, so a stuck `dragged_page` used to make every
+    /// click dead until some later stray release moved a page.
+    #[test]
+    fn a_lost_release_does_not_stick_the_drag_state() {
+        let ctx = egui::Context::default();
+        let vault = Vault {
+            dir: std::path::PathBuf::new(),
+            capsules: vec![capsule("msg-a", "Alpha"), capsule("msg-b", "Beta")],
+            load_errors: Vec::new(),
+        };
+        let tree = PageTree::build(&vault.capsules);
+        let dragged: Rc<RefCell<Option<usize>>> = Rc::new(RefCell::new(None));
+
+        let run = {
+            let ctx = ctx.clone();
+            let dragged = dragged.clone();
+            move |events: Vec<egui::Event>| {
+                let raw = egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(260.0, 900.0),
+                    )),
+                    events,
+                    ..Default::default()
+                };
+                let mut search = String::new();
+                let mut collapsed: HashSet<String> = HashSet::new();
+                ctx.run_pass(raw, |ctx| {
+                    egui::Area::new(egui::Id::unique("sidebar-harness-stale"))
+                        .fixed_pos(egui::Pos2::ZERO)
+                        .show(ctx, |ui| {
+                            let _ = draw_sidebar(
+                                ui,
+                                &vault,
+                                &tree,
+                                None,
+                                &mut dragged.borrow_mut(),
+                                &mut search,
+                                &mut collapsed,
+                                &crate::search::Bm25Index::default(),
+                                &["".to_string(), "".to_string()],
+                                false,
+                                &crate::ui_state::UiState::default(),
+                                0,
+                                0,
+                                Locale::En,
+                            );
+                        });
+                })
+                .textures_delta
+                .clear();
+            }
+        };
+
+        run(vec![]);
+        // Simulate a drag whose release never arrived: the state points at a
+        // page while no button is down.
+        *dragged.borrow_mut() = Some(0);
+        run(vec![]);
+        assert_eq!(
+            *dragged.borrow(),
+            None,
+            "a stale drag state must be cancelled on the next frame"
+        );
+    }
 }

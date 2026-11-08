@@ -3,6 +3,36 @@
 All notable changes to CapsuleCraft are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [2.12.2] — 2026-11-08 — Drag and drop actually drops
+
+The user was right: page drag-and-drop in the sidebar never delivered. Two
+defects, both fixed.
+
+### Fixed
+- **Drop targets were invisible and the drop could silently miss.** While a
+  drag is in flight, egui suppresses `hovered()` for every widget except the
+  one being dragged ("while dragging or clicking something, nothing else is
+  hovered"). The sidebar probed drop targets with `hovered()`, so during a
+  drag no row ever lit up, and the drop only registered thanks to egui
+  restoring hover on the release frame — releasing anywhere outside a row
+  (over the document, the scrollbar, the footer) cancelled the move with no
+  explanation. Drop targets and the root drop zone are now probed with
+  `contains_pointer()`, the same primitive the calendar rescheduler and the
+  block grip drag already used: the highlight follows the pointer for the
+  whole drag and the drop lands where the highlight shows.
+- **A lost release could freeze the page tree.** `dragged_page` was only
+  cleared when a release event arrived; if the button-up happened outside
+  the window or was eaten by a modal, the stale state made every row click
+  dead (row clicks are gated on the drag state being empty) and the next
+  stray release moved a page to wherever the pointer happened to be. The
+  sidebar now cancels a drag whose button is up and no release arrived —
+  the same stale-state cleanup the block drag already had.
+
+Sidebar rows carry a stable explicit id (`page-row`) now; that is what the
+new headless tests address. Tests 323 → 326: dropping one page onto another
+emits the reparent, dropping a page into its own subtree stays rejected, and
+a lost release cannot stick the drag state.
+
 ## [2.12.1] — 2026-11-08 — The planning board keeps its promises
 
 User-reported defect batch against the v2.12.0 planning board.
