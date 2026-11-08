@@ -1557,6 +1557,50 @@ impl NativeApp {
         self.last_edit = Instant::now();
     }
 
+    /// Persists every capsule a view mutated, even when it is not the open
+    /// one: the planning board writes tasks into the inbox page and
+    /// reschedules them from the calendar while a different page (or none)
+    /// is selected. Saving only the selected page used to drop those edits
+    /// on the next reload, which looked like tasks losing ticks or
+    /// disappearing entirely.
+    fn persist_touched(&mut self, indices: Vec<usize>) {
+        let mut seen: HashSet<usize> = HashSet::new();
+        let mut saved = 0;
+        for index in indices {
+            if !seen.insert(index) {
+                continue;
+            }
+            let Some(capsule) = self.vault.capsules.get(index) else {
+                continue;
+            };
+            let id = capsule.message_id.clone();
+            let snapshot = PageSnapshot::of(capsule);
+            if let Some((snapshot_id, previous)) = &self.snapshot {
+                if snapshot_id == &id && !same_snapshot(previous, &snapshot) {
+                    self.history
+                        .maybe_push(&id, snapshot_to_string(previous), now_millis());
+                }
+            }
+            if Some(index) == self.selected {
+                self.snapshot = Some((id, snapshot));
+            }
+            match self.vault.save(index) {
+                Ok(()) => saved += 1,
+                Err(err) => {
+                    self.status = err;
+                    self.status_error = true;
+                }
+            }
+        }
+        if saved > 0 {
+            self.last_write = Instant::now();
+            self.status = format!("Saved {}", chrono::Local::now().format("%H:%M:%S"));
+            self.status_error = false;
+            // Keep search and backlinks in sync with what is on disk.
+            self.refresh_links();
+        }
+    }
+
     /// Returns `false` when a dirty page could not be saved. Callers must not
     /// navigate away in that case.
     fn save_selected(&mut self) -> bool {
@@ -3060,7 +3104,14 @@ impl NativeApp {
         if let Some(old_title) = editor.rename_from.clone() {
             self.propagate_rename(&old_title);
         }
-        if view_action.changed {
+        if !view_action.touched.is_empty() {
+            // Views that mutate pages other than the open one (the planning
+            // board) must have those pages saved themselves; snapshotting the
+            // selected page here would write undo history for a page nobody
+            // changed.
+            let touched = std::mem::take(&mut view_action.touched);
+            self.persist_touched(touched);
+        } else if view_action.changed {
             self.record_change();
         }
         if let Some(toast) = view_action.toast.clone() {
