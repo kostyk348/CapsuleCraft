@@ -44,6 +44,10 @@ pub struct GraphState {
     pub local_depth: usize,
     /// Node slot for context menu.
     pub context_node: Option<u32>,
+    /// Whether selection highlighting on the canvas was cleared by clicking empty space.
+    pub selection_cleared: bool,
+    /// Last seen external selected page index to detect external selection changes.
+    pub last_external_selected: Option<usize>,
     /// Background layout progress channel, when a big vault is relaxing.
     layout_rx: Option<std::sync::mpsc::Receiver<graph::LayoutMsg>>,
     /// Vault signature the running job was started for — a vault edit
@@ -102,6 +106,8 @@ impl GraphState {
             local_mode: false,
             local_depth: 1,
             context_node: None,
+            selection_cleared: false,
+            last_external_selected: None,
             layout_rx: None,
             layout_sig: None,
             layout_done: 0,
@@ -122,6 +128,10 @@ pub fn draw(
     selected: Option<usize>,
 ) -> ViewAction {
     let mut action = ViewAction::default();
+    if selected != state.last_external_selected {
+        state.last_external_selected = selected;
+        state.selection_cleared = false;
+    }
     let signature = vault_signature(capsules);
     let tag = state.tag.clone();
     let rebuild = !matches!(
@@ -436,6 +446,13 @@ pub fn draw(
             .grid
             .nearest(&positions, transform.to_graph(p), 12.0 / transform.radius)
     });
+    if response.clicked() {
+        if context_hovered.is_none() {
+            state.selection_cleared = true;
+        } else {
+            state.selection_cleared = false;
+        }
+    }
     if response.secondary_clicked() {
         state.context_node = context_hovered;
     }

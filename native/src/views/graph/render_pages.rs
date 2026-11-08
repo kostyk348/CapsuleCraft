@@ -49,8 +49,13 @@ pub fn render_pages(
         slot_of.insert(node.capsule, slot as u32);
     }
 
-    // Active focus (hovered node takes precedence, then selected page)
-    let selected_slot = selected.and_then(|sel| slot_of.get(&sel).copied());
+    // Active selection on canvas (ignored if user cleared selection by clicking empty canvas)
+    let effective_selected = if state.selection_cleared {
+        None
+    } else {
+        selected
+    };
+    let selected_slot = effective_selected.and_then(|sel| slot_of.get(&sel).copied());
 
     // Local mode neighborhood calculation
     let local_set: Option<HashSet<u32>> = if state.local_mode {
@@ -94,6 +99,8 @@ pub fn render_pages(
         response.clone().on_hover_cursor(egui::CursorIcon::Grab);
     }
 
+    let is_hovering = hovered.is_some();
+    let has_selection = selected_slot.is_some();
     let active_slot = hovered.or(selected_slot).filter(|&slot| is_node_allowed(slot));
 
     // Search query matching
@@ -155,7 +162,13 @@ pub fn render_pages(
                     EdgeKind::Reference => theme::fade(theme::ink(), 0.18),
                     EdgeKind::TagCluster => theme::fade(theme::accent_ink(), 0.12),
                 };
-                let alpha_mult = if has_active { 0.10 } else { 1.0 };
+                let alpha_mult = if is_hovering {
+                    0.10
+                } else if has_selection {
+                    0.80
+                } else {
+                    1.0
+                };
                 painter.line_segment(
                     [pa, pb],
                     Stroke::new(
@@ -183,7 +196,7 @@ pub fn render_pages(
         let pos = transform.to_screen(positions[slot as usize]);
         let node_radius = (4.5 + (node.degree as f32).sqrt() * 1.8).clamp(4.5, 12.0)
             * state.zoom.clamp(0.7, 1.15);
-        let is_selected = selected == Some(node.capsule);
+        let is_selected = effective_selected == Some(node.capsule);
         let is_focus_center = active_slot == Some(slot);
         let is_connected_neighbor = active_neighbors.contains(&slot);
         let is_match = is_search_match(slot);
@@ -200,14 +213,20 @@ pub fn render_pages(
             } else {
                 0.15 * dim_node(slot)
             }
-        } else if has_active {
+        } else if is_hovering {
             if is_focus_center || is_connected_neighbor {
                 1.0
             } else {
-                0.20 * dim_node(slot)
+                0.22 * dim_node(slot)
+            }
+        } else if has_selection {
+            if is_selected || is_connected_neighbor {
+                1.0
+            } else {
+                0.85 * dim_node(slot)
             }
         } else {
-            dim_node(slot)
+            1.0 * dim_node(slot)
         };
 
         // Outer glow
@@ -217,7 +236,7 @@ pub fn render_pages(
         } else if is_focus_center || is_selected {
             painter.circle_filled(pos, node_radius + 6.0, theme::fade(theme::accent(), 0.35));
             painter.circle_filled(pos, node_radius + 3.0, theme::fade(color, 0.3));
-        } else if is_connected_neighbor && has_active {
+        } else if is_connected_neighbor && is_hovering {
             painter.circle_filled(pos, node_radius + 3.0, theme::fade(color, 0.25));
         }
 
@@ -284,21 +303,27 @@ pub fn render_pages(
                 } else {
                     0.15 * dim_node(*slot)
                 }
-            } else if has_active {
+            } else if is_hovering {
                 if is_active_node {
                     1.0
                 } else {
                     0.15 * dim_node(*slot)
                 }
+            } else if has_selection {
+                if is_active_node {
+                    1.0
+                } else {
+                    0.85 * dim_node(*slot)
+                }
             } else {
-                0.9 * dim_node(*slot)
+                0.95 * dim_node(*slot)
             };
             painter.text(
                 label_rect.min + vec2(2.0, 0.0),
                 egui::Align2::LEFT_TOP,
                 label,
                 font.clone(),
-                if selected == Some(node.capsule) || is_match {
+                if effective_selected == Some(node.capsule) || is_match {
                     theme::ink()
                 } else {
                     theme::fade(theme::muted(), alpha)
@@ -362,5 +387,34 @@ pub fn draw_page_legend(painter: &Painter, rect: Rect, locale: Locale) {
             theme::faint(),
         );
         x += 30.0 + label.chars().count() as f32 * 6.0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn effective_selected_respects_cleared_flag() {
+        let mut state = GraphState::new();
+        assert!(!state.selection_cleared);
+
+        let selected = Some(42usize);
+        let effective = if state.selection_cleared { None } else { selected };
+        assert_eq!(effective, Some(42));
+
+        // When user clicked empty canvas
+        state.selection_cleared = true;
+        let effective = if state.selection_cleared { None } else { selected };
+        assert_eq!(effective, None, "clicking empty canvas deselects graph");
+
+        // When user selects a different note externally
+        let new_selected = Some(99usize);
+        if new_selected != state.last_external_selected {
+            state.last_external_selected = new_selected;
+            state.selection_cleared = false;
+        }
+        let effective = if state.selection_cleared { None } else { new_selected };
+        assert_eq!(effective, Some(99), "external selection change restores focus");
     }
 }
