@@ -114,13 +114,32 @@ pub fn draw_document(
     // Id of the block to scroll to and stroke — the paragraph OCR just
     // appended, so "куда оно добавилось?" is answered visually.
     highlight: Option<&str>,
+    wrap_body: bool,
+    // Humanized "edited 5m ago" stamp computed from the file mtime (None for
+    // pages whose file could not be stat'ed).
+    edited_hint: Option<&str>,
 ) -> EditorAction {
     let mut action = EditorAction::default();
     let mut area = ScrollArea::vertical().id_salt("document");
     if let Some(offset) = scroll {
         area = area.vertical_scroll_offset(offset);
     }
+    // Ctrl+Home / Ctrl+End jump to the very top / bottom of the page; only
+    // when no text field owns the keyboard (they move the caret otherwise).
+    // `Context::input` takes the context write lock, so the memory probe must
+    // run outside it.
+    let keyboard_free = ui.memory(|m| m.focused().is_none());
+    let (jump_top, jump_bottom) = ui.ctx().input(|i| {
+        let cmd = i.modifiers.command;
+        (
+            keyboard_free && cmd && i.key_pressed(egui::Key::Home),
+            keyboard_free && cmd && i.key_pressed(egui::Key::End),
+        )
+    });
     area.auto_shrink([false, false]).show(ui, |ui| {
+        if jump_top {
+            ui.scroll_to_cursor(Some(Align::TOP));
+        }
         let available = ui.available_width();
         let (content_w, pad) = if wide_canvas {
             let w = (available - 96.0).max(480.0);
@@ -148,6 +167,7 @@ pub fn draw_document(
                     }
                     let response = ui.add(
                         TextEdit::multiline(&mut capsule.subject)
+                            .id_salt("page_subject")
                             .font(FontId::new(34.0, theme::display()))
                             .text_color(theme::ink())
                             .frame(Frame::NONE)
@@ -200,7 +220,7 @@ pub fn draw_document(
                 }
 
                 ui.add_space(12.0);
-                if document_meta(ui, capsule, locale) {
+                if document_meta(ui, capsule, locale, edited_hint) {
                     action.changed = true;
                 }
                 ui.add_space(28.0);
@@ -402,6 +422,7 @@ pub fn draw_document(
                                 block_count,
                                 &mut capsule.attachments,
                                 locale,
+                                wrap_body,
                             );
                             if highlighted {
                                 // Scroll the fresh OCR paragraph into view and
@@ -658,6 +679,11 @@ pub fn draw_document(
                         ui.add_space(90.0);
                     }
                 }
+
+                // Ctrl+End: to the very bottom of the page.
+                if jump_bottom {
+                    ui.scroll_to_cursor(Some(Align::BOTTOM));
+                }
             });
         });
     });
@@ -809,7 +835,12 @@ pub fn link_chip(ui: &mut Ui, label: &str, missing: bool) -> Response {
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-pub fn document_meta(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool {
+pub fn document_meta(
+    ui: &mut Ui,
+    capsule: &mut Capsule,
+    locale: Locale,
+    edited_hint: Option<&str>,
+) -> bool {
     let mut changed = false;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(7.0, 6.0);
@@ -986,6 +1017,20 @@ pub fn document_meta(ui: &mut Ui, capsule: &mut Capsule, locale: Locale) -> bool
                 .size(9.5)
                 .color(theme::faint()),
             );
+        }
+
+        // "Изменено 5 мин назад" — файл .eml правится и снаружи, поэтому
+        // штамп берётся из mtime, а не из внутреннего поля страницы.
+        if let Some(hint) = edited_hint {
+            if !hint.trim().is_empty() {
+                dot_sep(ui);
+                ui.label(
+                    RichText::new(hint)
+                        .family(theme::mono())
+                        .size(9.5)
+                        .color(theme::faint()),
+                );
+            }
         }
     });
     changed

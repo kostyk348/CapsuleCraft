@@ -55,3 +55,14 @@ last-writer-wins по mtime с допуском 2 с на расхождение
     конфликтов правок одной страницы на двух устройствах — сейчас
     конфликт молча решается в пользу более свежей правки.
 4. Иконка и сплэш (сейчас системные), выпуск arm32/x86_64 по запросу.
+
+## v2.12.0: NativeActivity backend and accesskit
+
+The shell runs as a NativeActivity (`android.app.NativeActivity`, no Java
+code). The Rust lib builds against android-activity's `native-activity`
+backend; eframe is declared per-target and the desktop-only `accesskit`
+feature is NOT enabled here — eframe 0.37 fails to compile with accesskit +
+android-native-activity together. Before v2.12.0 the crate asked for
+`android-game-activity` while the manifest shipped NativeActivity: the
+mismatch produced a `.so` without `ANativeActivity_onCreate`, and the app
+crashed at launch.

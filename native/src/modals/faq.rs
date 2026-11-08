@@ -57,6 +57,20 @@ pub fn draw_faq_modal(show: bool, locale: Locale, ctx: &egui::Context) -> bool {
                 )
                 .wrap(),
             );
+            body.add_space(4.0);
+            body.add(
+                Label::new(
+                    RichText::new(format!(
+                        "{} {}",
+                        t(locale, Key::AboutVersion),
+                        env!("CARGO_PKG_VERSION")
+                    ))
+                    .family(theme::mono())
+                    .size(11.0)
+                    .color(theme::faint()),
+                )
+                .wrap(),
+            );
             body.add_space(12.0);
 
             let pairs = [
