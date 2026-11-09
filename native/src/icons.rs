@@ -45,6 +45,7 @@ pub enum Icon {
     Chip,
     Image,
     Pen,
+    More,
 }
 
 fn at(rect: Rect, x: f32, y: f32) -> Pos2 {
@@ -457,6 +458,11 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
                 egui::StrokeKind::Inside,
             );
             line(&[(0.42, 0.2), (0.42, 0.8)]);
+        }
+        Icon::More => {
+            for y in [0.25, 0.5, 0.75] {
+                dot(0.5, y, 0.065);
+            }
         }
     }
 }

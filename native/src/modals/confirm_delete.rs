@@ -33,7 +33,8 @@ pub fn draw_confirm_delete(
             let (rect, _) = ui.allocate_exact_size(ctx.content_rect().size(), Sense::click());
             ui.painter()
                 .rect_filled(rect, 0.0, egui::Color32::from_black_alpha(150));
-            let panel = Rect::from_center_size(rect.center(), vec2(380.0, 150.0));
+            let panel_w = (rect.width() - 24.0).clamp(260.0, 380.0);
+            let panel = Rect::from_center_size(rect.center(), vec2(panel_w, 150.0));
             ui.painter().rect(
                 panel,
                 theme::RADIUS,

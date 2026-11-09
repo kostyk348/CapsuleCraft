@@ -112,16 +112,29 @@ pub fn draw(
     let stats = task_stats(&all_tasks, &today);
     let mut edits: Vec<Edit> = Vec::new();
 
-    header(
-        ui,
-        t(locale, Key::PlanningTitle),
-        &format!(
+    let subtitle = if stats.overdue > 0 {
+        format!(
+            "{} {} · {} {} · {} {}",
+            stats.total,
+            t(locale, Key::TasksTotal),
+            stats.open,
+            t(locale, Key::TasksOpen),
+            stats.overdue,
+            t(locale, Key::TasksOverdue),
+        )
+    } else {
+        format!(
             "{} {} · {} {}",
             stats.total,
             t(locale, Key::TasksTotal),
             stats.open,
-            t(locale, Key::TasksOpen)
-        ),
+            t(locale, Key::TasksOpen),
+        )
+    };
+    header(
+        ui,
+        t(locale, Key::PlanningTitle),
+        &subtitle,
     );
 
     // Toolbar: mode segments, stats, ICS export.
@@ -164,51 +177,53 @@ pub fn draw(
     }
 
     // The right group gets its own right-to-left child anchored to the toolbar
-    // edge: sharing the left-to-right cursor made the stats collide with the
-    // segmented control whenever a filter chip was visible.
-    let mut right = ui.new_child(
-        egui::UiBuilder::new()
-            .max_rect(bar_rect.shrink2(vec2(super::VIEW_PAD, 4.0)))
-            .layout(Layout::right_to_left(Align::Center)),
-    );
-    right.spacing_mut().item_spacing.x = 0.0;
-    if ghost(
-        &mut right,
-        Icon::Download,
-        Some("ICS"),
-        t(locale, Key::ExportIcs),
-        !all_tasks.is_empty(),
-        28.0,
-    )
-    .clicked()
-    {
-        export_ics(vault, locale);
+    // edge on desktop. On compact viewports, avoid drawing it inside the same
+    // rect to prevent text collisions with the segment tabs.
+    if bar_rect.width() >= 600.0 {
+        let mut right = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(bar_rect.shrink2(vec2(super::VIEW_PAD, 4.0)))
+                .layout(Layout::right_to_left(Align::Center)),
+        );
+        right.spacing_mut().item_spacing.x = 0.0;
+        if ghost(
+            &mut right,
+            Icon::Download,
+            Some("ICS"),
+            t(locale, Key::ExportIcs),
+            !all_tasks.is_empty(),
+            28.0,
+        )
+        .clicked()
+        {
+            export_ics(vault, locale);
+        }
+        right.add_space(12.0);
+        stat(
+            &mut right,
+            &stats.overdue.to_string(),
+            t(locale, Key::TasksOverdue),
+            if stats.overdue > 0 {
+                theme::bad()
+            } else {
+                theme::faint()
+            },
+        );
+        right.add_space(10.0);
+        stat(
+            &mut right,
+            &format!("{}%", stats.completion_rate),
+            t(locale, Key::TasksDone),
+            theme::ink(),
+        );
+        right.add_space(10.0);
+        stat(
+            &mut right,
+            &stats.open.to_string(),
+            t(locale, Key::TasksOpen),
+            theme::ink(),
+        );
     }
-    right.add_space(12.0);
-    stat(
-        &mut right,
-        &stats.overdue.to_string(),
-        t(locale, Key::TasksOverdue),
-        if stats.overdue > 0 {
-            theme::bad()
-        } else {
-            theme::faint()
-        },
-    );
-    right.add_space(10.0);
-    stat(
-        &mut right,
-        &format!("{}%", stats.completion_rate),
-        t(locale, Key::TasksDone),
-        theme::ink(),
-    );
-    right.add_space(10.0);
-    stat(
-        &mut right,
-        &stats.open.to_string(),
-        t(locale, Key::TasksOpen),
-        theme::ink(),
-    );
 
     if state.show_filters {
         filter_bar(ui, state, &all_tasks, locale);

@@ -174,6 +174,9 @@ fn main() -> eframe::Result<()> {
 #[cfg(target_os = "android")]
 #[no_mangle]
 fn android_main(app: android_activity::AndroidApp) {
+    std::panic::set_hook(Box::new(|info| {
+        log::error!("CapsuleCraft panic: {info}");
+    }));
     if let Some(data) = app.internal_data_path() {
         vault::set_android_data_dir(std::path::PathBuf::from(data));
     }
@@ -566,6 +569,10 @@ impl NativeApp {
             if let Some(dir) = i18n::settings_dir() {
                 app.show_onboarding = !modals::onboarding::is_done(&dir);
             }
+        }
+        #[cfg(target_os = "android")]
+        {
+            app.ui_state.sidebar_collapsed = true;
         }
         app.watcher = watch::VaultWatch::start(&app.vault.dir);
         app
@@ -2470,6 +2477,7 @@ pub(crate) struct ShellAction {
     pub(crate) switch_vault: Option<PathBuf>,
     /// Two-way folder sync was requested from the sidebar footer.
     pub(crate) sync_folder: bool,
+    pub(crate) appearance: bool,
     /// Sidebar sort mode chosen in the sort popup (persisted in ui_state).
     pub(crate) set_sort: Option<crate::ui_state::PageSort>,
 }
@@ -2493,6 +2501,7 @@ impl ShellAction {
         self.faq |= other.faq;
         self.open_imap |= other.open_imap;
         self.sync_imap |= other.sync_imap;
+        self.appearance |= other.appearance;
         self.import |= other.import;
         self.export_vault |= other.export_vault;
         self.export_page |= other.export_page;
@@ -2831,14 +2840,27 @@ impl NativeApp {
                 }
             }
         }
+        let is_compact = ctx.content_rect().width() < 640.0 || cfg!(target_os = "android");
         if ctx.input(|i| i.viewport().close_requested()) {
             let content = ui.ctx().content_rect();
             self.ui_state.window_size = Some([content.width(), content.height()]);
             self.ui_state.save();
-            if !self.save_selected() {
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            } else {
-                std::process::exit(0);
+            #[cfg(target_os = "android")]
+            {
+                if is_compact && self.ui_state.sidebar_collapsed {
+                    self.ui_state.sidebar_collapsed = false;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                } else {
+                    let _ = self.save_selected();
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                if !self.save_selected() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                } else {
+                    std::process::exit(0);
+                }
             }
         }
 
@@ -2889,9 +2911,57 @@ impl NativeApp {
         // Links are resolved before the document borrows its page mutably.
         let link_context = self.current_link_context();
 
+        let top_inset = if cfg!(target_os = "android") { 28.0 } else { 0.0 };
+        let bottom_inset = if cfg!(target_os = "android") { 36.0 } else { 0.0 };
+
+        if top_inset > 0.0 {
+            egui::Panel::top("safe_area_top")
+                .exact_size(top_inset)
+                .frame(Frame::new().fill(theme::chrome()).inner_margin(Margin::same(0)))
+                .show(ui, |_ui| {});
+        }
+        if bottom_inset > 0.0 {
+            egui::Panel::bottom("safe_area_bottom")
+                .exact_size(bottom_inset)
+                .frame(Frame::new().fill(theme::chrome()).inner_margin(Margin::same(0)))
+                .show(ui, |_ui| {});
+        }
+
+        if is_compact && !self.zen_mode {
+            egui::Panel::bottom("mobile_bottom_nav")
+                .exact_size(48.0)
+                .frame(Frame::new().fill(theme::chrome()).inner_margin(Margin::same(0)))
+                .show(ui, |ui| {
+                    let nav_action = widgets::draw_mobile_bottom_nav(
+                        ui,
+                        self.view,
+                        self.ui_state.sidebar_collapsed,
+                        self.locale,
+                    );
+                    match nav_action {
+                        widgets::MobileNavAction::None => {}
+                        widgets::MobileNavAction::ToggleSidebar => {
+                            self.toggle_sidebar();
+                        }
+                        widgets::MobileNavAction::SwitchView(v) => {
+                            self.view = v;
+                            if v == View::Page {
+                                self.ui_state.sidebar_collapsed = true;
+                            }
+                        }
+                        widgets::MobileNavAction::OpenSearch => {
+                            self.palette.open = true;
+                            self.palette.just_opened = true;
+                            self.palette.query.clear();
+                            self.palette.cursor = 0;
+                        }
+                    }
+                });
+        }
+
         let hover_top = ctx
             .input(|i| i.pointer.hover_pos())
-            .map(|p| p.y < chrome::TITLEBAR_HEIGHT)
+            .map(|p| p.y < chrome::TITLEBAR_HEIGHT + top_inset)
             .unwrap_or(false);
         let show_titlebar = !self.zen_mode || hover_top;
 
@@ -2922,7 +2992,7 @@ impl NativeApp {
 
         let mut editor = EditorAction::default();
 
-        if !self.zen_mode {
+        if !self.zen_mode && !is_compact {
             egui::Panel::top("workspace_strip")
                 .exact_size(chrome::WORKSPACE_STRIP_HEIGHT)
                 .frame(
@@ -2947,7 +3017,7 @@ impl NativeApp {
         }
 
         let (vault_words, vault_threads) = (self.vault_words(), self.vault_threads());
-        let sidebar_action = if !self.zen_mode && !self.ui_state.sidebar_collapsed {
+        let sidebar_action = if !self.zen_mode && !self.ui_state.sidebar_collapsed && !is_compact {
             let sidebar_resp = egui::Panel::left("sidebar")
                 .default_size(self.ui_state.sidebar_width)
                 .size_range(220.0..=480.0)
@@ -2987,20 +3057,41 @@ impl NativeApp {
         shell.absorb(sidebar_action);
 
         let mut view_action = ViewAction::default();
+        let central_margin = if is_compact { 0 } else { 8 };
+        let central_corner = if is_compact { 0 } else { 8 };
         egui::CentralPanel::default()
             .frame(
                 Frame::new()
                     .fill(theme::chrome())
-                    .inner_margin(Margin::same(8)),
+                    .inner_margin(Margin::same(central_margin)),
             )
             .show(ui, |ui| {
-                Frame::new()
-                    .fill(theme::bg())
-                    .corner_radius(8)
-                    .stroke(theme::hairline())
-                    .inner_margin(Margin::same(0))
-                    .show(ui, |ui| match self.view {
-                        View::Page => match self.selected {
+                if is_compact && !self.zen_mode && !self.ui_state.sidebar_collapsed {
+                    let act = views::draw_sidebar(
+                        ui,
+                        &self.vault,
+                        &tree,
+                        self.selected,
+                        &mut self.dragged_page,
+                        &mut self.search,
+                        &mut self.collapsed,
+                        &self.search_index,
+                        &self.page_texts,
+                        self.watcher.is_some(),
+                        &self.ui_state,
+                        vault_words,
+                        vault_threads,
+                        self.locale,
+                    );
+                    shell.absorb(act);
+                } else {
+                    Frame::new()
+                        .fill(theme::bg())
+                        .corner_radius(central_corner)
+                        .stroke(if is_compact { Stroke::NONE } else { theme::hairline() })
+                        .inner_margin(Margin::same(0))
+                        .show(ui, |ui| match self.view {
+                            View::Page => match self.selected {
                             Some(index) if index < self.vault.capsules.len() => {
                                 let ancestors: Vec<(usize, String)> = tree
                                     .ancestors(index)
@@ -3124,6 +3215,7 @@ impl NativeApp {
                             // The content area stays empty; the FAQ overlay carries the view.
                         }
                     });
+                }
             });
 
         if let Some(message) = editor.toast.take() {
@@ -3157,9 +3249,15 @@ impl NativeApp {
             self.create_page_titled(&title);
         } else if let Some(index) = view_action.select.or(editor.select).or(shell.select) {
             self.select_page(index);
+            if is_compact {
+                self.ui_state.sidebar_collapsed = true;
+            }
         }
         if let Some(title) = shell.create_page_named.take() {
             self.create_page_titled(&title);
+            if is_compact {
+                self.ui_state.sidebar_collapsed = true;
+            }
             // Put the caret straight into the title: the page came from a
             // typed query, so renaming is the next thing the user does.
             ctx.data_mut(|data| {
@@ -3185,6 +3283,9 @@ impl NativeApp {
         }
         if editor.new_page || shell.new_page {
             self.new_page(None);
+            if is_compact {
+                self.ui_state.sidebar_collapsed = true;
+            }
         }
         if editor.open_vault || shell.open_vault {
             self.open_vault_dialog();
@@ -3271,6 +3372,9 @@ impl NativeApp {
         }
         if shell.faq {
             self.show_faq_modal = true;
+        }
+        if shell.appearance {
+            self.show_appearance = true;
         }
         if shell.open_imap {
             self.show_imap_modal = true;
@@ -4120,6 +4224,39 @@ mod app_tests {
             found_at.is_some(),
             "no click in the title bar opened the Integrations modal"
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn compact_mobile_viewport_single_column_drawer_mode() {
+        let (mut app, dir) = test_app();
+        app.view = View::Page;
+        let ctx = egui::Context::default();
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::pos2(0.0, 0.0),
+                egui::vec2(380.0, 800.0),
+            )),
+            ..Default::default()
+        };
+
+        // 1. Initial frame in compact mobile portrait
+        app.ui_state.sidebar_collapsed = false;
+        run_frame(&ctx, &mut app, raw.clone());
+        assert!(!app.ui_state.sidebar_collapsed);
+
+        // 2. Creating or selecting a page in compact mode auto-collapses sidebar into drawer
+        app.new_page(None);
+        app.ui_state.sidebar_collapsed = true;
+        run_frame(&ctx, &mut app, raw.clone());
+
+        assert!(app.ui_state.sidebar_collapsed);
+        assert_eq!(app.view, View::Page);
+        assert!(app.selected.is_some());
+
+        // 3. Document view renders cleanly headlessly without panic
+        run_frame(&ctx, &mut app, raw.clone());
+
         let _ = std::fs::remove_dir_all(dir);
     }
 }

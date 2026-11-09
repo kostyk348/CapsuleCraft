@@ -38,10 +38,13 @@ pub fn draw_titlebar(
     let mut action = ShellAction::default();
 
     let total_rect = ui.max_rect();
+    let is_compact = total_rect.width() < 600.0;
 
     // 1. Right utility controls: rendered first with right-to-left layout so they
     // are guaranteed visible, anchored, and have strict layout boundaries.
-    let right_width = if chrome::custom_caption_buttons() {
+    let right_width = if is_compact {
+        72.0
+    } else if chrome::custom_caption_buttons() {
         450.0
     } else {
         340.0
@@ -60,146 +63,195 @@ pub fn draw_titlebar(
     );
     let right_ui = &mut right_bar;
     right_ui.spacing_mut().item_spacing.x = 2.0;
-    if chrome::custom_caption_buttons() {
-        chrome::caption_buttons(right_ui, chrome::TITLEBAR_HEIGHT);
-    }
-    right_ui.add_space(6.0);
 
-    if zen_mode {
+    if is_compact {
+        let more_btn = icon_button(right_ui, Icon::More, t(locale, Key::PaletteActions), true, false);
+        egui::Popup::menu(&more_btn)
+            .frame(popover_frame())
+            .align(egui::RectAlign::BOTTOM_END)
+            .show(|ui| {
+                if ui.button(t(locale, Key::SyncFolderMenu)).clicked() {
+                    action.sync_folder = true;
+                    ui.close();
+                }
+                if ui.button(t(locale, Key::ImapSyncTitle)).clicked() {
+                    action.open_imap = true;
+                    ui.close();
+                }
+                if ui.button(t(locale, Key::AppearanceTitle)).clicked() {
+                    action.appearance = true;
+                    ui.close();
+                }
+                if ui.button(t(locale, Key::PaletteHint)).clicked() {
+                    action.palette = true;
+                    ui.close();
+                }
+                if ui.button(t(locale, Key::IntegrationsOpen)).clicked() {
+                    action.open_integrations = true;
+                    ui.close();
+                }
+                if ui.button(t(locale, Key::FaqTitle)).clicked() {
+                    action.faq = true;
+                    ui.close();
+                }
+                if ui.button(t(locale, Key::CommandLocale)).clicked() {
+                    action.toggle_locale = true;
+                    ui.close();
+                }
+                if ui.button(t(locale, Key::Reload)).clicked() {
+                    action.reload = true;
+                    ui.close();
+                }
+                if dirty && ui.button(t(locale, Key::SaveNow)).clicked() {
+                    action.save = true;
+                    ui.close();
+                }
+            });
+        if icon_button(right_ui, Icon::Plus, t(locale, Key::CommandNewPage), true, false).clicked() {
+            action.new_page = true;
+        }
+    } else {
+        if chrome::custom_caption_buttons() {
+            chrome::caption_buttons(right_ui, chrome::TITLEBAR_HEIGHT);
+        }
+        right_ui.add_space(6.0);
+
+        if zen_mode {
+            if ghost(
+                right_ui,
+                Icon::Close,
+                Some("Zen"),
+                t(locale, Key::ZenModeEntered),
+                true,
+                26.0,
+            )
+            .clicked()
+            {
+                action.toggle_zen = true;
+            }
+            right_ui.add_space(4.0);
+        }
+
+        if icon_button(
+            right_ui,
+            Icon::Info,
+            &format!("{} (F1)", t(locale, Key::FaqTitle)),
+            true,
+            false,
+        )
+        .clicked()
+        {
+            action.faq = true;
+        }
+        if icon_button(
+            right_ui,
+            Icon::Command,
+            &format!("{} (Ctrl+K)", t(locale, Key::PaletteHint)),
+            true,
+            false,
+        )
+        .clicked()
+        {
+            action.palette = true;
+        }
+        if icon_button(
+            right_ui,
+            Icon::Chip,
+            t(locale, Key::IntegrationsOpen),
+            true,
+            false,
+        )
+        .clicked()
+        {
+            action.open_integrations = true;
+        }
+        if icon_button(
+            right_ui,
+            Icon::Code,
+            t(locale, Key::ConnectMcp),
+            true,
+            false,
+        )
+        .clicked()
+        {
+            action.connect_mcp = true;
+        }
+        let (imap_color, imap_hint) = if !imap_config.enabled {
+            (theme::muted(), t(locale, Key::ImapDisabled))
+        } else {
+            match imap_status {
+                sync_imap::SyncStatus::Syncing => (theme::badge_beta(), t(locale, Key::ImapSyncing)),
+                sync_imap::SyncStatus::Error(_) => (theme::bad(), t(locale, Key::ImapErrorToast)),
+                _ => (theme::accent(), t(locale, Key::ImapSynced)),
+            }
+        };
+        let imap_resp = icon_button(right_ui, Icon::Mail, imap_hint, true, false);
+        // Draw status dot on the IMAP icon
+        let dot_pos = pos2(imap_resp.rect.left() + 7.0, imap_resp.rect.top() + 7.0);
+        right_ui.painter().circle_filled(dot_pos, 2.5, imap_color);
+        if imap_resp.clicked() {
+            action.open_imap = true;
+        }
         if ghost(
             right_ui,
-            Icon::Close,
-            Some("Zen"),
-            t(locale, Key::ZenModeEntered),
+            Icon::Globe,
+            Some(locale.label()),
+            t(locale, Key::CommandLocale),
             true,
             26.0,
         )
         .clicked()
         {
-            action.toggle_zen = true;
+            action.toggle_locale = true;
         }
         right_ui.add_space(4.0);
-    }
 
-    if icon_button(
-        right_ui,
-        Icon::Info,
-        &format!("{} (F1)", t(locale, Key::FaqTitle)),
-        true,
-        false,
-    )
-    .clicked()
-    {
-        action.faq = true;
-    }
-    if icon_button(
-        right_ui,
-        Icon::Command,
-        &format!("{} (Ctrl+K)", t(locale, Key::PaletteHint)),
-        true,
-        false,
-    )
-    .clicked()
-    {
-        action.palette = true;
-    }
-    if icon_button(
-        right_ui,
-        Icon::Chip,
-        t(locale, Key::IntegrationsOpen),
-        true,
-        false,
-    )
-    .clicked()
-    {
-        action.open_integrations = true;
-    }
-    if icon_button(
-        right_ui,
-        Icon::Code,
-        t(locale, Key::ConnectMcp),
-        true,
-        false,
-    )
-    .clicked()
-    {
-        action.connect_mcp = true;
-    }
-    let (imap_color, imap_hint) = if !imap_config.enabled {
-        (theme::muted(), t(locale, Key::ImapDisabled))
-    } else {
-        match imap_status {
-            sync_imap::SyncStatus::Syncing => (theme::badge_beta(), t(locale, Key::ImapSyncing)),
-            sync_imap::SyncStatus::Error(_) => (theme::bad(), t(locale, Key::ImapErrorToast)),
-            _ => (theme::accent(), t(locale, Key::ImapSynced)),
+        if icon_button(right_ui, Icon::Reload, t(locale, Key::Reload), true, false).clicked() {
+            action.reload = true;
         }
-    };
-    let imap_resp = icon_button(right_ui, Icon::Mail, imap_hint, true, false);
-    // Draw status dot on the IMAP icon
-    let dot_pos = pos2(imap_resp.rect.left() + 7.0, imap_resp.rect.top() + 7.0);
-    right_ui.painter().circle_filled(dot_pos, 2.5, imap_color);
-    if imap_resp.clicked() {
-        action.open_imap = true;
-    }
-    if ghost(
-        right_ui,
-        Icon::Globe,
-        Some(locale.label()),
-        t(locale, Key::CommandLocale),
-        true,
-        26.0,
-    )
-    .clicked()
-    {
-        action.toggle_locale = true;
-    }
-    right_ui.add_space(4.0);
+        if icon_button(
+            right_ui,
+            Icon::Save,
+            if dirty {
+                t(locale, Key::SaveNow)
+            } else {
+                t(locale, Key::AllSaved)
+            },
+            dirty,
+            false,
+        )
+        .clicked()
+        {
+            action.save = true;
+        }
 
-    if icon_button(right_ui, Icon::Reload, t(locale, Key::Reload), true, false).clicked() {
-        action.reload = true;
-    }
-    if icon_button(
-        right_ui,
-        Icon::Save,
-        if dirty {
-            t(locale, Key::SaveNow)
+        right_ui.add_space(6.0);
+        let (dot_color, text) = if status_error {
+            (theme::bad(), t(locale, Key::SaveFailed))
+        } else if dirty {
+            (theme::badge_beta(), t(locale, Key::Unsaved))
         } else {
-            t(locale, Key::AllSaved)
-        },
-        dirty,
-        false,
-    )
-    .clicked()
-    {
-        action.save = true;
-    }
-
-    right_ui.add_space(6.0);
-    let (dot_color, text) = if status_error {
-        (theme::bad(), t(locale, Key::SaveFailed))
-    } else if dirty {
-        (theme::badge_beta(), t(locale, Key::Unsaved))
-    } else {
-        (theme::accent(), status)
-    };
-    right_ui.horizontal(|ui| {
-        let (dot, _) = ui.allocate_exact_size(vec2(6.0, 6.0), Sense::hover());
-        ui.painter().circle_filled(dot.center(), 2.5, dot_color);
-        if total_rect.width() >= 1150.0 || status_error || dirty {
-            let label = ui.label(RichText::new(text).family(theme::mono()).size(9.5).color(
+            (theme::accent(), status)
+        };
+        right_ui.horizontal(|ui| {
+            let (dot, _) = ui.allocate_exact_size(vec2(6.0, 6.0), Sense::hover());
+            ui.painter().circle_filled(dot.center(), 2.5, dot_color);
+            if total_rect.width() >= 1150.0 || status_error || dirty {
+                let label = ui.label(RichText::new(text).family(theme::mono()).size(9.5).color(
+                    if status_error {
+                        theme::bad()
+                    } else if dirty {
+                        theme::badge_beta()
+                    } else {
+                        theme::faint()
+                    },
+                ));
                 if status_error {
-                    theme::bad()
-                } else if dirty {
-                    theme::badge_beta()
-                } else {
-                    theme::faint()
-                },
-            ));
-            if status_error {
-                label.on_hover_text(status);
+                    label.on_hover_text(status);
+                }
             }
-        }
-    });
+        });
+    }
 
     let right_used_left = right_ui.min_rect().left().min(total_rect.right() - 20.0);
 
@@ -218,13 +270,18 @@ pub fn draw_titlebar(
             .layout(Layout::left_to_right(Align::Center)),
     );
     let ui_left = &mut bar;
-    ui_left.spacing_mut().item_spacing.x = 6.0;
-    ui_left.add_space(chrome::leading_inset() + 12.0);
+    ui_left.spacing_mut().item_spacing.x = if is_compact { 4.0 } else { 6.0 };
+    ui_left.add_space(chrome::leading_inset() + if is_compact { 4.0 } else { 12.0 });
 
+    let sidebar_icon = if is_compact && !sidebar_collapsed {
+        Icon::Close
+    } else {
+        Icon::Sidebar
+    };
     let sidebar_hint = format!("{} (Ctrl + \\)", t(locale, Key::CommandToggleSidebar));
     if icon_button(
         ui_left,
-        Icon::Sidebar,
+        sidebar_icon,
         &sidebar_hint,
         true,
         !sidebar_collapsed,
@@ -234,12 +291,14 @@ pub fn draw_titlebar(
         action.toggle_sidebar = true;
     }
 
-    ui_left.add_space(4.0);
-    let (divider, _) = ui_left.allocate_exact_size(vec2(1.0, 18.0), Sense::hover());
-    ui_left
-        .painter()
-        .vline(divider.center().x, divider.y_range(), theme::hairline());
-    ui_left.add_space(6.0);
+    if !is_compact {
+        ui_left.add_space(4.0);
+        let (divider, _) = ui_left.allocate_exact_size(vec2(1.0, 18.0), Sense::hover());
+        ui_left
+            .painter()
+            .vline(divider.center().x, divider.y_range(), theme::hairline());
+        ui_left.add_space(6.0);
+    }
 
     // Mark: clickable to toggle brand icon style (Mascot / Minimal Document)
     let (mark, mark_resp) = ui_left.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
@@ -284,36 +343,38 @@ pub fn draw_titlebar(
             .color(theme::ink()),
     );
 
-    let (badge_rect, _) = ui_left.allocate_exact_size(vec2(45.0, 16.0), Sense::hover());
-    ui_left.painter().rect(
-        badge_rect,
-        theme::RADIUS,
-        theme::wash(),
-        Stroke::new(1.0, theme::line()),
-        egui::StrokeKind::Inside,
-    );
-    let badge = caps(
-        ui_left,
-        "NATIVE",
-        8.0,
-        theme::mono_bold(),
-        1.0,
-        theme::faint(),
-    );
-    ui_left.painter().galley(
-        badge_rect.center() - badge.size() / 2.0,
-        badge,
-        theme::faint(),
-    );
+    if !is_compact {
+        let (badge_rect, _) = ui_left.allocate_exact_size(vec2(45.0, 16.0), Sense::hover());
+        ui_left.painter().rect(
+            badge_rect,
+            theme::RADIUS,
+            theme::wash(),
+            Stroke::new(1.0, theme::line()),
+            egui::StrokeKind::Inside,
+        );
+        let badge = caps(
+            ui_left,
+            "NATIVE",
+            8.0,
+            theme::mono_bold(),
+            1.0,
+            theme::faint(),
+        );
+        ui_left.painter().galley(
+            badge_rect.center() - badge.size() / 2.0,
+            badge,
+            theme::faint(),
+        );
 
-    ui_left.add_space(8.0);
-    let (divider, _) = ui_left.allocate_exact_size(vec2(1.0, 18.0), Sense::hover());
-    ui_left
-        .painter()
-        .vline(divider.center().x, divider.y_range(), theme::hairline());
-    ui_left.add_space(6.0);
+        ui_left.add_space(8.0);
+        let (divider, _) = ui_left.allocate_exact_size(vec2(1.0, 18.0), Sense::hover());
+        ui_left
+            .painter()
+            .vline(divider.center().x, divider.y_range(), theme::hairline());
+        ui_left.add_space(6.0);
 
-    views::draw_vault_dropdown(ui_left, vault, locale, &mut action);
+        views::draw_vault_dropdown(ui_left, vault, locale, &mut action);
+    }
 
     // 3. Middle drag area: only the empty space between the left and right groups
     // acts as window drag handle, preventing any click collisions.

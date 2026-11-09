@@ -142,7 +142,11 @@ pub fn draw_document(
             ui.scroll_to_cursor(Some(Align::TOP));
         }
         let available = ui.available_width();
-        let (content_w, pad) = if wide_canvas {
+        let (content_w, pad) = if available < 600.0 {
+            let p = 14.0;
+            let w = (available - 2.0 * p).max(120.0);
+            (w, p)
+        } else if wide_canvas {
             let w = (available - 96.0).max(480.0);
             let p = ((available - w) / 2.0).max(48.0);
             (w, p)
@@ -166,10 +170,11 @@ pub fn draw_document(
                         capsule.subject = capsule.subject.replace(['\r', '\n'], " ");
                         action.changed = true;
                     }
+                    let title_font_size = if available < 600.0 { 26.0 } else { 34.0 };
                     let response = ui.add(
                         TextEdit::multiline(&mut capsule.subject)
                             .id_salt("page_subject")
-                            .font(FontId::new(34.0, theme::display()))
+                            .font(FontId::new(title_font_size, theme::display()))
                             .text_color(theme::ink())
                             .frame(Frame::NONE)
                             .margin(Margin::same(0))
@@ -1104,38 +1109,56 @@ pub fn draw_empty_state(ui: &mut Ui, action: &mut EditorAction, locale: Locale) 
         .id_salt("empty")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            ui.add_space(110.0);
+            let available_w = ui.available_width();
+            let is_compact = available_w < 500.0;
+            ui.add_space(if is_compact { 40.0 } else { 110.0 });
             ui.vertical_centered(|ui| {
                 ui.label(
                     RichText::new(t(locale, Key::EmptyVaultTitle))
                         .family(theme::display())
-                        .size(32.0)
+                        .size(if is_compact { 22.0 } else { 32.0 })
                         .color(theme::ink()),
                 );
                 ui.add_space(8.0);
                 ui.label(
                     RichText::new(t(locale, Key::EmptyVaultBody))
-                        .size(13.0)
+                        .size(if is_compact { 12.0 } else { 13.0 })
                         .color(theme::muted()),
                 );
-                ui.add_space(22.0);
-                ui.horizontal(|ui| {
-                    let total = 420.0;
-                    ui.add_space((ui.available_width() - total) / 2.0);
-                    if primary_button(ui, t(locale, Key::CreateFirstPage), 34.0).clicked() {
+                ui.add_space(if is_compact { 16.0 } else { 22.0 });
+                if is_compact {
+                    if primary_button(ui, t(locale, Key::CreateFirstPage), 38.0).clicked() {
                         action.new_page = true;
                     }
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     if secondary_button(ui, Some(Icon::Info), t(locale, Key::Faq), 34.0).clicked() {
                         action.faq = true;
                     }
-                    ui.add_space(8.0);
+                    ui.add_space(10.0);
                     if secondary_button(ui, Some(Icon::Folder), t(locale, Key::ChangeFolder), 34.0)
                         .clicked()
                     {
                         action.open_vault = true;
                     }
-                });
+                } else {
+                    ui.horizontal(|ui| {
+                        let total = 420.0;
+                        ui.add_space((ui.available_width() - total) / 2.0);
+                        if primary_button(ui, t(locale, Key::CreateFirstPage), 34.0).clicked() {
+                            action.new_page = true;
+                        }
+                        ui.add_space(8.0);
+                        if secondary_button(ui, Some(Icon::Info), t(locale, Key::Faq), 34.0).clicked() {
+                            action.faq = true;
+                        }
+                        ui.add_space(8.0);
+                        if secondary_button(ui, Some(Icon::Folder), t(locale, Key::ChangeFolder), 34.0)
+                            .clicked()
+                        {
+                            action.open_vault = true;
+                        }
+                    });
+                }
                 ui.add_space(10.0);
                 ui.label(
                     RichText::new(t(locale, Key::ZeroDb))

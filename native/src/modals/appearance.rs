@@ -42,7 +42,18 @@ pub fn draw_appearance(show: bool, locale: Locale, ctx: &egui::Context) -> Appea
             ui.painter()
                 .rect_filled(rect, 0.0, egui::Color32::from_black_alpha(150));
 
-            let panel = Rect::from_center_size(rect.center(), vec2(560.0, 540.0));
+            let is_compact = rect.width() < 600.0;
+            let panel_w = if is_compact {
+                (rect.width() - 24.0).clamp(280.0, 560.0)
+            } else {
+                560.0
+            };
+            let panel_h = if is_compact {
+                (rect.height() - 48.0).clamp(320.0, 560.0)
+            } else {
+                540.0
+            };
+            let panel = Rect::from_center_size(rect.center(), vec2(panel_w, panel_h));
             ui.painter().rect(
                 panel,
                 theme::RADIUS,
@@ -53,7 +64,7 @@ pub fn draw_appearance(show: bool, locale: Locale, ctx: &egui::Context) -> Appea
 
             let mut body = ui.new_child(
                 UiBuilder::new()
-                    .max_rect(panel.shrink(20.0))
+                    .max_rect(panel.shrink(if is_compact { 14.0 } else { 20.0 }))
                     .layout(Layout::top_down(Align::Min)),
             );
 
@@ -84,13 +95,14 @@ pub fn draw_appearance(show: bool, locale: Locale, ctx: &egui::Context) -> Appea
             body.add_space(6.0);
             let themes: &[ThemeDef] = theme::preset_list();
             let current = theme::preset().id;
-            let columns = 2;
+            let columns = if is_compact { 1 } else { 2 };
+            let card_w = if is_compact { body.available_width().max(200.0) } else { 250.0 };
             for chunk in themes.chunks(columns) {
                 body.horizontal(|ui| {
                     for preset in chunk {
                         let selected = preset.id == current;
                         let (card, response) =
-                            ui.allocate_exact_size(vec2(250.0, 54.0), Sense::click());
+                            ui.allocate_exact_size(vec2(card_w, 54.0), Sense::click());
                         let stroke = if selected {
                             Stroke::new(2.0, theme::accent_color())
                         } else {
