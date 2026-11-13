@@ -8,7 +8,8 @@
 | Файл | Что это |
 |---|---|
 | `SHA256SUMS.txt` | контрольные суммы всех артефактов релиза |
-| `SHA256SUMS.txt.sig` + `SHA256SUMS.txt.pem` | **keyless-подпись cosign** поверх `SHA256SUMS.txt` (запись в публичном прозрачном логе Rekor, привязана к workflow `release.yml`) |
+| `SHA256SUMS.txt.bundle` | **keyless-подпись cosign** поверх `SHA256SUMS.txt` в современном формате bundle (подпись + сертификат + запись в прозрачном логе Rekor, привязана к workflow `release.yml`) |
+| `SHA256SUMS.txt.sig` + `SHA256SUMS.txt.pem` | та же подпись в старом раздельном формате — для инструментов, которые ещё не умеют bundle |
 | `SHA256SUMS.txt.asc` | **GPG-подпись** того же файла (если в репозитории задан секрет `GPG_PRIVATE_KEY`) |
 
 Подписаны именно контрольные суммы: подпись покрывает весь набор артефактов сразу.
@@ -20,13 +21,11 @@
 TAG=v2.12.5
 BASE=https://github.com/kostyk348/CapsuleCraft/releases/download/$TAG
 curl -sSfLO $BASE/SHA256SUMS.txt
-curl -sSfLO $BASE/SHA256SUMS.txt.sig
-curl -sSfLO $BASE/SHA256SUMS.txt.pem
+curl -sSfLO $BASE/SHA256SUMS.txt.bundle
 
 # 2) проверить подпись (нужен cosign: https://docs.sigstore.dev/cosign/installation/)
 cosign verify-blob \
-  --certificate SHA256SUMS.txt.pem \
-  --signature SHA256SUMS.txt.sig \
+  --bundle SHA256SUMS.txt.bundle \
   --certificate-identity-regexp "https://github.com/kostyk348/CapsuleCraft/.github/workflows/release.yml@.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   SHA256SUMS.txt
