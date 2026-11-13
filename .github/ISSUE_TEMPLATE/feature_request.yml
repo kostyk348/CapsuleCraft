@@ -1,17 +1,16 @@
 name: Feature request
-description: Propose a capability for CapsuleCraft
+description: Suggest an idea or an improvement
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        CapsuleCraft has two hard constraints: **everything is a `.eml` file** and **there is no server or database**.
-        Please frame the idea inside those limits.
+        Please describe the problem first — the feature is only interesting as its solution.
   - type: textarea
     id: problem
     attributes:
-      label: Problem
-      description: What can't you do today?
+      label: What problem does this solve?
+      description: Who hits it, when, and what do they do today instead?
     validations:
       required: true
   - type: textarea
@@ -21,15 +20,20 @@ body:
     validations:
       required: true
   - type: textarea
-    id: format
-    attributes:
-      label: Impact on the capsule format
-      description: New MIME part, new header, new block type — or none?
-    validations:
-      required: true
-  - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - UI / UX
+        - Core engine
+        - Data format
+        - Performance
+        - Packaging / install
+        - Docs
+        - Other
     validations:
-      required: false
+      required: true
