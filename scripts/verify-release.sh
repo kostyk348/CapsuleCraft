@@ -10,13 +10,11 @@ WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 
 echo "== downloading SHA256SUMS + signatures for ${TAG}"
 curl -sSfL -o "$WORK/SHA256SUMS.txt"      "${BASE}/SHA256SUMS.txt"
-curl -sSfL -o "$WORK/SHA256SUMS.txt.sig"  "${BASE}/SHA256SUMS.txt.sig"
-curl -sSfL -o "$WORK/SHA256SUMS.txt.pem"  "${BASE}/SHA256SUMS.txt.pem"
+curl -sSfL -o "$WORK/SHA256SUMS.txt.bundle" "${BASE}/SHA256SUMS.txt.bundle"
 
 echo "== cosign keyless signature over the checksum file"
 cosign verify-blob \
-  --certificate "$WORK/SHA256SUMS.txt.pem" \
-  --signature "$WORK/SHA256SUMS.txt.sig" \
+  --bundle "$WORK/SHA256SUMS.txt.bundle" \
   --certificate-identity-regexp "https://github.com/${REPO}/.github/workflows/release.yml@.*" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   "$WORK/SHA256SUMS.txt"
