@@ -361,7 +361,7 @@ jobs:
             Native egui shell: notes as RFC-822 emails, full-text search, planning,
             graph view and downloadable local AI components. No database, no webview, no cloud.
           license: MIT
-          url: https://github.com/kostyk348/CapsuleCraft
+          homepage: https://github.com/kostyk348/CapsuleCraft
           contents:
             - src: native/packaging/capsuleos-native
               dst: /usr/bin/capsulecraft
