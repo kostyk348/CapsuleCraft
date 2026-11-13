@@ -1,16 +1,39 @@
 name: Bug report
-description: Something is broken in CapsuleCraft
+description: Something is broken or behaves differently from the docs
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the report. Please remove private content from any `.eml` you attach.
+        Thanks for the report. Пишите на русском или английском — как удобнее.
+        Please include the version and the exact platform build you used.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release tag or asset name (e.g. `v2.12.5`, `CapsuleCraft_2.12.5_amd64.AppImage`)
+      placeholder: v1.2.3
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows (x64)
+        - Linux (x86_64)
+        - Linux (aarch64)
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Android
+        - Other / source build
+    validations:
+      required: true
   - type: textarea
     id: what-happened
     attributes:
       label: What happened
-      description: Expected behaviour vs. actual behaviour.
+      description: What you expected, what actually happened. Screenshot or log excerpt helps a lot.
     validations:
       required: true
   - type: textarea
@@ -18,44 +41,18 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Open vault
-        2. Create capsule with a DataGrid block
-        3. Export to .eml
-        4. ...
-    validations:
-      required: true
-  - type: input
-    id: version
-    attributes:
-      label: CapsuleCraft version
-      description: Release tag, or the commit hash for a source build.
-      placeholder: v1.0.0
-    validations:
-      required: true
-  - type: dropdown
-    id: os
-    attributes:
-      label: Operating system
-      options:
-        - Windows 11
-        - Windows 10
-        - Linux
-        - macOS
-    validations:
-      required: true
+        1. open ...
+        2. click ...
+        3. see error
   - type: textarea
     id: logs
     attributes:
       label: Logs / console output
-      description: Terminal output, or `%APPDATA%\com.capsuleos.app\logs` if present.
       render: shell
-    validations:
-      required: false
-  - type: textarea
-    id: capsule
+  - type: checkboxes
+    id: checks
     attributes:
-      label: Sample capsule (optional)
-      description: Minimal `.eml` that reproduces the issue, with private content stripped.
-      render: text
-    validations:
-      required: false
+      label: Before submitting
+      options:
+        - label: I checked the release notes and the README for this version
+        - label: I verified the release artifact checksum (`SHA256SUMS.txt`) before running it
