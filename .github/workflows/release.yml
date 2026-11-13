@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -115,6 +116,29 @@ jobs:
             Get-ChildItem "C:\Program Files (x86)\NSIS" -ErrorAction SilentlyContinue
             exit 1
           }
+
+      - name: Sign Windows binary and installer (Authenticode, optional)
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          if (-not $env:WINDOWS_CERT_PFX_BASE64) {
+            Write-Host "No WINDOWS_CERT_PFX_BASE64 secret - shipping unsigned (see docs/SIGNING.md)."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "cert.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe not found" }
+          $files = @(Get-ChildItem -Recurse -Include "capsuleos-native.exe","CapsuleCraft_*_setup.exe" -Path .)
+          foreach ($f in $files) {
+            & $signtool.FullName sign /fd SHA256 /td http://timestamp.digicert.com `
+              /tr http://timestamp.digicert.com /f $pfx /p $env:WINDOWS_CERT_PASSWORD $f.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($f.FullName)" }
+          }
+          Remove-Item $pfx -Force
 
       - name: Build NSIS installer (setup.exe)
         shell: pwsh
@@ -316,6 +340,44 @@ jobs:
             "CapsuleCraft_${VERSION}_amd64.deb"
           test -f "CapsuleCraft_${VERSION}_amd64.deb"
 
+      - name: Package .rpm (dnf / zypper friendly)
+        run: |
+          set -e
+          VERSION="${{ needs.create-release.outputs.version }}"
+          curl -sSfL -o /tmp/nfpm.tgz \
+            https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_Linux_x86_64.tar.gz
+          tar -xzf /tmp/nfpm.tgz -C /tmp nfpm
+          install -m 0755 native/target/release/capsuleos-native native/packaging/capsuleos-native
+          cat > /tmp/nfpm.yaml <<'NFPM'
+          name: capsulecraft
+          arch: amd64
+          platform: linux
+          version: "${VERSION}"
+          section: utils
+          priority: optional
+          maintainer: kostyk348 <kostyk348@users.noreply.github.com>
+          description: |
+            Offline knowledge base stored as a folder of .eml files.
+            Native egui shell: notes as RFC-822 emails, full-text search, planning,
+            graph view and downloadable local AI components. No database, no webview, no cloud.
+          license: MIT
+          url: https://github.com/kostyk348/CapsuleCraft
+          contents:
+            - src: native/packaging/capsuleos-native
+              dst: /usr/bin/capsulecraft
+              file_info:
+                mode: 0755
+                owner: root
+                group: root
+            - src: native/packaging/AppDir/usr/share/applications/capsulecraft.desktop
+              dst: /usr/share/applications/capsulecraft.desktop
+            - src: native/packaging/AppDir/usr/share/icons/hicolor/256x256/apps/capsulecraft.png
+              dst: /usr/share/icons/hicolor/256x256/apps/capsulecraft.png
+          NFPM
+          VERSION="$VERSION" /tmp/nfpm package -f /tmp/nfpm.yaml -p rpm \
+            --target "CapsuleCraft_${VERSION}_x86_64.rpm"
+          test -f "CapsuleCraft_${VERSION}_x86_64.rpm"
+
       - name: Upload AppImage and deb to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -326,6 +388,7 @@ jobs:
           gh release upload "$TAG" \
             "CapsuleCraft_${VERSION}_amd64.AppImage" \
             "CapsuleCraft_${VERSION}_amd64.deb" \
+            "CapsuleCraft_${VERSION}_x86_64.rpm" \
             --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Upload as artifact
@@ -335,6 +398,7 @@ jobs:
           path: |
             CapsuleCraft_*_amd64.AppImage
             CapsuleCraft_*_amd64.deb
+            CapsuleCraft_*_x86_64.rpm
 
   # Native macOS bundle: the same egui shell assembled into a .app with an
   # ad-hoc signature, so an unzipped local launch is not blocked outright.
@@ -661,12 +725,52 @@ jobs:
           cd release-assets
           rm -f SHA256SUMS*
 
-          if ls * >/dev/null 2>&1; then
-            echo "Calculating checksums for all release assets:"
-            sha256sum * | tee ../SHA256SUMS.txt
-            gh release upload "$TAG" ../SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
-          fi
           cd ..
+
+      - name: Generate SHA256SUMS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG="${{ needs.create-release.outputs.tag }}"
+          cd release-assets
+          rm -f SHA256SUMS*
+          sha256sum * > ../SHA256SUMS.txt
+          cd ..
+          cat SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Sign the checksums with cosign (keyless, sigstore transparency log)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG="${{ needs.create-release.outputs.tag }}"
+          curl -sSfL -o cosign https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+          chmod +x cosign
+          ./cosign sign-blob --yes \
+            --output-signature SHA256SUMS.txt.sig \
+            --output-certificate SHA256SUMS.txt.pem \
+            SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt.sig SHA256SUMS.txt.pem --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Sign the checksums with GPG (optional, secret-gated)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          set -e
+          TAG="${{ needs.create-release.outputs.tag }}"
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "No GPG_PRIVATE_KEY secret - skipping the GPG signature (cosign signature is still published)."
+            exit 0
+          fi
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --batch --yes --pinentry-mode loopback ${GPG_PASSPHRASE:+--passphrase "$GPG_PASSPHRASE"} \
+            --armor --detach-sign --output SHA256SUMS.txt.asc SHA256SUMS.txt
+          gpg --verify SHA256SUMS.txt.asc SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt.asc --clobber --repo "$GITHUB_REPOSITORY"
 
           # Guard: never publish a release whose artifact set is incomplete.
           # (v1.8.0 shipped without the AppImage and macOS bundle because the
