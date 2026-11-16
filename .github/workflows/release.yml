@@ -746,13 +746,17 @@ jobs:
         run: |
           set -e
           TAG="${{ needs.create-release.outputs.tag }}"
-          curl -sSfL -o cosign https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+          # cosign pinned: the signature format must not change under us
+          curl -sSfL -o cosign https://github.com/sigstore/cosign/releases/download/v2.4.1/cosign-linux-amd64
           chmod +x cosign
-          ./cosign sign-blob --yes \
-            --output-signature SHA256SUMS.txt.sig \
-            --output-certificate SHA256SUMS.txt.pem \
-            SHA256SUMS.txt
-          gh release upload "$TAG" SHA256SUMS.txt.sig SHA256SUMS.txt.pem --clobber --repo "$GITHUB_REPOSITORY"
+          # bundle = signature + certificate + transparency-log proof in one file
+          ./cosign sign-blob --yes --bundle SHA256SUMS.txt.bundle SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt.bundle --clobber --repo "$GITHUB_REPOSITORY"
+          # keep the legacy split pair for tools that do not read bundles yet
+          ./cosign sign-blob --yes --bundle SHA256SUMS.txt.bundle             --output-signature SHA256SUMS.txt.sig             --output-certificate SHA256SUMS.txt.pem             SHA256SUMS.txt 2>/dev/null || true
+          if [ -f SHA256SUMS.txt.sig ] && [ -f SHA256SUMS.txt.pem ]; then
+            gh release upload "$TAG" SHA256SUMS.txt.sig SHA256SUMS.txt.pem               --clobber --repo "$GITHUB_REPOSITORY"
+          fi
 
       - name: Sign the checksums with GPG (optional, secret-gated)
         env:
