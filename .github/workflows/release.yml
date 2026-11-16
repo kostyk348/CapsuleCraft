@@ -472,6 +472,9 @@ jobs:
           set -e
           df -H /
           rm -rf native/target ~/.cargo/registry/src ~/.cargo/registry/cache
+          # the universal build leaves a lot behind; reclaim it before hdiutil runs
+          rm -rf ~/.cargo/registry ~/.rustup/downloads ~/.rustup/tmp "$RUNNER_TEMP"/* 2>/dev/null || true
+          sudo rm -rf /Library/Developer/CoreSimulator/Caches/* 2>/dev/null || true
           df -H /
 
       - name: Package .dmg (drag-to-Applications)
