@@ -17,7 +17,7 @@
 [![Offline](https://img.shields.io/badge/offline--first-success)](#сильные-стороны)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 [![Listed on Remade](https://remade.wiki/badges/listed-on-remade.svg)](https://remade.wiki/projects/capsulecraft/)
-
+[![I did my own Obsidian](https://idmo.app/badge/capsulecraft)](https://idmo.app/p/capsulecraft)
 **Русский** · [English](README.md)
 
 </div>
